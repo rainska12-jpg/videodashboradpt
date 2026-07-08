@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>영상 업무 대시보드</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="authOverlay" class="auth-overlay">
+      <form id="authForm" class="auth-card">
+        <section class="auth-panel auth-login-panel">
+          <div>
+            <p class="eyebrow">Login</p>
+            <h1>영상 업무 대시보드</h1>
+          </div>
+          <input id="authId" autocomplete="username" required placeholder="이메일 또는 아이디" />
+          <input id="authPassword" autocomplete="current-password" required type="password" placeholder="비밀번호" />
+          <div class="auth-actions">
+            <button id="loginBtn" class="pill primary" type="submit">로그인</button>
+            <button id="signupBtn" class="pill ghost" type="button">회원가입</button>
+          </div>
+        </section>
+
+        <section class="auth-panel auth-signup-panel">
+          <div>
+            <p class="eyebrow">Sign Up</p>
+            <h1>회원가입</h1>
+          </div>
+          <input id="signupEmail" autocomplete="email" placeholder="아이디(이메일)" />
+          <input id="signupPassword" autocomplete="new-password" type="password" placeholder="비밀번호" />
+          <input id="signupPasswordConfirm" autocomplete="new-password" type="password" placeholder="비밀번호 확인" />
+          <input id="signupName" autocomplete="name" placeholder="이름" />
+          <select id="signupPosition">
+            <option value="">직책 선택</option>
+            <option value="과장">과장</option>
+            <option value="부과장">부과장</option>
+            <option value="팀장">팀장</option>
+            <option value="과원">과원</option>
+            <option value="협조">협조</option>
+          </select>
+          <div class="auth-actions">
+            <button id="backLoginBtn" class="pill ghost" type="button">로그인으로</button>
+            <button id="createAccountBtn" class="pill primary" type="button">가입 신청</button>
+          </div>
+        </section>
+        <small id="authMessage"></small>
+      </form>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">▶</div>
+          <div>
+            <strong>영상 업무 대시보드</strong>
+            <span>Video Work Dashboard</span>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="대시보드 메뉴">
+          <button class="nav-item active" data-view="overview"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg></span><span>개요</span></button>
+          <button class="nav-item" data-view="projects"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 4v16M16 4v16M4 8h4M4 16h4M16 8h4M16 16h4"/></svg></span><span>영상 프로젝트</span></button>
+          <button class="nav-item" data-view="works"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1"/><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M4 11h16"/></svg></span><span>업무</span></button>
+          <button class="nav-item" data-view="tasks"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Z"/><path d="m8.5 12 2.2 2.2L15.8 9"/></svg></span><span>할 일</span></button>
+          <button class="nav-item" data-view="calendar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span><span>일정 캘린더</span></button>
+          <button class="nav-item" data-view="studio"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M9 14h6M12 11v6"/></svg></span><span>방송실 예약</span></button>
+          <button class="nav-item" data-view="admin"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-2 .1 7 7 0 0 1-1.7.7 1.7 1.7 0 0 0-1.2 1.6V23H9.3v-.3A1.7 1.7 0 0 0 8.1 21a7 7 0 0 1-1.7-.7 1.7 1.7 0 0 0-2-.1l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 2.6 15a7 7 0 0 1 0-2 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-3.4.2.1a1.7 1.7 0 0 0 2-.1A7 7 0 0 1 8.1 7a1.7 1.7 0 0 0 1.2-1.6V5h3.4v.3A1.7 1.7 0 0 0 13.9 7a7 7 0 0 1 1.7.7 1.7 1.7 0 0 0 2 .1l.2-.1 2 3.4-.1.1a1.7 1.7 0 0 0-.3 1.9 7 7 0 0 1 0 2Z"/></svg></span><span>관리자 모드</span></button>
+        </nav>
+
+        <div class="sidebar-note">
+          <span>Next Action</span>
+          <strong id="priorityNote">오늘 처리할 일을 확인하세요.</strong>
+        </div>
+
+        <div id="currentUserPanel" class="sidebar-account hidden">
+          <div class="sidebar-account-avatar">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+          </div>
+          <div>
+            <strong id="currentUserBadge"></strong>
+            <span id="currentUserMeta"></span>
+          </div>
+          <button id="logoutBtn" class="sidebar-account-toggle" type="button" aria-label="로그아웃">⌄</button>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Video Work Dashboard</p>
+            <h1 id="viewTitle">개요</h1>
+          </div>
+          <div class="toolbar">
+            <button id="seedBtn" class="pill ghost">데이터 초기화</button>
+            <button id="exportBtn" class="pill primary">CSV 내보내기</button>
+          </div>
+        </header>
+
+        <section id="overviewView" class="view active" aria-label="개요">
+          <div class="hero-panel">
+            <div>
+              <p class="eyebrow">At a glance</p>
+              <h2>전체 제작 현황</h2>
+              <p>진행 단계, 임박 일정, 예산 집행률을 한 화면에서 확인합니다.</p>
+            </div>
+            <button class="play-button" data-go="projects" aria-label="영상 프로젝트 보기">▶</button>
+          </div>
+
+          <div class="kpi-grid">
+            <article class="kpi">
+              <span>진행 영상 프로젝트</span>
+              <strong id="activeProjects">0</strong>
+              <small>납품 완료 제외</small>
+            </article>
+            <article class="kpi">
+              <span>이번 주 마감</span>
+              <strong id="dueThisWeek">0</strong>
+              <small>7일 이내 최종 출고</small>
+            </article>
+            <article class="kpi">
+              <span>미완료 할 일</span>
+              <strong id="openTasks">0</strong>
+              <small>체크 전 업무</small>
+            </article>
+            <article class="kpi">
+              <span>예산 집행률</span>
+              <strong id="budgetRate">0%</strong>
+              <small id="budgetText">집행 0원 / 총 0원</small>
+            </article>
+          </div>
+
+          <div class="summary-grid">
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Today</p>
+                  <h2>오늘 처리</h2>
+                </div>
+              </div>
+              <div id="todaySummary" class="compact-list"></div>
+            </article>
+
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">This Week</p>
+                  <h2>이번 주 마감</h2>
+                </div>
+              </div>
+              <div id="weekSummary" class="compact-list"></div>
+            </article>
+          </div>
+
+          <div class="overview-grid">
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Stage Mix</p>
+                  <h2>진행 단계</h2>
+                </div>
+              </div>
+              <div id="statusMix" class="status-mix"></div>
+            </article>
+
+            <article class="panel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">Upcoming</p>
+                  <h2>다가오는 일정</h2>
+                </div>
+              </div>
+              <div id="upcomingList" class="compact-list"></div>
+            </article>
+          </div>
+        </section>
+
+        <section id="projectsView" class="view" aria-label="영상 프로젝트">
+          <div class="panel project-board">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Notion Style</p>
+              </div>
+              <button id="addProjectBtn" class="pill primary">영상 프로젝트 추가</button>
+            </div>
+            <div class="project-tools">
+              <input id="projectSearchInput" placeholder="영상 프로젝트 검색" />
+              <button id="projectFilterBtn" class="icon-pill" type="button" aria-expanded="false">☰ 필터</button>
+              <div id="projectFilterPanel" class="project-filter-panel">
+                <div id="projectTypeFilter"></div>
+                <div id="projectClientFilter"></div>
+                <div id="projectStatusFilter"></div>
+              </div>
+            </div>
+            <div class="project-head">
+              <button data-project-sort="title" type="button">영상 프로젝트명</button>
+              <span>담당자</span>
+              <button data-project-sort="type" type="button">분류</button>
+              <button data-project-sort="client" type="button">발주부서</button>
+              <button data-project-sort="status" type="button">진행상태</button>
+              <button data-project-sort="firstEditDate" type="button">1차 완성일</button>
+              <button data-project-sort="finalDate" type="button">최종 출고일</button>
+            </div>
+            <div id="projectList" class="project-list"></div>
+          </div>
+        </section>
+
+        <section id="worksView" class="view" aria-label="업무">
+          <div class="panel project-board">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Work Control</p>
+              </div>
+              <button id="addWorkBtn" class="pill primary">업무 추가</button>
+            </div>
+            <div class="project-tools">
+              <input id="workSearchInput" placeholder="업무 검색" />
+            </div>
+            <div class="project-head work-head">
+              <button data-work-sort="title" type="button">업무명</button>
+              <span>담당자</span>
+              <button data-work-sort="type" type="button">분류</button>
+              <button data-work-sort="client" type="button">발주부서</button>
+              <button data-work-sort="status" type="button">진행상태</button>
+              <span>일정 없음</span>
+              <button data-work-sort="kickoffDate" type="button">시작일</button>
+              <button data-work-sort="finalDate" type="button">완료일</button>
+            </div>
+            <div id="workList" class="project-list work-list"></div>
+          </div>
+        </section>
+
+        <section id="tasksView" class="view" aria-label="할 일">
+          <div class="task-overview-shell">
+            <div class="task-overview-hero">
+              <div>
+                <p class="eyebrow">Task Overview</p>
+                <h2>할 일 오버뷰</h2>
+                <p>영상 프로젝트와 업무에 등록된 미완료 할 일을 마감일 순으로 확인하세요.</p>
+              </div>
+              <label class="calendar-toggle overview-hide-done">
+                <input id="hideDoneTasks" type="checkbox" checked />
+                <span>완료된 항목 숨기기</span>
+              </label>
+            </div>
+            <div id="taskOverviewStats" class="task-overview-stats"></div>
+            <div class="task-overview-controls">
+              <div class="task-overview-filters">
+                <button class="record-control active" data-task-overview-filter="all" type="button">전체</button>
+                <button class="record-control" data-task-overview-filter="today" type="button">오늘</button>
+                <button class="record-control" data-task-overview-filter="three" type="button">3일 이내</button>
+                <button class="record-control" data-task-overview-filter="week" type="button">이번 주</button>
+                <button class="record-control" data-task-overview-filter="overdue" type="button">지연</button>
+              </div>
+              <input id="taskOverviewSearch" placeholder="할 일, 프로젝트, 담당자 검색" />
+            </div>
+            <div class="task-overview-selects">
+              <select id="taskOverviewSort">
+                <option value="due">정렬: 마감일 순</option>
+                <option value="created">정렬: 등록순</option>
+                <option value="project">정렬: 프로젝트 순</option>
+              </select>
+              <button id="taskOverviewFilterBtn" class="task-filter-trigger" type="button">☷ 필터</button>
+            </div>
+            <div id="taskList" class="task-overview-list"></div>
+          </div>
+        </section>
+
+        <section id="calendarView" class="view" aria-label="일정 캘린더">
+          <div class="panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Calendar</p>
+                <h2 id="calendarTitle">일정 캘린더</h2>
+              </div>
+              <div class="calendar-actions">
+                <button id="prevMonth" class="circle" aria-label="이전 달">‹</button>
+                <button id="todayBtn" class="pill ghost">오늘</button>
+                <button id="nextMonth" class="circle" aria-label="다음 달">›</button>
+              </div>
+            </div>
+            <div id="calendarFilterChecks" class="calendar-filter-checks" aria-label="캘린더 표시 필터">
+              <label><input type="checkbox" data-calendar-filter="all" checked /> 전체</label>
+              <label><input type="checkbox" data-calendar-filter="video" checked /> 영상</label>
+              <label><input type="checkbox" data-calendar-filter="work" checked /> 업무</label>
+              <label><input type="checkbox" data-calendar-filter="staff" checked /> 방송실</label>
+            </div>
+            <div id="calendarBoard" class="calendar-board">
+              <div class="calendar-main">
+                <div class="calendar-weekdays">
+                  <span>일</span>
+                  <span>월</span>
+                  <span>화</span>
+                  <span>수</span>
+                  <span>목</span>
+                  <span>금</span>
+                  <span>토</span>
+                </div>
+                <div id="calendarGrid" class="calendar-grid"></div>
+              </div>
+              <aside id="staffCalendarDetail" class="staff-calendar-detail" aria-live="polite"></aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="studioView" class="view" aria-label="방송실 예약">
+          <div class="studio-manage-page">
+            <div class="studio-manage-head">
+              <div>
+                <p class="eyebrow">Studio Calendar</p>
+                <h2>방송실 예약</h2>
+                <p>방송실 사용 일정과 스탭 배정을 한 화면에서 관리합니다.</p>
+              </div>
+            </div>
+
+            <div class="studio-toolbar">
+              <div class="studio-week-nav">
+                <button id="studioPrevWeekInlineBtn" class="circle" type="button" aria-label="이전">‹</button>
+                <button id="studioNextWeekInlineBtn" class="circle" type="button" aria-label="다음">›</button>
+                <button id="studioTodayBtn" class="pill ghost" type="button">오늘</button>
+                <strong id="studioWeekTitle">이번 주</strong>
+              </div>
+              <div class="studio-toolbar-actions">
+                <button class="record-control active" data-studio-view-mode="week" type="button">주</button>
+                <button class="record-control" data-studio-view-mode="month" type="button">월</button>
+                <button id="studioAddStaffBtn" class="pill primary" type="button">+ 방송실 예약</button>
+              </div>
+            </div>
+
+            <div class="studio-workspace">
+              <section class="studio-week-card">
+                <div id="studioLegend" class="studio-legend"></div>
+                <div id="studioWeekGrid" class="studio-week-grid"></div>
+              </section>
+
+              <aside class="studio-check-panel">
+                <h3>교육 유형 표시</h3>
+                <p>체크한 교육 유형만 방송실 예약 캘린더에 표시됩니다.</p>
+                <div id="studioTrainingTypeFilters" class="studio-training-type-filters"></div>
+                <div id="studioUnassignedNotice" class="studio-unassigned-notice"></div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section id="adminView" class="view" aria-label="관리자 모드">
+          <div class="panel admin-panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Admin</p>
+                <h2>드롭다운 메뉴 관리</h2>
+              </div>
+            </div>
+            <div id="adminLogin" class="admin-login">
+              <input id="adminPassword" type="password" inputmode="numeric" placeholder="관리자 비밀번호" />
+              <button id="adminUnlockBtn" class="pill primary">입장</button>
+              <small id="adminMessage">비밀번호: 0000</small>
+            </div>
+            <div id="adminContent" class="admin-content"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="projectDetail" class="detail-shell" aria-hidden="true">
+      <div class="detail-page">
+        <div class="detail-actions">
+          <button id="closeDetailBtn" class="pill ghost">목록으로</button>
+          <button id="deleteDetailBtn" class="pill danger-pill">삭제</button>
+        </div>
+        <input id="detailTitle" class="detail-title" placeholder="영상 프로젝트명을 입력하세요" />
+        <div class="detail-tabs" role="tablist" aria-label="영상 프로젝트 상세 메뉴">
+          <button class="detail-tab active" data-detail-tab="basic" type="button">기본정보</button>
+          <button class="detail-tab" data-detail-tab="tasks" type="button">할 일</button>
+          <button class="detail-tab" data-detail-tab="records" type="button">관리기록</button>
+        </div>
+        <div id="detailBasicTab" class="detail-tab-panel active">
+          <div id="detailProperties" class="detail-properties"></div>
+          <div class="memo-toolbar" aria-label="영상 프로젝트 메모 서식">
+            <button type="button" data-memo-target="detailMemo" data-memo-format="text">T 본문</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="h1">H1 제목1</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="h2">H2 제목2</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="h3">H3 제목3</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="h4">H4 제목4</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="bold">B</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="italic">I</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="underline">U</button>
+            <button type="button" data-memo-target="detailMemo" data-memo-format="clear">Tx</button>
+          </div>
+          <div id="detailMemo" class="detail-memo rich-memo" contenteditable="true" data-placeholder="영상 프로젝트 메모를 입력하세요."></div>
+        </div>
+        <section id="detailTasksTab" class="detail-tab-panel records-section">
+          <div class="records-head">
+            <span>✓</span>
+            <h2>할 일</h2>
+          </div>
+          <div id="projectTaskPanel"></div>
+        </section>
+        <section id="detailRecordsTab" class="detail-tab-panel records-section">
+          <div class="records-head">
+            <span>▱</span>
+            <h2>관리기록</h2>
+          </div>
+          <div id="managementRecords"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="workDetail" class="detail-shell" aria-hidden="true">
+      <div class="detail-page">
+        <div class="detail-actions">
+          <button id="closeWorkDetailBtn" class="pill ghost">목록으로</button>
+          <button id="deleteWorkDetailBtn" class="pill danger-pill">삭제</button>
+        </div>
+        <input id="workDetailTitle" class="detail-title" placeholder="업무명을 입력하세요" />
+        <div class="detail-tabs" role="tablist" aria-label="업무 상세 메뉴">
+          <button class="detail-tab active" data-work-detail-tab="basic" type="button">기본정보</button>
+          <button class="detail-tab" data-work-detail-tab="tasks" type="button">할 일</button>
+          <button class="detail-tab" data-work-detail-tab="records" type="button">관리기록</button>
+          <button class="detail-tab" data-work-detail-tab="studio" type="button">방송실 예약</button>
+        </div>
+        <div id="workDetailBasicTab" class="detail-tab-panel active">
+          <div id="workDetailProperties" class="detail-properties"></div>
+          <div class="memo-toolbar" aria-label="업무 메모 서식">
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="text">T 본문</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="h1">H1 제목1</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="h2">H2 제목2</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="h3">H3 제목3</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="h4">H4 제목4</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="bold">B</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="italic">I</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="underline">U</button>
+            <button type="button" data-memo-target="workDetailMemo" data-memo-format="clear">Tx</button>
+          </div>
+          <div id="workDetailMemo" class="detail-memo rich-memo" contenteditable="true" data-placeholder="업무 메모를 입력하세요."></div>
+        </div>
+        <section id="workDetailTasksTab" class="detail-tab-panel records-section">
+          <div class="records-head">
+            <span>✓</span>
+            <h2>할 일</h2>
+          </div>
+          <div id="workTaskPanel"></div>
+        </section>
+        <section id="workDetailRecordsTab" class="detail-tab-panel records-section">
+          <div class="records-head">
+            <span>▱</span>
+            <h2>관리기록</h2>
+          </div>
+          <div id="workManagementRecords"></div>
+        </section>
+
+
+        <section id="workDetailStudioTab" class="detail-tab-panel records-section">
+          <div class="records-head">
+            <span>▣</span>
+            <h2>방송실 예약</h2>
+          </div>
+          <div id="workStudioReservationPanel"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="scheduleModal" class="modal-shell" aria-hidden="true">
+      <form id="scheduleForm" class="modal-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">New Schedule</p>
+            <h2>일정 등록</h2>
+          </div>
+          <button id="closeScheduleBtn" class="circle" type="button" aria-label="닫기">×</button>
+        </div>
+        <label>
+          일정명
+          <input id="scheduleTitle" name="title" required placeholder="예: 촬영 준비 회의" />
+        </label>
+        <label>
+          담당자
+          <div id="scheduleOwnersDropdown"></div>
+        </label>
+        <label>
+          장소
+          <input id="scheduleLocation" placeholder="예: 회의실, 스튜디오, 온라인" />
+        </label>
+        <label>
+          날짜
+          <div id="scheduleDatePicker"></div>
+        </label>
+        <label class="check-line">
+          <input id="scheduleAllDay" type="checkbox" checked />
+          종일
+        </label>
+        <div class="time-row">
+          <label>
+            시작 시간
+            <input id="scheduleStartTime" type="time" value="09:00" disabled />
+          </label>
+          <label>
+            종료 시간
+            <input id="scheduleEndTime" type="time" value="10:00" disabled />
+          </label>
+        </div>
+        <label>
+          내용
+          <textarea id="scheduleMemo" rows="4" placeholder="일정 내용, 준비물, 참고사항을 입력하세요."></textarea>
+        </label>
+        <button class="pill primary" type="submit">일정 등록</button>
+      </form>
+    </div>
+
+    <div id="staffScheduleModal" class="modal-shell" aria-hidden="true">
+      <form id="staffScheduleForm" class="modal-card studio-schedule-modal">
+        <button id="closeStaffScheduleBtn" class="studio-modal-close" type="button" aria-label="닫기">×</button>
+        <header class="studio-modal-title">
+          <h2>방송실 예약</h2>
+          <p>방송실 사용 일정과 등록할 스탭을 설정해주세요.</p>
+        </header>
+
+        <div class="studio-schedule-layout">
+          <section class="studio-schedule-section">
+            <h3><span class="studio-section-icon calendar-icon">⌑</span> 기본 정보</h3>
+            <label>
+              일정 제목
+              <input id="staffScheduleTitle" type="text" placeholder="일정 제목을 입력하세요" />
+            </label>
+            <div class="studio-field-grid two">
+              <label>
+                장소
+                <div id="staffScheduleRoomDropdown"></div>
+              </label>
+              <label>
+                교육 유형
+                <div id="staffScheduleTrainingTypeDropdown"></div>
+              </label>
+            </div>
+            <div class="studio-date-line">
+              <label>
+                일시
+                <div id="staffScheduleDatePicker"></div>
+              </label>
+              <label class="studio-checkbox-line">
+                <input id="staffScheduleAllDay" type="checkbox" />
+                종일 일정
+              </label>
+            </div>
+            <div class="studio-field-grid time">
+              <label>
+                시작 시간
+                <div id="staffScheduleStartTimePicker"></div>
+              </label>
+              <span>~</span>
+              <label>
+                종료 시간
+                <div id="staffScheduleEndTimePicker"></div>
+              </label>
+            </div>
+            <label>
+              메모 (선택)
+              <textarea id="staffScheduleMemo" rows="4" maxlength="200" placeholder="스탭 배정 내용, 준비물, 교육 메모를 입력하세요."></textarea>
+              <b id="staffScheduleMemoCount" class="studio-memo-count">0 / 200</b>
+            </label>
+            <div class="studio-repeat-box">
+              <label class="studio-repeat-toggle">
+                <span>✓ 반복 설정</span>
+                <input id="staffScheduleRepeatEnabled" type="checkbox" />
+                <b>반복 안함</b>
+              </label>
+              <div id="staffScheduleRepeatControls" class="studio-repeat-controls">
+                <div class="studio-repeat-days" aria-label="반복 요일">
+                  <span>반복 요일</span>
+                  <div>
+                    <button type="button" data-staff-repeat-day="1">월</button>
+                    <button type="button" data-staff-repeat-day="2">화</button>
+                    <button type="button" data-staff-repeat-day="3">수</button>
+                    <button type="button" data-staff-repeat-day="4">목</button>
+                    <button type="button" data-staff-repeat-day="5">금</button>
+                    <button type="button" data-staff-repeat-day="6">토</button>
+                    <button type="button" data-staff-repeat-day="0">일</button>
+                  </div>
+                </div>
+                <label class="studio-repeat-count">
+                  반복 횟수
+                  <input id="staffScheduleRepeatCount" type="text" inputmode="numeric" pattern="[0-9]*" value="8" />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section class="studio-schedule-section">
+            <div class="studio-staff-head">
+              <div>
+                <h3><span class="studio-section-icon staff-icon">☷</span> 스탭 목록</h3>
+                <p>일정에 배정할 스탭을 선택하세요. (최대 6명)</p>
+              </div>
+              <button id="staffScheduleAddStaffBtn" class="pill primary small" type="button">+ 스탭 추가</button>
+            </div>
+            <div class="studio-staff-table">
+              <div class="studio-staff-table-head">
+                <span></span>
+                <span></span>
+                <span>스탭 종류</span>
+                <span>담당자</span>
+                <span>역할/메모</span>
+                <span>관리</span>
+              </div>
+              <div id="staffScheduleRows" class="studio-staff-rows"></div>
+              <button id="staffScheduleAddStaffWideBtn" class="studio-add-row" type="button">+ 스탭 추가 (최대 6명)</button>
+            </div>
+          </section>
+        </div>
+
+        <footer class="studio-modal-actions">
+          <button class="pill ghost" type="button" id="cancelStaffScheduleBtn">취소</button>
+          <button class="pill primary" type="submit">등록</button>
+        </footer>
+      </form>
+    </div>
+
+    <div id="staffEventDetailModal" class="modal-shell" aria-hidden="true">
+      <div class="modal-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Schedule Memo</p>
+            <h2>방송실 예약 상세</h2>
+          </div>
+          <button id="closeStaffEventDetailBtn" class="circle" type="button" aria-label="닫기">×</button>
+        </div>
+        <div id="staffEventDetailContent" class="event-detail"></div>
+        <div class="modal-actions event-detail-actions">
+          <button id="editScheduleEventBtn" class="pill ghost" type="button">수정</button>
+          <button id="deleteStaffEventBtn" class="pill danger-pill" type="button">예약 삭제</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="recurringTrainingModal" class="modal-shell" aria-hidden="true">
+      <form id="recurringTrainingForm" class="modal-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Recurring Training</p>
+            <h2>정기교육 등록</h2>
+          </div>
+          <button id="closeRecurringTrainingBtn" class="circle" type="button" aria-label="닫기">×</button>
+        </div>
+        <label>
+          장소
+          <div id="recurringTrainingRoomDropdown"></div>
+        </label>
+        <label>
+          스탭 종류
+          <div id="recurringTrainingStaffTypeDropdown"></div>
+        </label>
+        <label>
+          담당자
+          <div id="recurringTrainingOwnerDropdown"></div>
+        </label>
+        <label>
+          교육 유형
+          <div id="recurringTrainingTypeDropdown"></div>
+        </label>
+        <label>
+          시작일
+          <div id="recurringTrainingStartDatePicker"></div>
+        </label>
+        <label>
+          반복 방식
+          <div id="recurringTrainingRepeatDropdown"></div>
+        </label>
+        <label>
+          반복 횟수
+          <input id="recurringTrainingCount" type="number" min="1" max="52" value="8" />
+        </label>
+        <label class="check-line">
+          <input id="recurringTrainingAllDay" type="checkbox" checked />
+          종일
+        </label>
+        <div class="time-row">
+          <label>
+            시작 시간
+            <input id="recurringTrainingStartTime" type="time" value="09:00" disabled />
+          </label>
+          <label>
+            종료 시간
+            <input id="recurringTrainingEndTime" type="time" value="10:00" disabled />
+          </label>
+        </div>
+        <label>
+          메모
+          <textarea id="recurringTrainingMemo" rows="4" placeholder="교육 내용, 준비물, 참석 대상 등을 입력하세요."></textarea>
+        </label>
+        <button class="pill primary" type="submit">반복 일정 등록</button>
+      </form>
+    </div>
+
+    <div id="recurringTrainingManageModal" class="modal-shell" aria-hidden="true">
+      <div class="modal-card wide-modal">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Training Manager</p>
+            <h2>정기교육 관리</h2>
+          </div>
+          <button id="closeRecurringTrainingManageBtn" class="circle" type="button" aria-label="닫기">×</button>
+        </div>
+        <div id="recurringTrainingList" class="training-list"></div>
+      </div>
+    </div>
+
+    <div id="dropdownLayer" class="dropdown-layer"></div>
+    <div id="datePickerLayer" class="date-picker-layer"></div>
+    <div id="timePickerLayer" class="time-picker-layer"></div>
+    <div id="taskOverviewFilterModal" class="modal-shell task-filter-modal" aria-hidden="true">
+      <div class="modal-card task-filter-card" role="dialog" aria-modal="true" aria-labelledby="taskOverviewFilterTitle">
+        <div class="task-filter-head">
+          <div>
+            <p class="eyebrow">Filter</p>
+            <h3 id="taskOverviewFilterTitle">필터</h3>
+          </div>
+          <button id="closeTaskOverviewFilterBtn" class="record-control" type="button">닫기</button>
+        </div>
+        <div id="taskOverviewFilterSummary" class="task-filter-summary">적용된 필터 없음</div>
+        <div id="taskOverviewFilterOptions" class="task-filter-options"></div>
+      </div>
+    </div>
+
+    <div id="deleteConfirmModal" class="modal-shell confirm-modal" aria-hidden="true">
+      <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="deleteConfirmTitle">
+        <div class="confirm-icon">!</div>
+        <div>
+          <h3 id="deleteConfirmTitle">삭제하시겠습니까?</h3>
+          <p>삭제한 내용은 되돌릴 수 없습니다.</p>
+        </div>
+        <div class="confirm-actions">
+          <button id="deleteConfirmCancelBtn" class="pill ghost" type="button">취소</button>
+          <button id="deleteConfirmBtn" class="pill danger-pill" type="button">삭제</button>
+        </div>
+      </div>
+    </div>
+    <div id="repeatDeleteModal" class="modal-shell confirm-modal" aria-hidden="true">
+      <div class="modal-card confirm-card repeat-delete-card" role="dialog" aria-modal="true">
+        <div class="confirm-icon">!</div>
+        <div>
+          <h3>반복 일정 삭제</h3>
+          <p>이 반복 일정으로 생성된 다른 일정도 함께 삭제할까요?</p>
+        </div>
+        <div class="confirm-actions three">
+          <button id="repeatDeleteCancelBtn" class="pill ghost" type="button">취소</button>
+          <button id="repeatDeleteOnlyBtn" class="pill ghost" type="button">이 일정만 삭제</button>
+          <button id="repeatDeleteAllBtn" class="pill danger-pill" type="button">모두 삭제</button>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="/api/env.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
