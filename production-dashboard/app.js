@@ -1,4 +1,5 @@
 const STORAGE_KEY = "pd-production-dashboard-v4";
+const PREFS_KEY = "pd-production-dashboard-prefs-v1";
 const ADMIN_PASSWORD = "0314";
 const AUTH_DISABLED = false;
 const ENV = window.__ENV__ || {};
@@ -14,7 +15,16 @@ let isRemoteHydrating = false;
 
 function getSupabaseClient() {
   if (!SUPABASE_ENABLED) return null;
-  if (!supabaseClient) supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage
+      }
+    });
+  }
   return supabaseClient;
 }
 
@@ -207,30 +217,60 @@ const sampleData = {
   recurringTrainings: []
 };
 
+function loadPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+let dashboardPrefs = loadPrefs();
+
+function savePrefs(patch = {}) {
+  dashboardPrefs = { ...dashboardPrefs, ...patch };
+  localStorage.setItem(PREFS_KEY, JSON.stringify(dashboardPrefs));
+}
+
+function saveViewPrefs(patch = {}) {
+  savePrefs({
+    views: {
+      ...(dashboardPrefs.views || {}),
+      ...patch
+    }
+  });
+}
+
+function viewPref(key, fallback) {
+  return dashboardPrefs.views && Object.prototype.hasOwnProperty.call(dashboardPrefs.views, key)
+    ? dashboardPrefs.views[key]
+    : fallback;
+}
+
 let state = migrateOwnerState(loadState());
-let calendarDate = new Date();
-let studioWeekDate = new Date();
-let studioViewMode = "week";
-let studioTrainingTypeFilters = {};
+let calendarDate = new Date(viewPref("calendarDate", dateKey(new Date())));
+let studioWeekDate = new Date(viewPref("studioWeekDate", dateKey(new Date())));
+let studioViewMode = viewPref("studioViewMode", "week");
+let studioTrainingTypeFilters = viewPref("studioTrainingTypeFilters", {});
 let studioDragDraft = null;
 let staffRowDragId = null;
 let activeProjectId = null;
 let activeWorkId = null;
 let isAdminUnlocked = false;
+let adminProfilesRefreshing = false;
 let taskDraft = { projectId: state.projects[0]?.id || "", owner: ownerOptions()[0] || "", dueDate: dateKey(new Date()) };
-let taskOverviewFilter = "all";
-let taskOverviewSearch = "";
-let taskOverviewSort = "due";
-let taskOverviewOwner = "";
-let taskOverviewType = "";
-let taskOverviewProject = "";
-let taskOverviewHideDone = true;
+let taskOverviewFilter = viewPref("taskOverviewFilter", "all");
+let taskOverviewSearch = viewPref("taskOverviewSearch", "");
+let taskOverviewSort = viewPref("taskOverviewSort", "due");
+let taskOverviewOwner = viewPref("taskOverviewOwner", "");
+let taskOverviewType = viewPref("taskOverviewType", "");
+let taskOverviewProject = viewPref("taskOverviewProject", "");
+let taskOverviewHideDone = viewPref("taskOverviewHideDone", true);
 let scheduleDraft = { editingScheduleId: null, owners: ownerOptions()[0] ? [ownerOptions()[0]] : [], date: dateKey(new Date()), allDay: true, startTime: "09:00", endTime: "10:00" };
 let staffScheduleDraft = { title: "", room: "", type: "", owner: "", trainingType: "", date: dateKey(new Date()), allDay: false, startTime: "09:00", endTime: "10:00", repeatEnabled: false, repeatCount: 8, repeatDays: [], repeatEndMode: "none", repeatUntil: "", staffRows: [] };
 let recurringTrainingDraft = { room: state.options.studioRooms[0] || "", type: state.options.staffTypes[0] || "정기교육", owner: "", trainingType: state.options.trainingTypes[0] || "", startDate: dateKey(new Date()), repeat: "매주", count: 8, allDay: true, startTime: "09:00", endTime: "10:00" };
 let activeStaffEventId = null;
 let selectedStaffCalendarId = null;
-let calendarFilters = { video: true, work: true, staff: true };
 let activeScheduleEventId = null;
 let highlightedProjectTaskId = null;
 let highlightedWorkTaskId = null;
@@ -240,23 +280,25 @@ let detailTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: da
 let detailTaskComposerOpen = false;
 let editingRecordId = null;
 let recordSearchQuery = "";
-let recordFilterMode = "all";
+let recordFilterMode = viewPref("recordFilterMode", "all");
 let activeDetailTab = "basic";
-let detailTaskSort = "created";
+let detailTaskSort = viewPref("detailTaskSort", "created");
 let workTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
 let workTaskComposerOpen = false;
-let workTaskSort = "created";
+let workTaskSort = viewPref("workTaskSort", "created");
 let editingWorkRecordId = null;
 let workRecordSearchQuery = "";
-let workRecordFilterMode = "all";
+let workRecordFilterMode = viewPref("workRecordFilterMode", "all");
 let activeWorkDetailTab = "basic";
-let projectSearchQuery = "";
-let projectFilters = { type: "", client: "", status: "" };
-let projectSort = { key: "finalDate", direction: "asc" };
-let workSearchQuery = "";
-let workSort = { key: "finalDate", direction: "asc" };
+let projectSearchQuery = viewPref("projectSearchQuery", "");
+let projectFilters = viewPref("projectFilters", { type: "", client: "", status: "" });
+let projectSort = viewPref("projectSort", { key: "finalDate", direction: "asc" });
+let workSearchQuery = viewPref("workSearchQuery", "");
+let workSort = viewPref("workSort", { key: "finalDate", direction: "asc" });
 let isProjectFilterOpen = false;
-let activeCalendarMode = "all";
+let activeCalendarMode = viewPref("activeCalendarMode", "all");
+let calendarFilters = viewPref("calendarFilters", { video: true, work: true, staff: true });
+let activeView = "overview";
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -1043,6 +1085,7 @@ function setView(view) {
   $$(".view").forEach((section) => section.classList.remove("active"));
   const targetView = $(`#${view}View`) ? view : "overview";
   $(`#${targetView}View`).classList.add("active");
+  activeView = targetView;
   $(".main")?.classList.toggle("studio-mode", targetView === "studio");
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === targetView));
   $("#viewTitle").textContent = titles[targetView];
@@ -1550,6 +1593,7 @@ function renderProjectList() {
     placeholder: "전체 분류",
     onSelect: (value) => {
       projectFilters.type = value === "전체 분류" ? "" : value;
+      saveViewPrefs({ projectFilters });
       renderProjectList();
     }
   });
@@ -1560,6 +1604,7 @@ function renderProjectList() {
     placeholder: "전체 발주부서",
     onSelect: (value) => {
       projectFilters.client = value === "전체 발주부서" ? "" : value;
+      saveViewPrefs({ projectFilters });
       renderProjectList();
     }
   });
@@ -1570,6 +1615,7 @@ function renderProjectList() {
     placeholder: "전체 진행상태",
     onSelect: (value) => {
       projectFilters.status = value === "전체 진행상태" ? "" : value;
+      saveViewPrefs({ projectFilters });
       renderProjectList();
     }
   });
@@ -4884,18 +4930,25 @@ function moveStudioEventToDate(eventId, date) {
 }
 
 function renderAdmin() {
+  if (SUPABASE_ENABLED && isAdminUser() && !adminProfilesRefreshing) {
+    adminProfilesRefreshing = true;
+    refreshSupabaseProfiles()
+      .then(() => {
+        if (activeView === "admin") renderAdmin();
+      })
+      .finally(() => {
+        adminProfilesRefreshing = false;
+      });
+  }
   if (!isAdminUser()) {
     $("#adminLogin").classList.add("hidden");
     $("#adminContent").classList.add("open");
     $("#adminContent").innerHTML = `<div class="empty">관리자 권한 계정만 드롭다운과 계정을 관리할 수 있습니다.</div>`;
     return;
   }
-  $("#adminLogin").classList.toggle("hidden", isAdminUnlocked);
-  $("#adminContent").classList.toggle("open", isAdminUnlocked);
-  if (!isAdminUnlocked) {
-    $("#adminContent").innerHTML = "";
-    return;
-  }
+  isAdminUnlocked = true;
+  $("#adminLogin").classList.add("hidden");
+  $("#adminContent").classList.add("open");
 
   const groups = [
     ["types", "영상 프로젝트", "업무분류"],
@@ -5078,6 +5131,7 @@ function linkOwnerToUser(ownerId, userId) {
   if (!owner) return;
   owner.linkedUserId = userId || null;
   saveState();
+  saveRemoteDashboardState();
   renderAll();
   showToast(userId ? "담당자 슬롯에 계정을 연결했습니다." : "담당자 슬롯 연결을 해제했습니다.");
 }
@@ -5228,6 +5282,486 @@ function exportCsv() {
   URL.revokeObjectURL(url);
 }
 
+
+
+let mobileActiveSection = "projects";
+let mobileTaskFilter = viewPref("mobileTaskFilter", "today");
+let mobileAddMode = "";
+
+function isMobileViewport() {
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
+function mobileTitleForView(view) {
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", admin: "관리자", notifications: "알림", settings: "설정" }[view] || "영상";
+}
+
+function unreadNotifications() {
+  const user = currentUser();
+  return (state.notifications || []).filter((item) => !item.read && (!item.userId || item.userId === user?.id));
+}
+
+function mobileTodayKey() {
+  return dateKey(new Date());
+}
+
+function mobileWeekLimitKey() {
+  const date = new Date();
+  date.setDate(date.getDate() + 7);
+  return dateKey(date);
+}
+
+function mobileKpis() {
+  const today = mobileTodayKey();
+  const openProjects = state.projects.filter((project) => project.status !== "납품 완료").length;
+  const todayTasks = taskOverviewItems().filter((item) => !item.task.done && item.task.dueDate === today).length;
+  const todayEvents = projectEventsForDate(today).length;
+  return [
+    ["진행중 프로젝트", openProjects],
+    ["오늘 할 일", todayTasks],
+    ["오늘 일정", todayEvents]
+  ];
+}
+
+function mobileOwnersText(ids) {
+  const names = ownerNames(Array.isArray(ids) ? ids : []);
+  if (!names.length) return "담당자 없음";
+  if (names.length === 1) return names[0];
+  return `${names[0]} 외 ${names.length - 1}명`;
+}
+
+function mobileStatusText(value) {
+  return value || "상태 선택";
+}
+
+function renderMobileKpiStrip() {
+  return `<div class="mobile-kpi-strip">${mobileKpis().map(([label, value]) => `<article><span>${esc(label)}</span><b>${value}</b></article>`).join("")}</div>`;
+}
+
+function renderMobileProjectCards() {
+  const projects = [...state.projects].sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
+  return `
+    ${renderMobileKpiStrip()}
+    <div class="mobile-section-head"><h2>영상</h2><span>${projects.length}건</span></div>
+    <div class="mobile-card-list">
+      ${projects.length ? projects.map((project) => `
+        <button class="mobile-work-card" data-mobile-open-project="${esc(project.id)}" type="button">
+          <strong>${esc(project.title || "제목 없음")}</strong>
+          <div><span class="mobile-chip">${esc(mobileStatusText(project.status))}</span><span>${esc(mobileOwnersText(projectOwners(project)))}</span></div>
+          <small>마감일 ${project.finalDate ? esc(formatDate(project.finalDate)) : "없음"}</small>
+        </button>
+      `).join("") : `<div class="empty">등록된 영상 프로젝트가 없습니다.</div>`}
+    </div>
+  `;
+}
+
+function renderMobileWorkCards() {
+  const works = [...state.works].sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
+  return `
+    ${renderMobileKpiStrip()}
+    <div class="mobile-section-head"><h2>업무</h2><span>${works.length}건</span></div>
+    <div class="mobile-card-list">
+      ${works.length ? works.map((work) => `
+        <button class="mobile-work-card" data-mobile-open-work="${esc(work.id)}" type="button">
+          <strong>${esc(work.title || "제목 없음")}</strong>
+          <div><span class="mobile-chip">${esc(mobileStatusText(work.status))}</span><span>${esc(mobileOwnersText(workOwners(work)))}</span></div>
+          <small>마감일 ${work.noSchedule ? "일정 없음" : work.finalDate ? esc(formatDate(work.finalDate)) : "없음"}</small>
+        </button>
+      `).join("") : `<div class="empty">등록된 업무가 없습니다.</div>`}
+    </div>
+  `;
+}
+
+function mobileFilteredTasks() {
+  const today = mobileTodayKey();
+  const week = mobileWeekLimitKey();
+  return taskOverviewItems()
+    .filter((item) => {
+      const due = item.task.dueDate || "";
+      if (mobileTaskFilter === "today") return !item.task.done && due === today;
+      if (mobileTaskFilter === "overdue") return !item.task.done && due && due < today;
+      if (mobileTaskFilter === "week") return !item.task.done && due && due >= today && due <= week;
+      if (mobileTaskFilter === "done") return item.task.done;
+      return !item.task.done;
+    })
+    .sort((a, b) => String(a.task.dueDate || "9999-12-31").localeCompare(String(b.task.dueDate || "9999-12-31")));
+}
+
+function renderMobileTasks() {
+  const items = mobileFilteredTasks();
+  const filters = [["today", "오늘"], ["overdue", "지연"], ["week", "이번주"], ["done", "완료"]];
+  return `
+    <div class="mobile-task-head">
+      <h2>할 일</h2>
+      <div class="mobile-filter-chips">
+        ${filters.map(([key, label]) => `<button class="${mobileTaskFilter === key ? "active" : ""}" data-mobile-task-filter="${key}" type="button">${label}</button>`).join("")}
+      </div>
+    </div>
+    <div class="mobile-card-list mobile-task-list">
+      ${items.length ? items.map((item) => `
+        <article class="mobile-task-card" data-mobile-task-card="${esc(item.id)}">
+          <input type="checkbox" data-overview-task-source="${esc(item.source)}" data-overview-task-check="${esc(item.id)}" ${item.task.done ? "checked" : ""} ${item.canManage ? "" : "disabled"} />
+          <button type="button" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
+            <strong>${esc(item.task.text || "제목 없음")}</strong>
+            <span>${esc(item.sourceTitle)} · ${esc(taskOwnersLabel(item.task))}</span>
+            <small>${item.task.dueDate ? esc(formatDate(item.task.dueDate)) : "마감일 없음"} · ${esc(formatTaskTime(item.task))}</small>
+          </button>
+        </article>
+      `).join("") : `<div class="empty">조건에 맞는 할 일이 없습니다.</div>`}
+    </div>
+  `;
+}
+
+function mobileScheduleItems(from, to) {
+  const start = from || mobileTodayKey();
+  const end = to || start;
+  const items = [];
+  for (let date = new Date(`${start}T00:00:00`); dateKey(date) <= end; date.setDate(date.getDate() + 1)) {
+    const key = dateKey(date);
+    projectEventsForDate(key).forEach((event) => items.push({ ...event, date: key }));
+  }
+  return items.sort((a, b) => `${a.date} ${a.startTime || ""}`.localeCompare(`${b.date} ${b.startTime || ""}`));
+}
+
+function renderMobileScheduleList(title, items) {
+  return `
+    <section class="mobile-schedule-section">
+      <h3>${esc(title)}</h3>
+      ${items.length ? items.map((event) => `
+        <button class="mobile-schedule-card ${esc(event.source)}" data-mobile-calendar-source="${esc(event.source)}" data-mobile-calendar-id="${esc(event.id)}" data-mobile-calendar-date="${esc(event.date)}" type="button">
+          <b>${esc(event.label)}</b>
+          <span>${esc(formatDate(event.date))} · ${event.allDay === false ? `${esc(event.startTime || "")}-${esc(event.endTime || "")}` : "종일"}</span>
+        </button>
+      `).join("") : `<div class="empty">일정이 없습니다.</div>`}
+    </section>
+  `;
+}
+
+function renderMobileMonthMini() {
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - firstDay.getDay());
+  return `
+    <section class="mobile-month-mini">
+      <div class="mobile-section-head"><h3>${year}년 ${month + 1}월</h3><span>월간</span></div>
+      <div class="mobile-month-weekdays"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
+      <div class="mobile-month-grid">
+        ${Array.from({ length: 42 }, (_, index) => {
+          const date = new Date(start);
+          date.setDate(start.getDate() + index);
+          const key = dateKey(date);
+          const count = projectEventsForDate(key).length;
+          return `<button class="${date.getMonth() !== month ? "muted" : ""} ${key === mobileTodayKey() ? "today" : ""}" data-mobile-month-date="${key}" type="button"><b>${date.getDate()}</b>${count ? `<i>${count}</i>` : ""}</button>`;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderMobileCalendar() {
+  const today = mobileTodayKey();
+  const week = mobileWeekLimitKey();
+  return `
+    <div class="mobile-section-head"><h2>캘린더</h2><span>방송실 포함</span></div>
+    ${renderMobileScheduleList("오늘 일정", mobileScheduleItems(today, today))}
+    ${renderMobileScheduleList("이번주 일정", mobileScheduleItems(today, week))}
+    ${renderMobileMonthMini()}
+  `;
+}
+
+function renderMobileMoreInline() {
+  return `
+    <div class="mobile-section-head"><h2>더보기</h2><span>설정</span></div>
+    <div class="mobile-more-grid">
+      <button data-mobile-more-target="admin" type="button">관리자</button>
+      <button data-mobile-more-target="projects" type="button">프로젝트</button>
+      <button data-mobile-more-target="works" type="button">업무</button>
+      <button data-mobile-more-target="studio" type="button">방송실</button>
+      <button data-mobile-more-target="notifications" type="button">알림</button>
+      <button data-mobile-more-target="settings" type="button">설정</button>
+      <button id="mobileInlineLogoutBtn" type="button">로그아웃</button>
+    </div>
+  `;
+}
+
+function renderMobileDashboard() {
+  const app = $("#mobileApp");
+  if (!app) return;
+  const current = mobileActiveSection || "projects";
+  $("#mobileViewTitle") && ($("#mobileViewTitle").textContent = mobileTitleForView(current));
+  $$(".mobile-tab").forEach((button) => {
+    const section = button.dataset.mobileSection;
+    button.classList.toggle("active", section === current);
+  });
+  const user = currentUser();
+  $("#mobileUserName") && ($("#mobileUserName").textContent = user?.name || user?.username || "사용자");
+  $("#mobileUserMeta") && ($("#mobileUserMeta").textContent = user?.position || "과원");
+  const unread = unreadNotifications();
+  $("#mobileNotifyCount") && ($("#mobileNotifyCount").textContent = String(unread.length));
+  const notificationTarget = $("#mobileNotifications");
+  if (notificationTarget) {
+    notificationTarget.innerHTML = unread.length
+      ? unread.slice(0, 6).map((item) => `<article><b>${esc(item.title || "알림")}</b><span>${esc(item.body || item.message || "")}</span></article>`).join("")
+      : `<div class="empty">새 알림이 없습니다.</div>`;
+  }
+  const renderers = {
+    projects: renderMobileProjectCards,
+    works: renderMobileWorkCards,
+    tasks: renderMobileTasks,
+    calendar: renderMobileCalendar,
+    studio: renderMobileCalendar,
+    admin: renderMobileMoreInline,
+    notifications: renderMobileMoreInline,
+    settings: renderMobileMoreInline
+  };
+  app.innerHTML = (renderers[current] || renderMobileProjectCards)();
+}
+
+function toggleMobileFab(force) {
+  const menu = $("#mobileFabMenu");
+  if (!menu) return;
+  const open = typeof force === "boolean" ? force : !menu.classList.contains("open");
+  menu.classList.toggle("open", open);
+  menu.setAttribute("aria-hidden", String(!open));
+}
+
+function openMobileMoreSheet(open = true) {
+  const sheet = $("#mobileMoreSheet");
+  if (!sheet) return;
+  sheet.classList.toggle("open", open);
+  sheet.setAttribute("aria-hidden", String(!open));
+}
+
+function openMobileSection(section) {
+  document.body.classList.toggle("mobile-pc-view", section === "admin");
+  if (["projects", "works", "tasks", "calendar"].includes(section)) {
+    mobileActiveSection = section;
+    setView(section === "calendar" ? "calendar" : section);
+    renderMobileDashboard();
+    return;
+  }
+  if (section === "studio") {
+    mobileActiveSection = "calendar";
+    setView("calendar");
+    renderMobileDashboard();
+    return;
+  }
+  if (section === "admin") {
+    mobileActiveSection = "admin";
+    setView("admin");
+    renderMobileDashboard();
+    return;
+  }
+  mobileActiveSection = "admin";
+  renderMobileDashboard();
+}
+
+function closeMobileAddSheet() {
+  const sheet = $("#mobileAddSheet");
+  if (!sheet) return;
+  sheet.classList.remove("open");
+  sheet.setAttribute("aria-hidden", "true");
+  mobileAddMode = "";
+}
+
+function mobileOwnerCheckboxes(name, selected = []) {
+  return `
+    <div class="mobile-check-list">
+      ${ownerOptions().map((ownerId) => `
+        <label><input type="checkbox" name="${name}" value="${esc(ownerId)}" ${selected.includes(ownerId) ? "checked" : ""} /><span>${esc(ownerOptionLabel(ownerId))}</span></label>
+      `).join("")}
+    </div>
+  `;
+}
+
+function mobileSelect(name, options, placeholder = "선택") {
+  return `<select name="${name}"><option value="">${esc(placeholder)}</option>${options.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}</select>`;
+}
+
+function mobileProjectWorkSelect() {
+  return `
+    <select name="target">
+      <option value="">연결 대상 선택</option>
+      ${state.projects.map((project) => `<option value="project:${esc(project.id)}">영상 · ${esc(project.title)}</option>`).join("")}
+      ${state.works.map((work) => `<option value="work:${esc(work.id)}">업무 · ${esc(work.title)}</option>`).join("")}
+    </select>
+  `;
+}
+
+function renderMobileAddForm(mode) {
+  const today = dateKey(new Date());
+  const configs = {
+    project: ["영상 추가", "영상 등록"],
+    work: ["업무 추가", "업무 등록"],
+    task: ["할 일 추가", "할 일 등록"],
+    schedule: ["일정 추가", "일정 등록"]
+  };
+  const [title, submitLabel] = configs[mode] || configs.project;
+  let body = "";
+  if (mode === "project") {
+    body = `
+      <section><h3>기본정보</h3><input name="title" placeholder="영상명" required />${mobileSelect("type", state.options.types, "분류 선택")}${mobileSelect("client", state.options.clients, "발주부서 선택")}</section>
+      <section><h3>담당/상태</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("status", state.options.statuses, "진행상태 선택")}</section>
+      <section><h3>일정</h3><label>시작일<input name="kickoffDate" type="date" value="${today}" /></label><label>촬영일<input name="shootDate" type="date" value="${today}" /></label><label>1차 완성일<input name="firstEditDate" type="date" value="${today}" /></label><label>최종 출고일<input name="finalDate" type="date" value="${today}" /></label></section>
+      <section><h3>메모</h3><textarea name="memo" placeholder="메모"></textarea></section>
+    `;
+  } else if (mode === "work") {
+    body = `
+      <section><h3>기본정보</h3><input name="title" placeholder="업무명" required />${mobileSelect("type", state.options.workTypes, "분류 선택")}${mobileSelect("client", state.options.workClients, "발주부서 선택")}</section>
+      <section><h3>담당/상태</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("status", state.options.workStatuses, "진행상태 선택")}</section>
+      <section><h3>일정</h3><label class="mobile-toggle-line"><input name="noSchedule" type="checkbox" /> 일정 없음</label><label>시작일<input name="kickoffDate" type="date" value="${today}" /></label><label>완료일<input name="finalDate" type="date" value="${today}" /></label></section>
+      <section><h3>메모</h3><textarea name="memo" placeholder="메모"></textarea></section>
+    `;
+  } else if (mode === "task") {
+    body = `
+      <section><h3>기본정보</h3><input name="title" placeholder="할 일 제목" required /></section>
+      <section><h3>연결</h3>${mobileProjectWorkSelect()}</section>
+      <section><h3>담당/분류</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("type", taskTypeOptions(), "업무 분류 선택")}</section>
+      <section><h3>일정</h3><label>마감일<input name="dueDate" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="noDueDate" type="checkbox" /> 마감일 없음</label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" value="09:00" /><input name="endTime" type="time" value="10:00" /></div></section>
+      <section><h3>세부내용</h3><textarea name="detail" placeholder="세부내용"></textarea></section>
+    `;
+  } else {
+    body = `
+      <section><h3>기본정보</h3><input name="title" placeholder="일정명" required />${mobileProjectWorkSelect()}</section>
+      <section><h3>일정</h3><label>날짜<input name="date" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" value="09:00" /><input name="endTime" type="time" value="10:00" /></div></section>
+      <section><h3>담당자</h3>${mobileOwnerCheckboxes("owners")}</section>
+      <section><h3>메모</h3><input name="location" placeholder="장소" /><textarea name="memo" placeholder="메모"></textarea></section>
+    `;
+  }
+  return `
+    <header><button type="button" data-close-mobile-add>닫기</button><strong>${esc(title)}</strong><button type="submit">${esc(submitLabel)}</button></header>
+    <div class="mobile-add-body">${body}</div>
+    <footer><button class="pill primary" type="submit">${esc(submitLabel)}</button></footer>
+  `;
+}
+
+function openMobileAddSheet(mode) {
+  mobileAddMode = mode;
+  const sheet = $("#mobileAddSheet");
+  const form = $("#mobileAddForm");
+  if (!sheet || !form) return;
+  form.innerHTML = renderMobileAddForm(mode);
+  sheet.classList.add("open");
+  sheet.setAttribute("aria-hidden", "false");
+}
+
+function mobileFormOwners(form) {
+  return Array.from(form.querySelectorAll('input[name="owners"]:checked')).map((input) => input.value);
+}
+
+function submitMobileAddForm(form) {
+  const data = new FormData(form);
+  const today = dateKey(new Date());
+  if (mobileAddMode === "project") {
+    const project = {
+      id: makeId(),
+      title: String(data.get("title") || "").trim() || "새 영상 프로젝트",
+      method: "",
+      type: String(data.get("type") || ""),
+      owners: mobileFormOwners(form),
+      client: String(data.get("client") || ""),
+      note: "",
+      status: String(data.get("status") || ""),
+      kickoffDate: String(data.get("kickoffDate") || today),
+      shootDate: String(data.get("shootDate") || today),
+      firstEditDate: String(data.get("firstEditDate") || today),
+      finalDate: String(data.get("finalDate") || today),
+      progress: 0,
+      budget: 0,
+      spent: 0,
+      memo: String(data.get("memo") || ""),
+      records: []
+    };
+    state.projects.unshift(project);
+    saveState();
+    closeMobileAddSheet();
+    mobileActiveSection = "projects";
+    renderAll();
+    return;
+  }
+  if (mobileAddMode === "work") {
+    const work = {
+      id: makeId(),
+      title: String(data.get("title") || "").trim() || "새 업무",
+      type: String(data.get("type") || ""),
+      owners: mobileFormOwners(form),
+      client: String(data.get("client") || ""),
+      status: String(data.get("status") || ""),
+      noSchedule: Boolean(data.get("noSchedule")),
+      kickoffDate: String(data.get("kickoffDate") || today),
+      finalDate: String(data.get("finalDate") || today),
+      calendarFields: { ...defaultWorkCalendarFields },
+      studioReservationEnabled: false,
+      studioReservationId: "",
+      studioReservation: null,
+      memo: String(data.get("memo") || ""),
+      tasks: [],
+      records: []
+    };
+    state.works.unshift(work);
+    saveState();
+    closeMobileAddSheet();
+    mobileActiveSection = "works";
+    renderAll();
+    return;
+  }
+  if (mobileAddMode === "task") {
+    const target = String(data.get("target") || "");
+    if (!target) {
+      showToast("프로젝트 또는 업무를 선택하세요.");
+      return;
+    }
+    const task = {
+      id: makeId(),
+      text: String(data.get("title") || "").trim() || "새 할 일",
+      detail: String(data.get("detail") || ""),
+      type: String(data.get("type") || ""),
+      owners: mobileFormOwners(form),
+      owner: mobileFormOwners(form)[0] || "",
+      dueDate: data.get("noDueDate") ? "" : String(data.get("dueDate") || today),
+      noDueDate: Boolean(data.get("noDueDate")),
+      allDay: Boolean(data.get("allDay")),
+      startTime: String(data.get("startTime") || "09:00"),
+      endTime: String(data.get("endTime") || "10:00"),
+      calendar: true,
+      done: false,
+      createdAt: new Date().toISOString()
+    };
+    if (target.startsWith("project:")) {
+      task.projectId = target.replace("project:", "");
+      state.tasks.unshift(task);
+    } else {
+      const work = state.works.find((item) => item.id === target.replace("work:", ""));
+      if (!work) return;
+      work.tasks = Array.isArray(work.tasks) ? work.tasks : [];
+      work.tasks.unshift(task);
+    }
+    saveState();
+    closeMobileAddSheet();
+    mobileActiveSection = "tasks";
+    renderAll();
+    return;
+  }
+  if (mobileAddMode === "schedule") {
+    state.schedules.push({
+      id: makeId(),
+      title: String(data.get("title") || "").trim() || "새 일정",
+      owners: mobileFormOwners(form),
+      location: String(data.get("location") || ""),
+      memo: String(data.get("memo") || ""),
+      date: String(data.get("date") || today),
+      allDay: Boolean(data.get("allDay")),
+      startTime: String(data.get("startTime") || "09:00"),
+      endTime: String(data.get("endTime") || "10:00")
+    });
+    saveState();
+    closeMobileAddSheet();
+    mobileActiveSection = "calendar";
+    renderAll();
+  }
+}
+
 function renderAll() {
   renderKpis();
   renderWorkSummary();
@@ -5241,6 +5775,7 @@ function renderAll() {
   renderStudioManage();
   renderAdmin();
   renderAuth();
+  renderMobileDashboard();
 }
 
 document.addEventListener("click", () => {
@@ -5257,12 +5792,93 @@ $("#dropdownLayer").addEventListener("click", (event) => event.stopPropagation()
 $("#datePickerLayer").addEventListener("click", (event) => event.stopPropagation());
 $("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation());
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
+$$("[data-mobile-section]").forEach((button) => button.addEventListener("click", () => { openMobileSection(button.dataset.mobileSection); openMobileMoreSheet(false); toggleMobileFab(false); }));
+$("[data-mobile-more]")?.addEventListener("click", () => openMobileMoreSheet(true));
+$$("[data-close-mobile-sheet]").forEach((button) => button.addEventListener("click", () => openMobileMoreSheet(false)));
+$$("[data-close-mobile-add]").forEach((button) => button.addEventListener("click", () => closeMobileAddSheet()));
+$("#mobileNotifyBtn")?.addEventListener("click", () => openMobileMoreSheet(true));
+$("#mobileFabBtn")?.addEventListener("click", () => toggleMobileFab());
+$("#mobileFabMenu")?.addEventListener("click", (event) => {
+  const mode = event.target.closest("[data-mobile-add]")?.dataset.mobileAdd;
+  if (!mode) return;
+  toggleMobileFab(false);
+  openMobileAddSheet(mode);
+});
+$("#mobileMoreSheet")?.addEventListener("click", (event) => {
+  const target = event.target.closest("[data-mobile-more-target]")?.dataset.mobileMoreTarget;
+  if (!target) return;
+  openMobileMoreSheet(false);
+  openMobileSection(target);
+});
+$("#mobileAddSheet")?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-close-mobile-add]")) closeMobileAddSheet();
+});
+$("#mobileAddForm")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitMobileAddForm(event.currentTarget);
+});
+$("#mobileApp")?.addEventListener("change", (event) => {
+  const taskId = event.target.dataset.overviewTaskCheck;
+  if (!taskId) return;
+  const source = event.target.dataset.overviewTaskSource;
+  const item = taskOverviewItems().find((entry) => entry.id === taskId && entry.source === source);
+  if (!item || !item.canManage) {
+    event.target.checked = !event.target.checked;
+    showToast("담당자 또는 관리자만 할 일을 변경할 수 있습니다.");
+    return;
+  }
+  item.task.done = event.target.checked;
+  saveState();
+  renderAll();
+});
+$("#mobileApp")?.addEventListener("click", (event) => {
+  if (event.target.closest("#mobileInlineLogoutBtn")) {
+    $("#logoutBtn")?.click();
+    return;
+  }
+  const moreTarget = event.target.closest("[data-mobile-more-target]")?.dataset.mobileMoreTarget;
+  if (moreTarget) {
+    openMobileSection(moreTarget);
+    return;
+  }
+  const projectId = event.target.closest("[data-mobile-open-project]")?.dataset.mobileOpenProject;
+  if (projectId) openProjectDetail(projectId);
+  const workId = event.target.closest("[data-mobile-open-work]")?.dataset.mobileOpenWork;
+  if (workId) openWorkDetail(workId);
+  const filter = event.target.closest("[data-mobile-task-filter]")?.dataset.mobileTaskFilter;
+  if (filter) {
+    mobileTaskFilter = filter;
+    saveViewPrefs({ mobileTaskFilter });
+    renderMobileDashboard();
+  }
+  const taskButton = event.target.closest("[data-mobile-open-task-id]");
+  if (taskButton) {
+    const item = taskOverviewItems().find((entry) => entry.id === taskButton.dataset.mobileOpenTaskId && entry.source === taskButton.dataset.mobileOpenTaskSource);
+    if (item?.source === "project" && item.projectId) {
+      highlightedProjectTaskId = item.id;
+      openProjectDetail(item.projectId);
+      activeDetailTab = "tasks";
+      renderDetailTabs();
+    }
+    if (item?.source === "work" && item.workId) {
+      highlightedWorkTaskId = item.id;
+      openWorkDetail(item.workId);
+      activeWorkDetailTab = "tasks";
+      renderWorkDetailTabs();
+    }
+  }
+  const monthDate = event.target.closest("[data-mobile-month-date]")?.dataset.mobileMonthDate;
+  if (monthDate) openScheduleModal(monthDate);
+});
+$("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
+$("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
 
 $("#addProjectBtn").addEventListener("click", addProject);
 $("#addWorkBtn").addEventListener("click", addWork);
 $("#projectSearchInput").addEventListener("input", (event) => {
   projectSearchQuery = event.target.value;
+  saveViewPrefs({ projectSearchQuery });
   renderProjectList();
   const input = $("#projectSearchInput");
   input.focus();
@@ -5288,10 +5904,12 @@ $("#projectsView").addEventListener("click", (event) => {
   } else {
     projectSort = { key, direction: "asc" };
   }
+  saveViewPrefs({ projectSort });
   renderProjectList();
 });
 $("#workSearchInput").addEventListener("input", (event) => {
   workSearchQuery = event.target.value;
+  saveViewPrefs({ workSearchQuery });
   renderWorkList();
   const input = $("#workSearchInput");
   input.focus();
@@ -5306,6 +5924,7 @@ $("#worksView").addEventListener("click", (event) => {
   } else {
     workSort = { key, direction: "asc" };
   }
+  saveViewPrefs({ workSort });
   renderWorkList();
 });
 $("#worksView").addEventListener("input", (event) => {
@@ -5385,6 +6004,7 @@ $("#calendarView").addEventListener("change", (event) => {
   } else {
     calendarFilters[key] = checkbox.checked;
   }
+  saveViewPrefs({ calendarFilters });
   renderCalendar();
 });
 
@@ -5392,21 +6012,25 @@ $("#studioView").addEventListener("click", (event) => {
   const modeButton = event.target.closest("[data-studio-view-mode]");
   if (modeButton) {
     studioViewMode = modeButton.dataset.studioViewMode;
+    saveViewPrefs({ studioViewMode });
     renderStudioManage();
     return;
   }
   if (event.target.closest("#studioTodayBtn")) {
     studioWeekDate = new Date();
+    saveViewPrefs({ studioWeekDate: dateKey(studioWeekDate) });
     renderStudioManage();
     return;
   }
   if (event.target.closest("#studioPrevWeekInlineBtn")) {
     studioWeekDate.setDate(studioWeekDate.getDate() + (studioViewMode === "month" ? -31 : -7));
+    saveViewPrefs({ studioWeekDate: dateKey(studioWeekDate) });
     renderStudioManage();
     return;
   }
   if (event.target.closest("#studioNextWeekInlineBtn")) {
     studioWeekDate.setDate(studioWeekDate.getDate() + (studioViewMode === "month" ? 31 : 7));
+    saveViewPrefs({ studioWeekDate: dateKey(studioWeekDate) });
     renderStudioManage();
     return;
   }
@@ -5435,6 +6059,7 @@ $("#studioView").addEventListener("change", (event) => {
   } else {
     studioTrainingTypeFilters[filter.dataset.studioTrainingFilter] = filter.checked;
   }
+  saveViewPrefs({ studioTrainingTypeFilters });
   renderStudioManage({ preserveScroll: true });
 });
 
@@ -5657,6 +6282,7 @@ $("#workTaskPanel").addEventListener("click", (event) => {
   if (sortButton) {
     syncWorkTaskDraftInputs();
     workTaskSort = sortButton.dataset.workTaskSort;
+    saveViewPrefs({ workTaskSort });
     const work = state.works.find((item) => item.id === activeWorkId);
     if (work) renderWorkTasks(work);
     return;
@@ -5740,6 +6366,7 @@ $("#workManagementRecords").addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-work-record-filter]");
   if (filterButton) {
     workRecordFilterMode = filterButton.dataset.workRecordFilter;
+    saveViewPrefs({ workRecordFilterMode });
     const work = state.works.find((item) => item.id === activeWorkId);
     if (work) renderWorkManagementRecords(work);
     return;
@@ -5781,6 +6408,7 @@ $("#managementRecords").addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-record-filter]");
   if (filterButton) {
     recordFilterMode = filterButton.dataset.recordFilter;
+    saveViewPrefs({ recordFilterMode });
     const project = state.projects.find((item) => item.id === activeProjectId);
     if (project) renderManagementRecords(project);
     return;
@@ -5823,6 +6451,7 @@ $("#projectTaskPanel").addEventListener("click", (event) => {
   if (sortButton) {
     syncProjectTaskDraftInputs();
     detailTaskSort = sortButton.dataset.projectTaskSort;
+    saveViewPrefs({ detailTaskSort });
     const project = state.projects.find((item) => item.id === activeProjectId);
     if (project) renderProjectTasks(project);
     return;
@@ -5939,11 +6568,13 @@ $("#taskList").addEventListener("click", (event) => {
 
 $("#hideDoneTasks").addEventListener("change", (event) => {
   taskOverviewHideDone = event.target.checked;
+  saveViewPrefs({ taskOverviewHideDone });
   renderTasks();
 });
 
 $("#taskOverviewSearch").addEventListener("input", (event) => {
   taskOverviewSearch = event.target.value;
+  saveViewPrefs({ taskOverviewSearch });
   renderTasks();
   $("#taskOverviewSearch").focus();
 });
@@ -5952,11 +6583,13 @@ $("#tasksView").addEventListener("click", (event) => {
   const filterButton = event.target.closest("[data-task-overview-filter]");
   if (!filterButton) return;
   taskOverviewFilter = filterButton.dataset.taskOverviewFilter;
+  saveViewPrefs({ taskOverviewFilter });
   renderTasks();
 });
 
 $("#taskOverviewSort").addEventListener("change", (event) => {
   taskOverviewSort = event.target.value;
+  saveViewPrefs({ taskOverviewSort });
   renderTasks();
 });
 
@@ -5968,22 +6601,26 @@ $("#taskOverviewFilterModal").addEventListener("click", (event) => {
   const chip = event.target.closest("[data-task-filter-kind]");
   if (!chip) return;
   setTaskOverviewFilterValue(chip.dataset.taskFilterKind, chip.dataset.taskFilterValue || "");
+  saveViewPrefs({ taskOverviewOwner, taskOverviewType, taskOverviewProject });
   renderTasks();
   openTaskOverviewFilter();
 });
 
 $("#prevMonth").addEventListener("click", () => {
   calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() - 1, 1);
+  saveViewPrefs({ calendarDate: dateKey(calendarDate) });
   renderCalendar();
 });
 
 $("#nextMonth").addEventListener("click", () => {
   calendarDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 1);
+  saveViewPrefs({ calendarDate: dateKey(calendarDate) });
   renderCalendar();
 });
 
 $("#todayBtn").addEventListener("click", () => {
   calendarDate = new Date();
+  saveViewPrefs({ calendarDate: dateKey(calendarDate) });
   renderCalendar();
 });
 
@@ -6310,3 +6947,12 @@ document.addEventListener("pointerdown", (event) => {
   button.appendChild(ripple);
   setTimeout(() => ripple.remove(), 520);
 });
+
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch((error) => {
+      console.warn("Service worker registration failed", error);
+    });
+  });
+}

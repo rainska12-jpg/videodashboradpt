@@ -85,3 +85,22 @@ Vercel에도 같은 값을 등록해야 합니다.
 - `.env.local`은 GitHub에 올리면 안 됩니다.
 - Supabase Service Role Key(서비스 역할 키)는 프론트엔드에 넣지 마세요.
 - 실제 운영 전에는 Supabase Authentication(인증)의 Email confirmation(이메일 확인) 설정을 운영 방식에 맞게 확인하세요.
+
+
+## PWA 설치
+
+Vercel 배포 후 모바일 브라우저에서 앱처럼 설치할 수 있습니다.
+
+### iPhone
+
+1. Safari에서 배포 주소를 엽니다.
+2. 공유 버튼을 누릅니다.
+3. `홈 화면에 추가`를 선택합니다.
+
+### Android
+
+1. Chrome에서 배포 주소를 엽니다.
+2. 메뉴를 누릅니다.
+3. `앱 설치` 또는 `홈 화면에 추가`를 선택합니다.
+
+주의: 로그인과 Supabase 데이터 저장은 온라인 연결이 필요합니다. 기본 화면 파일은 캐시되지만, 실시간 데이터는 Supabase 연결 상태에 따라 동작합니다.
