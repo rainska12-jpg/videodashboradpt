@@ -4597,6 +4597,19 @@ h3 {
   margin-top: 12px;
 }
 
+.owner-link-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.owner-link-actions small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .owner-link-head,
 .owner-link-row {
   display: grid;
@@ -4615,6 +4628,14 @@ h3 {
   border-radius: 8px;
   background: rgba(255,255,255,0.045);
   padding: 10px;
+}
+
+.owner-link-row.is-dirty {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+[data-save-owner-links].attention {
+  box-shadow: 0 0 0 3px rgba(30, 215, 96, 0.22);
 }
 
 .owner-link-row select {

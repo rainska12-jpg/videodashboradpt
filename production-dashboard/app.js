@@ -95,12 +95,16 @@ async function loadRemoteDashboardState() {
 
 async function saveRemoteDashboardState() {
   const client = getSupabaseClient();
-  if (!client || !currentProfile?.approved || isRemoteHydrating) return;
+  if (!client || !currentProfile?.approved || isRemoteHydrating) return false;
   const payload = { ...state, currentUser: currentProfile.id };
   const { error } = await client
     .from("dashboard_state")
     .upsert({ id: DASHBOARD_STATE_ROW_ID, data: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  if (error) console.warn("Supabase dashboard save failed", error);
+  if (error) {
+    console.warn("Supabase dashboard save failed", error);
+    return false;
+  }
+  return true;
 }
 
 function queueRemoteSave() {
@@ -707,7 +711,10 @@ function normalizeState(data) {
         trainingType,
         title: series.title || trainingType
       };
-    }) : []
+    }) : [],
+    owners: Array.isArray(data.owners) ? data.owners : [],
+    notifications: Array.isArray(data.notifications) ? data.notifications : [],
+    ownerDefaultsVersion: data.ownerDefaultsVersion || 2
   };
 }
 
@@ -5003,6 +5010,10 @@ function renderOwnerLinkManager() {
         <p class="eyebrow">owners</p>
         <h3>담당자 연결 관리</h3>
       </div>
+      <div class="owner-link-actions">
+        <small>계정을 선택한 뒤 연결 저장을 눌러야 반영됩니다.</small>
+        <button class="pill primary" type="button" data-save-owner-links>연결 저장</button>
+      </div>
       <div class="owner-link-table">
         <div class="owner-link-head"><span>담당자</span><span>연결 계정</span><span>상태</span><span>관리</span></div>
         ${ownerSlots().map((owner) => {
@@ -5122,7 +5133,7 @@ function approveUser(userId) {
   showToast("가입 계정이 승인되었습니다.");
 }
 
-function linkOwnerToUser(ownerId, userId) {
+async function linkOwnerToUser(ownerId, userId) {
   if (!isAdminUser()) return;
   ownerSlots().forEach((owner) => {
     if (userId && owner.linkedUserId === userId) owner.linkedUserId = null;
@@ -5131,9 +5142,46 @@ function linkOwnerToUser(ownerId, userId) {
   if (!owner) return;
   owner.linkedUserId = userId || null;
   saveState();
-  saveRemoteDashboardState();
+  const saved = await saveRemoteDashboardState();
   renderAll();
-  showToast(userId ? "담당자 슬롯에 계정을 연결했습니다." : "담당자 슬롯 연결을 해제했습니다.");
+  showToast(saved === false ? "연결 저장에 실패했습니다. Supabase 권한을 확인해주세요." : userId ? "담당자 슬롯에 계정을 연결했습니다." : "담당자 슬롯 연결을 해제했습니다.");
+}
+
+async function saveOwnerLinkSettings() {
+  if (!isAdminUser()) return;
+  const selects = Array.from(document.querySelectorAll("[data-link-owner-id]"));
+  const usedUserIds = new Set();
+  const nextLinks = new Map();
+  let hasDuplicate = false;
+
+  selects.forEach((select) => {
+    const ownerId = select.dataset.linkOwnerId;
+    const userId = select.value || "";
+    if (userId && usedUserIds.has(userId)) {
+      hasDuplicate = true;
+      nextLinks.set(ownerId, "");
+      return;
+    }
+    if (userId) usedUserIds.add(userId);
+    nextLinks.set(ownerId, userId);
+  });
+
+  ownerSlots().forEach((owner) => {
+    owner.linkedUserId = null;
+  });
+  nextLinks.forEach((userId, ownerId) => {
+    const owner = ownerById(ownerId);
+    if (owner) owner.linkedUserId = userId || null;
+  });
+
+  saveState();
+  const saved = await saveRemoteDashboardState();
+  renderAll();
+  if (saved === false) {
+    showToast("연결 저장에 실패했습니다. Supabase 권한을 확인해주세요.");
+    return;
+  }
+  showToast(hasDuplicate ? "중복 계정은 하나만 연결하고 저장했습니다." : "담당자 연결 설정을 저장했습니다.");
 }
 
 function addOption(group, value) {
@@ -6845,6 +6893,14 @@ $("#adminContent").addEventListener("submit", (event) => {
 });
 
 $("#adminContent").addEventListener("click", (event) => {
+  const saveOwnerLinksButton = event.target.closest("[data-save-owner-links]");
+  if (saveOwnerLinksButton) {
+    saveOwnerLinksButton.disabled = true;
+    saveOwnerLinkSettings().finally(() => {
+      saveOwnerLinksButton.disabled = false;
+    });
+    return;
+  }
   const pendingButton = event.target.closest("[data-mark-pending]");
   if (pendingButton) {
     markUserPending(pendingButton.dataset.markPending);
@@ -6878,10 +6934,11 @@ $("#adminContent").addEventListener("click", (event) => {
   confirmDelete(() => deleteOption(manager.dataset.optionGroup, value));
 });
 
-$("#adminContent").addEventListener("change", (event) => {
+$("#adminContent").addEventListener("change", async (event) => {
   const linkSelect = event.target.closest("[data-link-owner-id]");
   if (linkSelect) {
-    linkOwnerToUser(linkSelect.dataset.linkOwnerId, linkSelect.value);
+    linkSelect.closest(".owner-link-row")?.classList.add("is-dirty");
+    $("#adminContent [data-save-owner-links]")?.classList.add("attention");
     return;
   }
   const input = event.target.closest("[data-option-edit-value]");
