@@ -484,6 +484,35 @@ function linkedOwnerIdsForUser(user = currentUser()) {
     .map((owner) => owner.id);
 }
 
+function recordAuthorDisplayName(author) {
+  if (!author) return "관리자";
+  if (ownerSlots().some((owner) => owner.name === author)) return author;
+  const user = state.users.find((item) => item.id === author || item.username === author || item.email === author || item.name === author);
+  if (!user) return author;
+  const linkedOwnerId = linkedOwnerIdsForUser(user)[0];
+  return linkedOwnerId ? ownerName(linkedOwnerId) : (user.name || user.username || author);
+}
+
+function currentRecordAuthorName(fallbackOwnerIds = []) {
+  const user = currentUser();
+  const linkedOwnerId = linkedOwnerIdsForUser(user)[0];
+  if (linkedOwnerId) return ownerName(linkedOwnerId);
+  return ownerName(fallbackOwnerIds[0]) || user?.name || user?.username || "관리자";
+}
+
+function isCurrentUserRecord(record) {
+  const user = currentUser();
+  if (!user || !record) return false;
+  const names = new Set([
+    user.id,
+    user.username,
+    user.email,
+    user.name,
+    ...ownerNames(linkedOwnerIdsForUser(user))
+  ].filter(Boolean));
+  return names.has(record.author) || names.has(recordAuthorDisplayName(record.author));
+}
+
 function canUserManageOwner(ownerId, user = currentUser()) {
   if (!user) return false;
   if (isAdminUser()) return true;
@@ -2430,9 +2459,10 @@ function renderWorkManagementRecords(work) {
   work.records = Array.isArray(work.records) ? work.records : [];
   const records = [...work.records]
     .filter((record) => {
-      if (workRecordFilterMode === "mine" && record.author !== currentUser()?.username) return false;
+      const author = recordAuthorDisplayName(record.author);
+      if (workRecordFilterMode === "mine" && !isCurrentUserRecord(record)) return false;
       if (!query) return true;
-      return `${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
+      return `${author || ""} ${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const editingRecord = work.records.find((record) => record.id === editingWorkRecordId);
@@ -2459,7 +2489,7 @@ function renderWorkManagementRecords(work) {
               .map((record) => `
                 <article class="record-card">
                   <div class="record-meta">
-                    <strong>${esc(record.author || "관리자")}</strong>
+                    <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
                     ${editable ? `<button class="record-control" data-edit-work-record="${esc(record.id)}" type="button">수정</button>` : ""}
                     ${editable ? `<button class="record-control danger" data-delete-work-record="${esc(record.id)}" type="button">삭제</button>` : ""}
@@ -2555,12 +2585,13 @@ function addWorkManagementRecord() {
   if (!body) return;
   work.records = Array.isArray(work.records) ? work.records : [];
   const user = currentUser();
+  const authorName = currentRecordAuthorName(workOwners(work));
   if (editingWorkRecordId) {
     const record = work.records.find((item) => item.id === editingWorkRecordId);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
-      record.author = user?.username || record.author || "관리자";
+      record.author = authorName || record.author || "관리자";
     }
     editingWorkRecordId = null;
     notifyOwners(workOwners(work), `관리기록이 수정되었습니다: ${work.title}`, { type: "work-record", workId: work.id });
@@ -2571,7 +2602,7 @@ function addWorkManagementRecord() {
   }
   work.records.push({
     id: makeId(),
-    author: user?.username || ownerName(workOwners(work)[0]) || "관리자",
+    author: authorName,
     body,
     createdAt: new Date().toISOString()
   });
@@ -3430,9 +3461,10 @@ function renderManagementRecords(project) {
   const query = recordSearchQuery.trim().toLowerCase();
   const records = [...(project.records || [])]
     .filter((record) => {
-      if (recordFilterMode === "mine" && record.author !== currentUser()?.username) return false;
+      const author = recordAuthorDisplayName(record.author);
+      if (recordFilterMode === "mine" && !isCurrentUserRecord(record)) return false;
       if (!query) return true;
-      return `${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
+      return `${author || ""} ${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const editingRecord = project.records?.find((record) => record.id === editingRecordId);
@@ -3459,7 +3491,7 @@ function renderManagementRecords(project) {
               .map((record) => `
                 <article class="record-card">
                   <div class="record-meta">
-                    <strong>${esc(record.author || "관리자")}</strong>
+                    <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
                     ${editable ? `<button class="record-control" data-edit-record="${esc(record.id)}" type="button">수정</button>` : ""}
                     ${editable ? `<button class="record-control danger" data-delete-record="${esc(record.id)}" type="button">삭제</button>` : ""}
@@ -3770,12 +3802,13 @@ function addManagementRecord() {
   if (!body) return;
   project.records = Array.isArray(project.records) ? project.records : [];
   const user = currentUser();
+  const authorName = currentRecordAuthorName(projectOwners(project));
   if (editingRecordId) {
     const record = project.records.find((item) => item.id === editingRecordId);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
-      record.author = user?.username || record.author || "관리자";
+      record.author = authorName || record.author || "관리자";
     }
     editingRecordId = null;
     notifyOwners(projectOwners(project), `관리기록이 수정되었습니다: ${project.title}`, { type: "project-record", projectId: project.id });
@@ -3786,7 +3819,7 @@ function addManagementRecord() {
   }
   project.records.push({
     id: makeId(),
-    author: user?.username || ownerName(projectOwners(project)[0]) || "관리자",
+    author: authorName,
     body,
     createdAt: new Date().toISOString()
   });
