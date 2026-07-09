@@ -266,9 +266,12 @@
             </div>
             <div class="task-overview-selects">
               <select id="taskOverviewSort">
-                <option value="due">정렬: 마감일 순</option>
-                <option value="created">정렬: 등록순</option>
-                <option value="project">정렬: 프로젝트 순</option>
+                <option value="dueAsc">정렬: 마감일 빠른 순</option>
+                <option value="dueDesc">정렬: 마감일 늦은 순</option>
+                <option value="createdDesc">정렬: 등록일 최신순</option>
+                <option value="createdAsc">정렬: 등록일 오래된순</option>
+                <option value="project">정렬: 프로젝트명순</option>
+                <option value="owner">정렬: 담당자순</option>
               </select>
               <button id="taskOverviewFilterBtn" class="task-filter-trigger" type="button">☷ 필터</button>
             </div>
@@ -718,7 +721,7 @@
     <div id="mobileTopbar" class="mobile-topbar mobile-v2" aria-label="모바일 상단 정보">
       <div>
         <p class="eyebrow">Video Work Dashboard</p>
-        <strong id="mobileViewTitle">영상</strong>
+        <strong id="mobileViewTitle">할 일</strong>
       </div>
       <button id="mobileNotifyBtn" class="mobile-icon-btn" type="button" aria-label="알림">
         <span>알림</span>
@@ -727,9 +730,9 @@
     </div>
 
     <nav id="mobileTabbar" class="mobile-tabbar mobile-v2" aria-label="모바일 메뉴">
-      <button class="mobile-tab active" data-mobile-section="projects" type="button"><span>▣</span><b>영상</b></button>
+      <button class="mobile-tab" data-mobile-section="projects" type="button"><span>▣</span><b>영상</b></button>
       <button class="mobile-tab" data-mobile-section="works" type="button"><span>▤</span><b>업무</b></button>
-      <button class="mobile-tab" data-mobile-section="tasks" type="button"><span>✓</span><b>할 일</b></button>
+      <button class="mobile-tab active" data-mobile-section="tasks" type="button"><span>✓</span><b>할 일</b></button>
       <button class="mobile-tab" data-mobile-section="calendar" type="button"><span>□</span><b>캘린더</b></button>
       <button class="mobile-tab" data-mobile-more type="button"><span>⋯</span><b>더보기</b></button>
     </nav>

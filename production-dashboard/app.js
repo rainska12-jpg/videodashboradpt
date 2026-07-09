@@ -265,7 +265,7 @@ let adminProfilesRefreshing = false;
 let taskDraft = { projectId: state.projects[0]?.id || "", owner: ownerOptions()[0] || "", dueDate: dateKey(new Date()) };
 let taskOverviewFilter = viewPref("taskOverviewFilter", "all");
 let taskOverviewSearch = viewPref("taskOverviewSearch", "");
-let taskOverviewSort = viewPref("taskOverviewSort", "due");
+let taskOverviewSort = viewPref("taskOverviewSort", "dueAsc");
 let taskOverviewOwner = viewPref("taskOverviewOwner", "");
 let taskOverviewType = viewPref("taskOverviewType", "");
 let taskOverviewProject = viewPref("taskOverviewProject", "");
@@ -2731,6 +2731,68 @@ function taskOverviewDueBadge(item) {
   return `<span class="overview-due upcoming">D-${diff}</span>`;
 }
 
+const taskSortOptions = [
+  ["dueAsc", "마감일 빠른 순"],
+  ["dueDesc", "마감일 늦은 순"],
+  ["createdDesc", "등록일 최신순"],
+  ["createdAsc", "등록일 오래된순"],
+  ["project", "프로젝트명순"],
+  ["owner", "담당자순"]
+];
+
+function normalizeTaskSort(value) {
+  const aliases = { due: "dueAsc", created: "createdAsc" };
+  const key = aliases[value] || value || "dueAsc";
+  return taskSortOptions.some(([option]) => option === key) ? key : "dueAsc";
+}
+
+function taskSortLabel(value) {
+  const key = normalizeTaskSort(value);
+  return taskSortOptions.find(([option]) => option === key)?.[1] || "마감일 빠른 순";
+}
+
+function taskDueSortRank(item) {
+  if (item.task.done) return 4;
+  const diff = taskOverviewDayDiff(item);
+  if (diff === null) return 3;
+  if (diff < 0) return 0;
+  if (diff === 0) return 1;
+  return 2;
+}
+
+function taskCreatedValue(item) {
+  return new Date(item.task.createdAt || item.id || 0).getTime() || 0;
+}
+
+function compareTaskOverviewItems(a, b, sortValue = taskOverviewSort) {
+  const sort = normalizeTaskSort(sortValue);
+  if (sort === "createdDesc") return taskCreatedValue(b) - taskCreatedValue(a);
+  if (sort === "createdAsc") return taskCreatedValue(a) - taskCreatedValue(b);
+  if (sort === "project") return `${a.sourceTitle} ${a.task.text || ""}`.localeCompare(`${b.sourceTitle} ${b.task.text || ""}`, "ko");
+  if (sort === "owner") return `${taskOwnersLabel(a.task)} ${a.sourceTitle}`.localeCompare(`${taskOwnersLabel(b.task)} ${b.sourceTitle}`, "ko");
+  if (sort === "dueDesc") {
+    const aDue = a.task.done ? "0000-00-00" : (a.task.dueDate || "0000-00-00");
+    const bDue = b.task.done ? "0000-00-00" : (b.task.dueDate || "0000-00-00");
+    return bDue.localeCompare(aDue) || a.sourceTitle.localeCompare(b.sourceTitle, "ko");
+  }
+  const rank = taskDueSortRank(a) - taskDueSortRank(b);
+  if (rank) return rank;
+  const aDue = a.task.dueDate || "9999-12-31";
+  const bDue = b.task.dueDate || "9999-12-31";
+  return aDue.localeCompare(bDue) || a.sourceTitle.localeCompare(b.sourceTitle, "ko");
+}
+
+function taskDdayInfo(item) {
+  if (item.task.done) return { label: "완료", className: "done" };
+  const diff = taskOverviewDayDiff(item);
+  if (diff === null) return { label: "마감 없음", className: "none" };
+  if (diff < 0) return { label: `${Math.abs(diff)}일 지연`, className: "overdue" };
+  if (diff === 0) return { label: "D-DAY", className: "today" };
+  if (diff <= 3) return { label: `D-${diff}`, className: "soon" };
+  if (diff <= 6) return { label: `D-${diff}`, className: "mid" };
+  return { label: `D-${diff}`, className: "safe" };
+}
+
 function filteredTaskOverviewItems() {
   const query = taskOverviewSearch.trim().toLowerCase();
   return taskOverviewItems()
@@ -2751,13 +2813,7 @@ function filteredTaskOverviewItems() {
         .toLowerCase()
         .includes(query);
     })
-    .sort((a, b) => {
-      if (taskOverviewSort === "created") return String(a.task.createdAt || a.id).localeCompare(String(b.task.createdAt || b.id));
-      if (taskOverviewSort === "project") return a.sourceTitle.localeCompare(b.sourceTitle);
-      const aDue = a.task.dueDate || "9999-12-31";
-      const bDue = b.task.dueDate || "9999-12-31";
-      return aDue.localeCompare(bDue);
-    });
+    .sort((a, b) => compareTaskOverviewItems(a, b, taskOverviewSort));
 }
 
 function renderTaskOverviewSelect(select, value, options, defaultLabel) {
@@ -2870,7 +2926,11 @@ function renderTaskOverviewControls(items) {
     filterButton.classList.toggle("active", count > 0);
   }
   const sortSelect = $("#taskOverviewSort");
-  if (sortSelect) sortSelect.value = taskOverviewSort;
+  if (sortSelect) {
+    taskOverviewSort = normalizeTaskSort(taskOverviewSort);
+    sortSelect.innerHTML = taskSortOptions.map(([value, label]) => `<option value="${esc(value)}">정렬: ${esc(label)}</option>`).join("");
+    sortSelect.value = taskOverviewSort;
+  }
   const searchInput = $("#taskOverviewSearch");
   if (searchInput && searchInput.value !== taskOverviewSearch) searchInput.value = taskOverviewSearch;
   const hideInput = $("#hideDoneTasks");
@@ -5365,8 +5425,11 @@ function exportCsv() {
 
 
 
-let mobileActiveSection = "projects";
-let mobileTaskFilter = viewPref("mobileTaskFilter", "today");
+let mobileActiveSection = "tasks";
+let mobileTaskFilter = viewPref("mobileTaskFilter", "all");
+let mobileTaskSort = viewPref("mobileTaskSort", taskOverviewSort);
+let mobileTaskHideDone = viewPref("mobileTaskHideDone", true);
+let mobileTaskSortOpen = false;
 let mobileAddMode = "";
 
 function isMobileViewport() {
@@ -5456,39 +5519,91 @@ function renderMobileWorkCards() {
 function mobileFilteredTasks() {
   const today = mobileTodayKey();
   const week = mobileWeekLimitKey();
-  return taskOverviewItems()
-    .filter((item) => {
-      const due = item.task.dueDate || "";
-      if (mobileTaskFilter === "today") return !item.task.done && due === today;
-      if (mobileTaskFilter === "overdue") return !item.task.done && due && due < today;
-      if (mobileTaskFilter === "week") return !item.task.done && due && due >= today && due <= week;
-      if (mobileTaskFilter === "done") return item.task.done;
-      return !item.task.done;
-    })
-    .sort((a, b) => String(a.task.dueDate || "9999-12-31").localeCompare(String(b.task.dueDate || "9999-12-31")));
+  const allItems = taskOverviewItems();
+  if (!["all", "today", "overdue", "week"].includes(mobileTaskFilter)) mobileTaskFilter = "all";
+  mobileTaskSort = normalizeTaskSort(mobileTaskSort);
+  const matchingItems = allItems.filter((item) => {
+    const due = item.task.dueDate || "";
+    if (mobileTaskFilter === "today") return !item.task.done && due === today;
+    if (mobileTaskFilter === "overdue") return !item.task.done && due && due < today;
+    if (mobileTaskFilter === "week") return !item.task.done && due && due >= today && due <= week;
+    return true;
+  });
+  const visibleItems = matchingItems
+    .filter((item) => !(mobileTaskHideDone && item.task.done))
+    .sort((a, b) => compareTaskOverviewItems(a, b, mobileTaskSort));
+  return { allItems, matchingItems, visibleItems };
+}
+
+function mobileTaskEmptyMessage(totalCount, visibleCount) {
+  if (!visibleCount && totalCount && mobileTaskHideDone) return "표시할 할 일이 없습니다. 완료된 항목 숨기기를 해제하면 완료 업무를 볼 수 있습니다.";
+  if (mobileTaskFilter === "today") return "오늘 마감인 할 일이 없습니다.";
+  if (mobileTaskFilter === "overdue") return "지연된 할 일이 없습니다.";
+  if (mobileTaskFilter === "week") return "이번주 할 일이 없습니다.";
+  return "등록된 할 일이 없습니다.";
+}
+
+function mobileTaskDueText(task) {
+  const date = task.dueDate ? formatDate(task.dueDate) : "마감일 없음";
+  return `${date} · ${formatTaskTime(task)}`;
+}
+
+function renderMobileTaskCard(item) {
+  const badge = taskDdayInfo(item);
+  return `
+    <article class="mobile-task-card ${item.task.done ? "is-done" : ""}" data-mobile-task-card="${esc(item.id)}">
+      <input class="mobile-task-check" type="checkbox" data-overview-task-source="${esc(item.source)}" data-overview-task-check="${esc(item.id)}" ${item.task.done ? "checked" : ""} ${item.canManage ? "" : "disabled"} />
+      <button class="mobile-task-open" type="button" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
+        <strong>${esc(item.task.text || "제목 없음")}</strong>
+        <span>${esc(item.sourceTitle)} · ${esc(taskOwnersLabel(item.task))}</span>
+        <small>${esc(mobileTaskDueText(item.task))}</small>
+      </button>
+      <b class="mobile-dday-badge ${esc(badge.className)}">${esc(badge.label)}</b>
+    </article>
+  `;
+}
+
+function renderMobileSortSheet() {
+  if (!mobileTaskSortOpen) return "";
+  return `
+    <div class="mobile-sort-backdrop" data-mobile-close-sort></div>
+    <section class="mobile-sort-sheet">
+      <i></i>
+      <h3>정렬 방식</h3>
+      ${taskSortOptions.map(([value, label]) => `
+        <button class="${normalizeTaskSort(mobileTaskSort) === value ? "active" : ""}" data-mobile-task-sort="${esc(value)}" type="button">
+          <span></span>
+          ${esc(label)}
+          ${normalizeTaskSort(mobileTaskSort) === value ? "<b>✓</b>" : ""}
+        </button>
+      `).join("")}
+    </section>
+  `;
 }
 
 function renderMobileTasks() {
-  const items = mobileFilteredTasks();
-  const filters = [["today", "오늘"], ["overdue", "지연"], ["week", "이번주"], ["done", "완료"]];
+  const { matchingItems, visibleItems } = mobileFilteredTasks();
+  const filters = [["all", "전체"], ["today", "오늘"], ["overdue", "지연"], ["week", "이번주"]];
+  const emptyMessage = mobileTaskEmptyMessage(matchingItems.length, visibleItems.length);
   return `
-    <div class="mobile-task-head">
-      <h2>할 일</h2>
+    <div class="mobile-task-page">
       <div class="mobile-filter-chips">
         ${filters.map(([key, label]) => `<button class="${mobileTaskFilter === key ? "active" : ""}" data-mobile-task-filter="${key}" type="button">${label}</button>`).join("")}
       </div>
-    </div>
-    <div class="mobile-card-list mobile-task-list">
-      ${items.length ? items.map((item) => `
-        <article class="mobile-task-card" data-mobile-task-card="${esc(item.id)}">
-          <input type="checkbox" data-overview-task-source="${esc(item.source)}" data-overview-task-check="${esc(item.id)}" ${item.task.done ? "checked" : ""} ${item.canManage ? "" : "disabled"} />
-          <button type="button" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
-            <strong>${esc(item.task.text || "제목 없음")}</strong>
-            <span>${esc(item.sourceTitle)} · ${esc(taskOwnersLabel(item.task))}</span>
-            <small>${item.task.dueDate ? esc(formatDate(item.task.dueDate)) : "마감일 없음"} · ${esc(formatTaskTime(item.task))}</small>
-          </button>
-        </article>
-      `).join("") : `<div class="empty">조건에 맞는 할 일이 없습니다.</div>`}
+      <div class="mobile-task-tools">
+        <button class="mobile-sort-trigger ${mobileTaskSortOpen ? "active" : ""}" data-mobile-open-sort type="button">
+          <span>☰</span> 정렬: ${esc(taskSortLabel(mobileTaskSort))} <i>${mobileTaskSortOpen ? "⌃" : "⌄"}</i>
+        </button>
+        <label class="mobile-hide-done-toggle">
+          <span>완료된 항목 숨기기</span>
+          <input data-mobile-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} />
+          <b></b>
+        </label>
+      </div>
+      <div class="mobile-card-list mobile-task-list">
+        ${visibleItems.length ? visibleItems.map(renderMobileTaskCard).join("") : `<div class="mobile-task-empty"><div>✓</div><strong>${esc(emptyMessage)}</strong><span>새 할 일을 추가하거나 다른 필터를 확인해보세요.</span></div>`}
+      </div>
+      ${renderMobileSortSheet()}
     </div>
   `;
 }
@@ -5899,6 +6014,13 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
   submitMobileAddForm(event.currentTarget);
 });
 $("#mobileApp")?.addEventListener("change", (event) => {
+  const hideDone = event.target.closest("[data-mobile-hide-done]");
+  if (hideDone) {
+    mobileTaskHideDone = hideDone.checked;
+    saveViewPrefs({ mobileTaskHideDone });
+    renderMobileDashboard();
+    return;
+  }
   const taskId = event.target.dataset.overviewTaskCheck;
   if (!taskId) return;
   const source = event.target.dataset.overviewTaskSource;
@@ -5929,8 +6051,28 @@ $("#mobileApp")?.addEventListener("click", (event) => {
   const filter = event.target.closest("[data-mobile-task-filter]")?.dataset.mobileTaskFilter;
   if (filter) {
     mobileTaskFilter = filter;
+    mobileTaskSortOpen = false;
     saveViewPrefs({ mobileTaskFilter });
     renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-open-sort]")) {
+    mobileTaskSortOpen = !mobileTaskSortOpen;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-close-sort]")) {
+    mobileTaskSortOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  const sort = event.target.closest("[data-mobile-task-sort]")?.dataset.mobileTaskSort;
+  if (sort) {
+    mobileTaskSort = normalizeTaskSort(sort);
+    mobileTaskSortOpen = false;
+    saveViewPrefs({ mobileTaskSort });
+    renderMobileDashboard();
+    return;
   }
   const taskButton = event.target.closest("[data-mobile-open-task-id]");
   if (taskButton) {
@@ -6669,7 +6811,7 @@ $("#tasksView").addEventListener("click", (event) => {
 });
 
 $("#taskOverviewSort").addEventListener("change", (event) => {
-  taskOverviewSort = event.target.value;
+  taskOverviewSort = normalizeTaskSort(event.target.value);
   saveViewPrefs({ taskOverviewSort });
   renderTasks();
 });

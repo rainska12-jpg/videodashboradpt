@@ -5641,3 +5641,385 @@ h3 {
     display: block !important;
   }
 }
+
+@media (max-width: 768px) {
+  .main {
+    padding: 96px 20px 132px;
+    overflow-x: hidden;
+  }
+
+  #mobileApp.mobile-app {
+    gap: 16px;
+  }
+
+  .mobile-topbar.mobile-v2 {
+    min-height: 74px;
+    padding: 14px 20px 12px;
+    background: linear-gradient(180deg, rgba(4, 8, 10, 0.98), rgba(4, 8, 10, 0.88));
+    border-bottom: 0;
+  }
+
+  .mobile-topbar.mobile-v2 .eyebrow {
+    display: none;
+  }
+
+  .mobile-topbar.mobile-v2 strong {
+    font-size: 36px;
+    line-height: 1;
+    letter-spacing: -0.5px;
+  }
+
+  .mobile-icon-btn {
+    min-width: 82px;
+    min-height: 50px;
+    border-radius: 25px;
+    background: rgba(255, 255, 255, 0.07);
+    font-size: 15px;
+  }
+
+  .mobile-icon-btn b {
+    min-width: 26px;
+    height: 26px;
+    font-size: 14px;
+  }
+
+  .mobile-task-page {
+    display: grid;
+    gap: 16px;
+  }
+
+  .mobile-filter-chips {
+    gap: 12px;
+    padding-bottom: 2px;
+  }
+
+  .mobile-filter-chips button {
+    min-width: 78px;
+    min-height: 48px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    color: var(--text);
+    font-size: 16px;
+    padding: 0 18px;
+  }
+
+  .mobile-filter-chips button.active {
+    background: rgba(31, 215, 101, 0.24);
+    box-shadow: inset 0 0 0 2px var(--accent);
+    color: var(--text);
+  }
+
+  .mobile-task-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+    gap: 12px;
+  }
+
+  .mobile-sort-trigger,
+  .mobile-hide-done-toggle {
+    min-height: 52px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.11);
+    color: var(--text);
+    padding: 0 14px;
+  }
+
+  .mobile-sort-trigger {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 850;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .mobile-sort-trigger i {
+    margin-left: auto;
+    color: var(--muted);
+    font-style: normal;
+  }
+
+  .mobile-hide-done-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 850;
+  }
+
+  .mobile-hide-done-toggle span {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-hide-done-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .mobile-hide-done-toggle b {
+    width: 44px;
+    height: 26px;
+    border-radius: 999px;
+    background: #394047;
+    position: relative;
+    flex: 0 0 auto;
+    transition: background 180ms ease;
+  }
+
+  .mobile-hide-done-toggle b::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #e7e7e7;
+    transition: transform 180ms ease;
+  }
+
+  .mobile-hide-done-toggle input:checked + b {
+    background: var(--accent);
+  }
+
+  .mobile-hide-done-toggle input:checked + b::after {
+    transform: translateX(18px);
+  }
+
+  .mobile-card-list.mobile-task-list {
+    gap: 12px;
+    padding-bottom: 128px;
+  }
+
+  .mobile-task-card {
+    min-height: 96px;
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(23, 28, 32, 0.96), rgba(10, 14, 17, 0.96));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16), 0 16px 36px rgba(0, 0, 0, 0.18);
+  }
+
+  .mobile-task-card .mobile-task-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    border: 1.5px solid rgba(255, 255, 255, 0.55);
+    background: rgba(0, 0, 0, 0.35);
+    display: grid;
+    place-items: center;
+  }
+
+  .mobile-task-card .mobile-task-check:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .mobile-task-card .mobile-task-check:checked::after {
+    content: "✓";
+    color: #020b05;
+    font-size: 22px;
+    font-weight: 950;
+    line-height: 1;
+  }
+
+  .mobile-task-card .mobile-task-open {
+    min-width: 0;
+    min-height: 58px;
+    display: grid;
+    align-content: center;
+    gap: 5px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    padding: 0;
+  }
+
+  .mobile-task-card .mobile-task-open strong,
+  .mobile-task-card .mobile-task-open span,
+  .mobile-task-card .mobile-task-open small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-task-card .mobile-task-open strong {
+    font-size: 17px;
+    line-height: 1.15;
+    font-weight: 950;
+  }
+
+  .mobile-task-card .mobile-task-open span {
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .mobile-task-card .mobile-task-open small {
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .mobile-dday-badge {
+    min-width: 64px;
+    min-height: 44px;
+    display: inline-grid;
+    place-items: center;
+    padding: 0 12px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 950;
+    white-space: nowrap;
+  }
+
+  .mobile-dday-badge.safe { background: #19b95a; }
+  .mobile-dday-badge.mid { background: #c4b328; color: #0b0b0b; }
+  .mobile-dday-badge.soon { background: #f27a00; }
+  .mobile-dday-badge.today { background: #ef3f35; }
+  .mobile-dday-badge.overdue { background: #a71922; }
+  .mobile-dday-badge.none,
+  .mobile-dday-badge.done { background: #4b5158; }
+
+  .mobile-task-card.is-done {
+    opacity: 0.72;
+  }
+
+  .mobile-task-empty {
+    min-height: 420px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 14px;
+    padding: 34px 22px;
+    border-radius: 22px;
+    background: linear-gradient(135deg, rgba(23, 28, 32, 0.94), rgba(9, 13, 16, 0.96));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    text-align: center;
+  }
+
+  .mobile-task-empty div {
+    width: 94px;
+    height: 94px;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: #041006;
+    background: var(--accent);
+    font-size: 36px;
+    font-weight: 950;
+    box-shadow: 0 0 0 28px rgba(255, 255, 255, 0.04);
+  }
+
+  .mobile-task-empty strong {
+    max-width: 280px;
+    font-size: 20px;
+    line-height: 1.35;
+  }
+
+  .mobile-task-empty span {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .mobile-sort-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 105;
+    background: rgba(0, 0, 0, 0.58);
+  }
+
+  .mobile-sort-sheet {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    bottom: calc(70px + env(safe-area-inset-bottom));
+    z-index: 110;
+    display: grid;
+    gap: 0;
+    padding: 14px;
+    border-radius: 28px 28px 0 0;
+    background: rgba(24, 29, 33, 0.98);
+    box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.42), inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-sort-sheet > i {
+    width: 52px;
+    height: 5px;
+    justify-self: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.34);
+    margin-bottom: 16px;
+  }
+
+  .mobile-sort-sheet h3 {
+    margin: 0 0 14px;
+    font-size: 22px;
+    font-weight: 950;
+  }
+
+  .mobile-sort-sheet button {
+    min-height: 56px;
+    display: grid;
+    grid-template-columns: 26px 1fr 24px;
+    align-items: center;
+    gap: 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    padding: 0 14px;
+    text-align: left;
+    font-size: 16px;
+    font-weight: 850;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .mobile-sort-sheet button span {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.72);
+  }
+
+  .mobile-sort-sheet button.active {
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .mobile-sort-sheet button.active span {
+    box-shadow: inset 0 0 0 6px var(--accent);
+  }
+
+  .mobile-sort-sheet button b {
+    color: var(--accent);
+    font-size: 20px;
+  }
+
+  .mobile-fab-wrap.mobile-v2 {
+    right: 24px;
+    bottom: 108px;
+  }
+
+  .mobile-fab {
+    width: 64px;
+    height: 64px;
+    font-size: 38px;
+  }
+}
