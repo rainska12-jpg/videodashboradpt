@@ -303,6 +303,7 @@ let isProjectFilterOpen = false;
 let activeCalendarMode = viewPref("activeCalendarMode", "all");
 let calendarFilters = viewPref("calendarFilters", { video: true, work: true, staff: true });
 let activeView = "overview";
+let activeDropdownAnchor = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -1161,6 +1162,11 @@ function renderMultiDropdown({ target, values, options, placeholder, onChange, c
 function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel = (option) => option) {
   closeDatePicker();
   const layer = $("#dropdownLayer");
+  if (layer.classList.contains("open") && activeDropdownAnchor === anchor) {
+    closeDropdown();
+    return;
+  }
+  activeDropdownAnchor = anchor;
   const rect = anchor.getBoundingClientRect();
   layer.innerHTML = options
     .map((option) => `
@@ -1185,6 +1191,7 @@ function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel
 }
 
 function closeDropdown() {
+  activeDropdownAnchor = null;
   $("#dropdownLayer").classList.remove("open");
   $("#dropdownLayer").innerHTML = "";
 }
@@ -1192,6 +1199,11 @@ function closeDropdown() {
 function openMultiDropdown(anchor, options, selected, onChange, formatOptionLabel = (option) => option) {
   closeDatePicker();
   const layer = $("#dropdownLayer");
+  if (layer.classList.contains("open") && activeDropdownAnchor === anchor) {
+    closeDropdown();
+    return;
+  }
+  activeDropdownAnchor = anchor;
   const rect = anchor.getBoundingClientRect();
   layer.innerHTML = options.length
     ? options
@@ -2478,7 +2490,6 @@ function renderWorkManagementRecords(work) {
       </div>
     </div>
     <div class="record-tools">
-      <input id="workRecordSearchInput" class="record-search" value="${esc(workRecordSearchQuery)}" placeholder="관리기록 검색" />
       <button class="record-control ${workRecordFilterMode === "all" ? "active" : ""}" data-work-record-filter="all" type="button">전체</button>
       <button class="record-control ${workRecordFilterMode === "mine" ? "active" : ""}" data-work-record-filter="mine" type="button">내 기록</button>
     </div>
@@ -2626,12 +2637,12 @@ function deleteWorkManagementRecord(recordId) {
   showToast("관리기록이 삭제되었습니다.");
 }
 
-function openWorkDetail(workId) {
+function openWorkDetail(workId, initialTab = "basic") {
   if (!state.works.some((work) => work.id === workId)) return;
   activeWorkId = workId;
   editingWorkRecordId = null;
   workTaskComposerOpen = false;
-  activeWorkDetailTab = "basic";
+  activeWorkDetailTab = initialTab;
   renderWorkDetail();
   $("#workDetail").classList.add("open");
   $("#workDetail").setAttribute("aria-hidden", "false");
@@ -2734,10 +2745,8 @@ function taskOverviewDueBadge(item) {
 const taskSortOptions = [
   ["dueAsc", "마감일 빠른 순"],
   ["dueDesc", "마감일 늦은 순"],
-  ["createdDesc", "등록일 최신순"],
-  ["createdAsc", "등록일 오래된순"],
-  ["project", "프로젝트명순"],
-  ["owner", "담당자순"]
+  ["createdDesc", "등록일 최신 순"],
+  ["createdAsc", "등록일 오래된 순"]
 ];
 
 function normalizeTaskSort(value) {
@@ -2787,7 +2796,7 @@ function taskDdayInfo(item) {
   const diff = taskOverviewDayDiff(item);
   if (diff === null) return { label: "마감 없음", className: "none" };
   if (diff < 0) return { label: `${Math.abs(diff)}일 지연`, className: "overdue" };
-  if (diff === 0) return { label: "D-DAY", className: "today" };
+  if (diff === 0) return { label: "오늘", className: "today" };
   if (diff <= 3) return { label: `D-${diff}`, className: "soon" };
   if (diff <= 6) return { label: `D-${diff}`, className: "mid" };
   return { label: `D-${diff}`, className: "safe" };
@@ -3540,7 +3549,6 @@ function renderManagementRecords(project) {
       </div>
     </div>
     <div class="record-tools">
-      <input id="recordSearchInput" class="record-search" value="${esc(recordSearchQuery)}" placeholder="관리기록 검색" />
       <button class="record-control ${recordFilterMode === "all" ? "active" : ""}" data-record-filter="all" type="button">전체</button>
       <button class="record-control ${recordFilterMode === "mine" ? "active" : ""}" data-record-filter="mine" type="button">내 기록</button>
     </div>
@@ -3903,12 +3911,12 @@ function deleteManagementRecord(recordId) {
   showToast("관리기록이 삭제되었습니다.");
 }
 
-function openProjectDetail(projectId) {
+function openProjectDetail(projectId, initialTab = "basic") {
   if (!state.projects.some((project) => project.id === projectId)) return;
   activeProjectId = projectId;
   editingRecordId = null;
   detailTaskComposerOpen = false;
-  activeDetailTab = "basic";
+  activeDetailTab = initialTab;
   renderProjectDetail();
   $("#projectDetail").classList.add("open");
   $("#projectDetail").setAttribute("aria-hidden", "false");
@@ -5429,7 +5437,10 @@ let mobileActiveSection = "tasks";
 let mobileTaskFilter = viewPref("mobileTaskFilter", "all");
 let mobileTaskSort = viewPref("mobileTaskSort", taskOverviewSort);
 let mobileTaskHideDone = viewPref("mobileTaskHideDone", true);
+let mobileTaskOwner = viewPref("mobileTaskOwner", "");
 let mobileTaskSortOpen = false;
+let mobileTaskOwnerFilterOpen = false;
+let mobileProjectSortOpen = false;
 let mobileAddMode = "";
 
 function isMobileViewport() {
@@ -5478,24 +5489,111 @@ function mobileStatusText(value) {
   return value || "상태 선택";
 }
 
+const mobileProjectSortOptions = [
+  [{ key: "finalDate", direction: "asc" }, "마감일 빠른 순"],
+  [{ key: "finalDate", direction: "desc" }, "마감일 늦은 순"],
+  [{ key: "createdAt", direction: "desc" }, "최신순"],
+  [{ key: "title", direction: "asc" }, "프로젝트명순"]
+];
+
+function mobileProjectSortLabel() {
+  const option = mobileProjectSortOptions.find(([value]) => value.key === projectSort.key && value.direction === projectSort.direction);
+  return option?.[1] || "마감일 빠른 순";
+}
+
+function projectSortValue(project, key) {
+  if (key === "status") return state.options.statuses.indexOf(project.status);
+  if (key === "createdAt") return project.createdAt || project.id || "";
+  return project[key] || "";
+}
+
+function sortedMobileProjects() {
+  return [...state.projects].sort((a, b) => {
+    const direction = projectSort.direction === "desc" ? -1 : 1;
+    const aValue = projectSortValue(a, projectSort.key);
+    const bValue = projectSortValue(b, projectSort.key);
+    if (typeof aValue === "number" && typeof bValue === "number") return (aValue - bValue) * direction;
+    return String(aValue).localeCompare(String(bValue), "ko") * direction;
+  });
+}
+
+function mobileProjectStatusClass(status) {
+  const value = String(status || "");
+  if (value.includes("완료") || value.includes("납품")) return "done";
+  if (value.includes("대기")) return "waiting";
+  if (value.includes("수정")) return "revision";
+  if (value.includes("컨펌")) return "confirm";
+  return "progress";
+}
+
+function mobileProjectDueInfo(project) {
+  const isDone = String(project.status || "").includes("완료") || String(project.status || "").includes("납품");
+  if (isDone) return { label: "완료", className: "done" };
+  if (!project.finalDate) return { label: "마감 없음", className: "none" };
+  const diff = daysUntil(project.finalDate);
+  if (diff < 0) return { label: `${Math.abs(diff)}일 지연`, className: "overdue" };
+  if (diff === 0) return { label: "오늘", className: "today" };
+  if (diff <= 6) return { label: `D-${diff}`, className: "soon" };
+  return { label: `D-${diff}`, className: "safe" };
+}
+
+function renderMobileProjectSortSheet() {
+  if (!mobileProjectSortOpen) return "";
+  return `
+    <div class="mobile-sort-backdrop" data-mobile-close-project-sort></div>
+    <section class="mobile-sort-sheet">
+      <i></i>
+      <h3>정렬 방식</h3>
+      ${mobileProjectSortOptions.map(([value, label]) => {
+        const active = projectSort.key === value.key && projectSort.direction === value.direction;
+        return `
+          <button class="${active ? "active" : ""}" data-mobile-project-sort-key="${esc(value.key)}" data-mobile-project-sort-direction="${esc(value.direction)}" type="button">
+            <span></span>
+            ${esc(label)}
+            ${active ? "<b>✓</b>" : ""}
+          </button>
+        `;
+      }).join("")}
+    </section>
+  `;
+}
+
 function renderMobileKpiStrip() {
   return `<div class="mobile-kpi-strip">${mobileKpis().map(([label, value]) => `<article><span>${esc(label)}</span><b>${value}</b></article>`).join("")}</div>`;
 }
 
 function renderMobileProjectCards() {
-  const projects = [...state.projects].sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
+  const projects = sortedMobileProjects();
   return `
-    ${renderMobileKpiStrip()}
-    <div class="mobile-section-head"><h2>영상</h2><span>${projects.length}건</span></div>
-    <div class="mobile-card-list">
-      ${projects.length ? projects.map((project) => `
-        <button class="mobile-work-card" data-mobile-open-project="${esc(project.id)}" type="button">
-          <strong>${esc(project.title || "제목 없음")}</strong>
-          <div><span class="mobile-chip">${esc(mobileStatusText(project.status))}</span><span>${esc(mobileOwnersText(projectOwners(project)))}</span></div>
-          <small>마감일 ${project.finalDate ? esc(formatDate(project.finalDate)) : "없음"}</small>
-        </button>
-      `).join("") : `<div class="empty">등록된 영상 프로젝트가 없습니다.</div>`}
+    <div class="mobile-project-toolbar">
+      <button class="mobile-project-sort ${mobileProjectSortOpen ? "active" : ""}" data-mobile-open-project-sort type="button">
+        ${esc(mobileProjectSortLabel())} <span>⌄</span>
+      </button>
     </div>
+    <div class="mobile-section-head mobile-project-head"><h2>프로젝트</h2><span>총 ${projects.length}건</span></div>
+    <div class="mobile-card-list mobile-project-list">
+      ${projects.length ? projects.map((project) => {
+        const due = mobileProjectDueInfo(project);
+        return `
+          <button class="mobile-project-card" data-mobile-open-project="${esc(project.id)}" type="button">
+            <div class="mobile-project-main">
+              <strong>${esc(project.title || "제목 없음")}</strong>
+              <p>
+                <span class="mobile-project-status ${mobileProjectStatusClass(project.status)}">${esc(mobileStatusText(project.status))}</span>
+                <span><em>담당자</em> ${esc(mobileOwnersText(projectOwners(project)))}</span>
+                <span><em>발주부서</em> ${esc(project.client || "-")}</span>
+              </p>
+              <small>마감일 ${project.finalDate ? esc(formatDate(project.finalDate)) : "없음"}</small>
+            </div>
+            <div class="mobile-project-side">
+              <b class="mobile-project-dday ${esc(due.className)}">${esc(due.label)}</b>
+              <i>›</i>
+            </div>
+          </button>
+        `;
+      }).join("") : `<div class="empty">등록된 영상 프로젝트가 없습니다.</div>`}
+    </div>
+    ${renderMobileProjectSortSheet()}
   `;
 }
 
@@ -5524,6 +5622,7 @@ function mobileFilteredTasks() {
   mobileTaskSort = normalizeTaskSort(mobileTaskSort);
   const matchingItems = allItems.filter((item) => {
     const due = item.task.dueDate || "";
+    if (mobileTaskOwner && !taskOwners(item.task).includes(mobileTaskOwner)) return false;
     if (mobileTaskFilter === "today") return !item.task.done && due === today;
     if (mobileTaskFilter === "overdue") return !item.task.done && due && due < today;
     if (mobileTaskFilter === "week") return !item.task.done && due && due >= today && due <= week;
@@ -5551,7 +5650,7 @@ function mobileTaskDueText(task) {
 function renderMobileTaskCard(item) {
   const badge = taskDdayInfo(item);
   return `
-    <article class="mobile-task-card ${item.task.done ? "is-done" : ""}" data-mobile-task-card="${esc(item.id)}">
+    <article class="mobile-task-card ${item.task.done ? "is-done" : ""}" data-mobile-task-card="${esc(item.id)}" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
       <input class="mobile-task-check" type="checkbox" data-overview-task-source="${esc(item.source)}" data-overview-task-check="${esc(item.id)}" ${item.task.done ? "checked" : ""} ${item.canManage ? "" : "disabled"} />
       <button class="mobile-task-open" type="button" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
         <strong>${esc(item.task.text || "제목 없음")}</strong>
@@ -5581,6 +5680,30 @@ function renderMobileSortSheet() {
   `;
 }
 
+function renderMobileOwnerFilterSheet() {
+  if (!mobileTaskOwnerFilterOpen) return "";
+  const owners = ownerOptions();
+  return `
+    <div class="mobile-sort-backdrop" data-mobile-close-owner-filter></div>
+    <section class="mobile-sort-sheet">
+      <i></i>
+      <h3>담당자 필터</h3>
+      <button class="${!mobileTaskOwner ? "active" : ""}" data-mobile-task-owner="" type="button">
+        <span></span>
+        전체
+        ${!mobileTaskOwner ? "<b>✓</b>" : ""}
+      </button>
+      ${owners.map((ownerId) => `
+        <button class="${mobileTaskOwner === ownerId ? "active" : ""}" data-mobile-task-owner="${esc(ownerId)}" type="button">
+          <span></span>
+          ${esc(ownerOptionLabel(ownerId))}
+          ${mobileTaskOwner === ownerId ? "<b>✓</b>" : ""}
+        </button>
+      `).join("")}
+    </section>
+  `;
+}
+
 function renderMobileTasks() {
   const { matchingItems, visibleItems } = mobileFilteredTasks();
   const filters = [["all", "전체"], ["today", "오늘"], ["overdue", "지연"], ["week", "이번주"]];
@@ -5591,11 +5714,19 @@ function renderMobileTasks() {
         ${filters.map(([key, label]) => `<button class="${mobileTaskFilter === key ? "active" : ""}" data-mobile-task-filter="${key}" type="button">${label}</button>`).join("")}
       </div>
       <div class="mobile-task-tools">
-        <button class="mobile-sort-trigger ${mobileTaskSortOpen ? "active" : ""}" data-mobile-open-sort type="button">
-          <span>☰</span> 정렬: ${esc(taskSortLabel(mobileTaskSort))} <i>${mobileTaskSortOpen ? "⌃" : "⌄"}</i>
+        <button class="mobile-sort-trigger icon-only ${mobileTaskSortOpen ? "active" : ""}" data-mobile-open-sort type="button" aria-label="정렬">
+          <svg class="mobile-sort-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 4v14"></path>
+            <path d="M5 15l3 3 3-3"></path>
+            <path d="M16 20V6"></path>
+            <path d="M13 9l3-3 3 3"></path>
+          </svg>
+        </button>
+        <button class="mobile-owner-filter-trigger ${mobileTaskOwnerFilterOpen || mobileTaskOwner ? "active" : ""}" data-mobile-open-owner-filter type="button" aria-label="담당자 필터">
+          ☰${mobileTaskOwner ? `<small>${esc(ownerOptionLabel(mobileTaskOwner))}</small>` : ""}
         </button>
         <label class="mobile-hide-done-toggle">
-          <span>완료된 항목 숨기기</span>
+          <span>완료</span>
           <input data-mobile-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} />
           <b></b>
         </label>
@@ -5604,6 +5735,7 @@ function renderMobileTasks() {
         ${visibleItems.length ? visibleItems.map(renderMobileTaskCard).join("") : `<div class="mobile-task-empty"><div>✓</div><strong>${esc(emptyMessage)}</strong><span>새 할 일을 추가하거나 다른 필터를 확인해보세요.</span></div>`}
       </div>
       ${renderMobileSortSheet()}
+      ${renderMobileOwnerFilterSheet()}
     </div>
   `;
 }
@@ -5681,6 +5813,42 @@ function renderMobileMoreInline() {
   `;
 }
 
+function renderMobileAdminInline() {
+  if (!isAdminUser()) {
+    return `
+      <div class="mobile-section-head"><h2>관리자</h2><span>권한 필요</span></div>
+      <div class="empty">관리자 계정만 가입 상태를 확인하고 승인할 수 있습니다.</div>
+    `;
+  }
+  const rows = state.users
+    .map((user) => {
+      const statusText = user.status === "inactive" ? "삭제됨" : user.approved === false || user.status === "pending" ? "미승인" : user.role === "admin" ? "관리자" : "일반";
+      return `
+        <article class="mobile-admin-user" data-mobile-admin-user="${esc(user.id)}">
+          <div>
+            <strong>${esc(user.name || user.username || user.email || "사용자")}</strong>
+            <span>${esc(user.email || user.username || "-")}</span>
+            <small>${esc(user.position || "과원")} · ${esc(statusText)}</small>
+          </div>
+          <div>
+            <button class="${user.role === "admin" && user.approved !== false && user.status !== "pending" ? "active" : ""}" data-mobile-user-role="admin" type="button">관리자</button>
+            <button class="${user.role !== "admin" && user.approved !== false && user.status !== "pending" ? "active" : ""}" data-mobile-user-role="user" type="button">일반</button>
+            <button class="${user.approved === false || user.status === "pending" ? "active" : ""}" data-mobile-user-pending type="button">미승인</button>
+            <button class="danger" data-mobile-user-delete type="button" ${user.id === state.currentUser ? "disabled" : ""}>삭제</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    <div class="mobile-section-head"><h2>관리자</h2><span>가입 승인</span></div>
+    <div class="mobile-admin-panel">
+      <h3>계정 관리</h3>
+      ${rows || '<div class="empty">등록된 계정이 없습니다.</div>'}
+    </div>
+  `;
+}
+
 function renderMobileDashboard() {
   const app = $("#mobileApp");
   if (!app) return;
@@ -5707,7 +5875,7 @@ function renderMobileDashboard() {
     tasks: renderMobileTasks,
     calendar: renderMobileCalendar,
     studio: renderMobileCalendar,
-    admin: renderMobileMoreInline,
+    admin: renderMobileAdminInline,
     notifications: renderMobileMoreInline,
     settings: renderMobileMoreInline
   };
@@ -6044,25 +6212,92 @@ $("#mobileApp")?.addEventListener("click", (event) => {
     openMobileSection(moreTarget);
     return;
   }
+  const mobileAdminUser = event.target.closest("[data-mobile-admin-user]");
+  const mobileUserRole = event.target.closest("[data-mobile-user-role]");
+  if (mobileAdminUser && mobileUserRole) {
+    setUserRole(mobileAdminUser.dataset.mobileAdminUser, mobileUserRole.dataset.mobileUserRole);
+    renderMobileDashboard();
+    return;
+  }
+  if (mobileAdminUser && event.target.closest("[data-mobile-user-pending]")) {
+    markUserPending(mobileAdminUser.dataset.mobileAdminUser);
+    renderMobileDashboard();
+    return;
+  }
+  if (mobileAdminUser && event.target.closest("[data-mobile-user-delete]")) {
+    confirmDelete(() => {
+      deleteUser(mobileAdminUser.dataset.mobileAdminUser);
+      renderMobileDashboard();
+    });
+    return;
+  }
   const projectId = event.target.closest("[data-mobile-open-project]")?.dataset.mobileOpenProject;
-  if (projectId) openProjectDetail(projectId);
+  if (projectId) {
+    openProjectDetail(projectId);
+    return;
+  }
   const workId = event.target.closest("[data-mobile-open-work]")?.dataset.mobileOpenWork;
-  if (workId) openWorkDetail(workId);
+  if (workId) {
+    openWorkDetail(workId);
+    return;
+  }
+  if (event.target.closest("[data-mobile-open-project-sort]")) {
+    mobileProjectSortOpen = !mobileProjectSortOpen;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-close-project-sort]")) {
+    mobileProjectSortOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  const projectSortButton = event.target.closest("[data-mobile-project-sort-key]");
+  if (projectSortButton) {
+    projectSort = {
+      key: projectSortButton.dataset.mobileProjectSortKey,
+      direction: projectSortButton.dataset.mobileProjectSortDirection
+    };
+    mobileProjectSortOpen = false;
+    saveViewPrefs({ projectSort });
+    renderMobileDashboard();
+    return;
+  }
   const filter = event.target.closest("[data-mobile-task-filter]")?.dataset.mobileTaskFilter;
   if (filter) {
     mobileTaskFilter = filter;
     mobileTaskSortOpen = false;
+    mobileTaskOwnerFilterOpen = false;
     saveViewPrefs({ mobileTaskFilter });
     renderMobileDashboard();
     return;
   }
   if (event.target.closest("[data-mobile-open-sort]")) {
     mobileTaskSortOpen = !mobileTaskSortOpen;
+    mobileTaskOwnerFilterOpen = false;
     renderMobileDashboard();
     return;
   }
   if (event.target.closest("[data-mobile-close-sort]")) {
     mobileTaskSortOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-open-owner-filter]")) {
+    mobileTaskOwnerFilterOpen = !mobileTaskOwnerFilterOpen;
+    mobileTaskSortOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-close-owner-filter]")) {
+    mobileTaskOwnerFilterOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  const owner = event.target.closest("[data-mobile-task-owner]")?.dataset.mobileTaskOwner;
+  if (owner !== undefined) {
+    mobileTaskOwner = owner;
+    mobileTaskOwnerFilterOpen = false;
+    saveViewPrefs({ mobileTaskOwner });
     renderMobileDashboard();
     return;
   }
@@ -6074,19 +6309,18 @@ $("#mobileApp")?.addEventListener("click", (event) => {
     renderMobileDashboard();
     return;
   }
+  if (event.target.closest("[data-overview-task-check]")) return;
   const taskButton = event.target.closest("[data-mobile-open-task-id]");
   if (taskButton) {
     const item = taskOverviewItems().find((entry) => entry.id === taskButton.dataset.mobileOpenTaskId && entry.source === taskButton.dataset.mobileOpenTaskSource);
-    if (item?.source === "project" && item.projectId) {
+    if (item?.source === "project" && item.sourceId) {
       highlightedProjectTaskId = item.id;
-      openProjectDetail(item.projectId);
-      activeDetailTab = "tasks";
+      openProjectDetail(item.sourceId, "tasks");
       renderDetailTabs();
     }
-    if (item?.source === "work" && item.workId) {
+    if (item?.source === "work" && item.sourceId) {
       highlightedWorkTaskId = item.id;
-      openWorkDetail(item.workId);
-      activeWorkDetailTab = "tasks";
+      openWorkDetail(item.sourceId, "tasks");
       renderWorkDetailTabs();
     }
   }
@@ -6775,15 +7009,13 @@ $("#taskList").addEventListener("click", (event) => {
   if (!item) return;
   if (item.source === "project") {
     highlightedProjectTaskId = item.id;
-    openProjectDetail(item.sourceId);
-    activeDetailTab = "tasks";
+    openProjectDetail(item.sourceId, "tasks");
     renderDetailTabs();
     clearTaskHighlight("project");
   }
   if (item.source === "work") {
     highlightedWorkTaskId = item.id;
-    openWorkDetail(item.sourceId);
-    activeWorkDetailTab = "tasks";
+    openWorkDetail(item.sourceId, "tasks");
     renderWorkDetailTabs();
     clearTaskHighlight("work");
   }
