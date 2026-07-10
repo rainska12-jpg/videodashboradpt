@@ -12,6 +12,7 @@ let currentProfile = null;
 let remoteStateLoaded = false;
 let remoteSaveTimer = null;
 let isRemoteHydrating = false;
+let isAuthInitializing = SUPABASE_ENABLED;
 
 function getSupabaseClient() {
   if (!SUPABASE_ENABLED) return null;
@@ -117,12 +118,17 @@ function queueRemoteSave() {
 
 async function initSupabaseSession() {
   const client = getSupabaseClient();
-  if (!client) return;
+  if (!client) {
+    isAuthInitializing = false;
+    renderAll();
+    return;
+  }
   try {
     const user = await fetchCurrentProfile();
     if (!user) {
       currentProfile = null;
       state.currentUser = null;
+      isAuthInitializing = false;
       renderAll();
       return;
     }
@@ -131,14 +137,18 @@ async function initSupabaseSession() {
       currentProfile = null;
       state.currentUser = null;
       setAuthMessage("관리자 승인 대기 중입니다.");
+      isAuthInitializing = false;
       renderAll();
       return;
     }
     await loadRemoteDashboardState();
     await refreshSupabaseProfiles();
+    isAuthInitializing = false;
     renderAll();
   } catch (error) {
     console.warn("Supabase session init failed", error);
+    isAuthInitializing = false;
+    renderAll();
   }
 }
 
@@ -204,7 +214,8 @@ const defaultOptions = {
   studioRooms: ["방송실 A", "방송실 B", "스튜디오", "편집실", "장비실"],
   staffTypes: ["정기교육", "비정기교육", "방송실 스탭", "장비 점검", "외부 지원", "촬영 지원"],
   studioStaffOwners: [...defaultOwnerNames],
-  trainingTypes: ["자막 송출 교육", "카메라 기초 교육", "라이브 스위처 교육", "장비 점검 교육", "현장 실습"]
+  trainingTypes: ["자막 송출 교육", "카메라 기초 교육", "라이브 스위처 교육", "장비 점검 교육", "현장 실습"],
+  boardPrefixes: ["일반"]
 };
 
 const sampleData = {
@@ -218,7 +229,9 @@ const sampleData = {
   tasks: [],
   schedules: [],
   staffEvents: [],
-  recurringTrainings: []
+  recurringTrainings: [],
+  boardPosts: [],
+  boardComments: []
 };
 
 function loadPrefs() {
@@ -302,6 +315,15 @@ let workSort = viewPref("workSort", { key: "finalDate", direction: "asc" });
 let isProjectFilterOpen = false;
 let activeCalendarMode = viewPref("activeCalendarMode", "all");
 let calendarFilters = viewPref("calendarFilters", { video: true, work: true, staff: true });
+let boardSearchQuery = viewPref("boardSearchQuery", "");
+let boardSearchScope = viewPref("boardSearchScope", "titleContent");
+let boardPrefixFilter = viewPref("boardPrefixFilter", "");
+let boardPostFilter = viewPref("boardPostFilter", "all");
+let boardActiveTab = viewPref("boardActiveTab", "all");
+let activeBoardPostId = null;
+let boardEditorPostId = null;
+let boardViewerPostId = null;
+let mobileBoardFilterOpen = false;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -460,9 +482,20 @@ function ownerById(ownerId) {
   return ownerSlots().find((owner) => owner.id === ownerId) || ownerSlots().find((owner) => owner.name === ownerId) || null;
 }
 
+function decodeStableOwnerId(ownerId) {
+  const match = String(ownerId || "").match(/^owner-([0-9a-f]+)-\d+$/i);
+  if (!match) return "";
+  try {
+    const encoded = match[1].replace(/([0-9a-f]{2})/gi, "%$1");
+    return decodeURIComponent(encoded);
+  } catch {
+    return "";
+  }
+}
+
 function ownerName(ownerId) {
   const owner = ownerById(ownerId);
-  return owner ? owner.name : (ownerId || "");
+  return owner ? owner.name : (decodeStableOwnerId(ownerId) || ownerId || "");
 }
 
 function ownerNames(ownerIds) {
@@ -471,7 +504,7 @@ function ownerNames(ownerIds) {
 
 function ownerOptionLabel(ownerId) {
   const owner = ownerById(ownerId);
-  return owner ? owner.name : (ownerId || "선택");
+  return owner ? owner.name : (decodeStableOwnerId(ownerId) || ownerId || "선택");
 }
 
 function ownerOptions() {
@@ -742,6 +775,34 @@ function normalizeState(data) {
         title: series.title || trainingType
       };
     }) : [],
+    boardPosts: Array.isArray(data.boardPosts) ? data.boardPosts.map((post, index) => ({
+      id: post.id || makeId(),
+      number: Number(post.number || index + 1),
+      prefix: post.prefix || options.boardPrefixes[0] || "일반",
+      title: post.title || "",
+      contentHtml: post.contentHtml || "",
+      authorUserId: post.authorUserId || "",
+      authorName: post.authorName || "사용자",
+      isNotice: Boolean(post.isNotice),
+      noticeUntil: post.noticeUntil || null,
+      noticePeriodType: post.noticePeriodType || null,
+      notifyOff: Boolean(post.notifyOff),
+      viewUserIds: Array.isArray(post.viewUserIds) ? post.viewUserIds : [],
+      viewLogs: Array.isArray(post.viewLogs) ? post.viewLogs : [],
+      createdAt: post.createdAt || new Date().toISOString(),
+      updatedAt: post.updatedAt || null,
+      deletedAt: post.deletedAt || null
+    })) : [],
+    boardComments: Array.isArray(data.boardComments) ? data.boardComments.map((comment) => ({
+      id: comment.id || makeId(),
+      postId: comment.postId || "",
+      body: comment.body || "",
+      authorUserId: comment.authorUserId || "",
+      authorName: comment.authorName || "사용자",
+      createdAt: comment.createdAt || new Date().toISOString(),
+      updatedAt: comment.updatedAt || null,
+      deletedAt: comment.deletedAt || null
+    })) : [],
     owners: Array.isArray(data.owners) ? data.owners : [],
     notifications: Array.isArray(data.notifications) ? data.notifications : [],
     ownerDefaultsVersion: data.ownerDefaultsVersion || 2
@@ -900,9 +961,18 @@ function setAuthMessage(message) {
 }
 
 function renderAuth() {
+  const overlay = $("#authOverlay");
+  if (isAuthInitializing) {
+    overlay.classList.remove("hidden");
+    overlay.classList.add("auth-loading");
+    document.body.classList.add("auth-locked");
+    return;
+  }
   const user = currentUser();
   const signedIn = AUTH_DISABLED || Boolean(user);
-  $("#authOverlay").classList.toggle("hidden", signedIn);
+  overlay.classList.remove("auth-loading");
+  overlay.classList.toggle("hidden", signedIn);
+  document.body.classList.toggle("auth-locked", !signedIn);
   $("#logoutBtn").classList.toggle("hidden", !signedIn);
   $("#currentUserPanel").classList.toggle("hidden", !signedIn);
   $("#seedBtn").classList.toggle("hidden", !isAdminUser());
@@ -1118,7 +1188,7 @@ function projectName(projectId) {
 }
 
 function setView(view) {
-  const titles = { overview: "개요", projects: "영상 프로젝트", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 예약", admin: "관리자 모드" };
+  const titles = { overview: "개요", projects: "영상 프로젝트", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 예약", board: "게시판", admin: "관리자 모드" };
   $$(".view").forEach((section) => section.classList.remove("active"));
   const targetView = $(`#${view}View`) ? view : "overview";
   $(`#${targetView}View`).classList.add("active");
@@ -2846,7 +2916,7 @@ function taskOverviewProjectOptions(items) {
 
 function taskOverviewFilterOptions(kind, items = taskOverviewItems()) {
   if (kind === "owner") {
-    return [...new Set(items.flatMap((item) => taskOwners(item.task)).filter(Boolean))].map((value) => ({ value, label: value }));
+    return [...new Set(items.flatMap((item) => taskOwners(item.task)).filter(Boolean))].map((value) => ({ value, label: ownerOptionLabel(value) }));
   }
   if (kind === "type") {
     return [...new Set(items.map((item) => item.task.type).filter(Boolean))].map((value) => ({ value, label: value }));
@@ -2868,6 +2938,7 @@ function setTaskOverviewFilterValue(kind, value) {
 
 function taskOverviewFilterLabel(kind, value, options) {
   if (!value) return "전체";
+  if (kind === "owner") return ownerOptionLabel(value);
   return options.find((option) => option.value === value)?.label || value;
 }
 
@@ -5037,6 +5108,695 @@ function moveStudioEventToDate(eventId, date) {
   showToast("방송실 예약 날짜가 변경되었습니다.");
 }
 
+function boardPrefixes() {
+  return state.options.boardPrefixes?.length ? state.options.boardPrefixes : ["일반"];
+}
+
+function boardPrefixValue(value) {
+  return value || boardPrefixes()[0] || "일반";
+}
+
+function boardCommentsForPost(postId) {
+  return (state.boardComments || []).filter((comment) => comment.postId === postId && !comment.deletedAt);
+}
+
+function isActiveNotice(post) {
+  if (!post?.isNotice || post.deletedAt) return false;
+  if (!post.noticeUntil) return true;
+  return dateKey(new Date()) <= post.noticeUntil;
+}
+
+function getNoticeUntil(periodType, customDate) {
+  if (periodType === "forever") return null;
+  if (periodType === "custom") return customDate || null;
+  const date = new Date();
+  if (periodType === "month") date.setMonth(date.getMonth() + 1);
+  else date.setDate(date.getDate() + 7);
+  return dateKey(date);
+}
+
+function boardNoticePeriodLabel(post) {
+  if (!post?.isNotice) return "일반글";
+  if (!post.noticeUntil) return "무기한";
+  return `${formatDate(post.noticeUntil)}까지`;
+}
+
+function stripHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  return template.content.textContent || "";
+}
+
+function sanitizeBoardHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = html || "";
+  const allowed = new Set(["P", "BR", "H1", "H2", "H3", "H4", "STRONG", "B", "EM", "I", "U", "DIV", "SPAN"]);
+  template.content.querySelectorAll("*").forEach((node) => {
+    if (!allowed.has(node.tagName)) {
+      node.replaceWith(...Array.from(node.childNodes));
+      return;
+    }
+    [...node.attributes].forEach((attr) => {
+      if (attr.name.startsWith("on") || ["style", "src", "href"].includes(attr.name)) node.removeAttribute(attr.name);
+    });
+  });
+  return template.innerHTML;
+}
+
+function boardDateText(value, compact = false) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const now = new Date();
+  const sameDay = dateKey(date) === dateKey(now);
+  const hhmm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  if (compact && sameDay) return hhmm;
+  if (compact) return `${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")} ${hhmm}`;
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, "0")}.${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function boardAuthor() {
+  const user = currentUser();
+  return {
+    id: user?.id || "",
+    name: user?.name || user?.username || "사용자"
+  };
+}
+
+function notifyBoardNotice(post) {
+  if (!post?.isNotice || post.notifyOff) return;
+  const users = state.users || [];
+  users.forEach((user) => {
+    if (!user?.id || user.id === post.authorUserId || user.status === "inactive" || user.approved === false || user.status === "pending") return;
+    state.notifications.push({
+      id: makeId(),
+      userId: user.id,
+      title: "새 공지",
+      body: `새 공지가 등록되었습니다: ${post.title}`,
+      message: `새 공지가 등록되었습니다: ${post.title}`,
+      source: { type: "board", postId: post.id, action: "notice" },
+      read: false,
+      createdAt: new Date().toISOString()
+    });
+  });
+}
+
+function notifyBoardComment(post, comment) {
+  if (!post || !comment || !post.authorUserId || post.authorUserId === comment.authorUserId) return;
+  state.notifications.push({
+    id: makeId(),
+    userId: post.authorUserId,
+    title: "게시판 댓글",
+    body: `내 게시글에 댓글이 달렸습니다: ${post.title}`,
+    message: `내 게시글에 댓글이 달렸습니다: ${post.title}`,
+    source: { type: "board", postId: post.id, commentId: comment.id, action: "comment" },
+    read: false,
+    createdAt: new Date().toISOString()
+  });
+}
+
+function sortBoardPosts(posts) {
+  return [...posts].sort((a, b) => {
+    const aNotice = isActiveNotice(a);
+    const bNotice = isActiveNotice(b);
+    if (aNotice !== bNotice) return aNotice ? -1 : 1;
+    if (aNotice && bNotice) return new Date(b.createdAt) - new Date(a.createdAt);
+    return Number(b.number || 0) - Number(a.number || 0);
+  });
+}
+
+function filteredBoardPosts() {
+  const query = boardSearchQuery.trim().toLowerCase();
+  return sortBoardPosts((state.boardPosts || []).filter((post) => {
+    if (post.deletedAt) return false;
+    const activeNotice = isActiveNotice(post);
+    if (boardActiveTab === "notice" && !activeNotice) return false;
+    if (boardActiveTab === "mine" && post.authorUserId !== currentUser()?.id) return false;
+    if (boardPostFilter === "notice" && !activeNotice) return false;
+    if (boardPostFilter === "mine" && post.authorUserId !== currentUser()?.id) return false;
+    if (boardPrefixFilter && post.prefix !== boardPrefixFilter) return false;
+    if (!query) return true;
+    const title = (post.title || "").toLowerCase();
+    const body = stripHtml(post.contentHtml).toLowerCase();
+    const author = (post.authorName || "").toLowerCase();
+    if (boardSearchScope === "title") return title.includes(query);
+    if (boardSearchScope === "content") return body.includes(query);
+    return `${title} ${body} ${author}`.includes(query);
+  }));
+}
+
+function trackBoardPostView(postId) {
+  const post = state.boardPosts.find((item) => item.id === postId);
+  const user = currentUser();
+  if (!post || !user?.id) return;
+  post.viewUserIds = Array.isArray(post.viewUserIds) ? post.viewUserIds : [];
+  post.viewLogs = Array.isArray(post.viewLogs) ? post.viewLogs : [];
+  if (!post.viewUserIds.includes(user.id)) post.viewUserIds.push(user.id);
+  const log = post.viewLogs.find((item) => item.userId === user.id);
+  const viewedAt = new Date().toISOString();
+  if (log) {
+    log.name = user.name || user.username || "사용자";
+    log.viewedAt = viewedAt;
+  } else {
+    post.viewLogs.push({ userId: user.id, name: user.name || user.username || "사용자", viewedAt });
+  }
+  saveState();
+}
+
+function openBoardDetail(postId) {
+  activeBoardPostId = postId;
+  boardEditorPostId = null;
+  trackBoardPostView(postId);
+  renderBoard();
+  if (mobileActiveSection === "board") renderMobileDashboard();
+}
+
+function closeBoardDetail() {
+  activeBoardPostId = null;
+  boardViewerPostId = null;
+  renderBoard();
+  if (mobileActiveSection === "board") renderMobileDashboard();
+}
+
+function openBoardEditor(postId = null) {
+  boardEditorPostId = postId || "";
+  activeBoardPostId = null;
+  renderBoard();
+  if (mobileActiveSection === "board") renderMobileDashboard();
+  requestAnimationFrame(() => $("#boardTitleInput")?.focus());
+}
+
+function closeBoardEditor() {
+  boardEditorPostId = null;
+  renderBoard();
+  if (mobileActiveSection === "board") renderMobileDashboard();
+}
+
+function nextBoardNumber() {
+  return Math.max(0, ...(state.boardPosts || []).map((post) => Number(post.number || 0))) + 1;
+}
+
+function readBoardEditorForm(form) {
+  const isAdmin = isAdminUser();
+  const isNotice = isAdmin && form.querySelector("[name='isNotice']")?.checked;
+  const periodType = isNotice ? (form.querySelector("[name='noticePeriodType']")?.value || "week") : null;
+  return {
+    title: form.querySelector("[name='title']")?.value.trim() || "",
+    prefix: boardPrefixValue(form.querySelector("[name='prefix']")?.value),
+    contentHtml: sanitizeBoardHtml(form.querySelector("[data-board-editor-content]")?.innerHTML || ""),
+    isNotice: Boolean(isNotice),
+    notifyOff: Boolean(isNotice && form.querySelector("[name='notifyOff']")?.checked),
+    noticePeriodType: isNotice ? periodType : null,
+    noticeUntil: isNotice ? getNoticeUntil(periodType, form.querySelector("[name='noticeCustomDate']")?.value) : null
+  };
+}
+
+function createBoardPost(form) {
+  const data = readBoardEditorForm(form);
+  if (!data.title) {
+    showToast("제목을 입력해주세요.");
+    return;
+  }
+  const author = boardAuthor();
+  const post = {
+    id: makeId(),
+    number: nextBoardNumber(),
+    ...data,
+    authorUserId: author.id,
+    authorName: author.name,
+    viewUserIds: [],
+    viewLogs: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    deletedAt: null
+  };
+  state.boardPosts.push(post);
+  if (post.isNotice) notifyBoardNotice(post);
+  saveState();
+  boardEditorPostId = null;
+  renderAll();
+  showToast("게시글이 등록되었습니다.");
+}
+
+function updateBoardPost(postId, form) {
+  const post = state.boardPosts.find((item) => item.id === postId);
+  if (!post) return;
+  const wasNotice = Boolean(post.isNotice);
+  const data = readBoardEditorForm(form);
+  if (!data.title) {
+    showToast("제목을 입력해주세요.");
+    return;
+  }
+  Object.assign(post, data, { updatedAt: new Date().toISOString() });
+  if (!wasNotice && post.isNotice) notifyBoardNotice(post);
+  saveState();
+  boardEditorPostId = null;
+  activeBoardPostId = post.id;
+  renderAll();
+  showToast("게시글이 수정되었습니다.");
+}
+
+function deleteBoardPost(postId) {
+  const post = state.boardPosts.find((item) => item.id === postId);
+  if (!post) return;
+  post.deletedAt = new Date().toISOString();
+  saveState();
+  activeBoardPostId = null;
+  renderAll();
+  showToast("게시글이 삭제되었습니다.");
+}
+
+function addBoardComment(postId, body) {
+  const post = state.boardPosts.find((item) => item.id === postId && !item.deletedAt);
+  const cleanBody = String(body || "").trim();
+  if (!post || !cleanBody) return;
+  const author = boardAuthor();
+  const comment = {
+    id: makeId(),
+    postId,
+    body: cleanBody,
+    authorUserId: author.id,
+    authorName: author.name,
+    createdAt: new Date().toISOString(),
+    updatedAt: null,
+    deletedAt: null
+  };
+  state.boardComments.push(comment);
+  notifyBoardComment(post, comment);
+  saveState();
+  rerenderBoardSurfaces();
+}
+
+function updateBoardComment(commentId, body) {
+  const comment = state.boardComments.find((item) => item.id === commentId && !item.deletedAt);
+  const cleanBody = String(body || "").trim();
+  if (!comment || !cleanBody) return;
+  comment.body = cleanBody;
+  comment.updatedAt = new Date().toISOString();
+  saveState();
+  rerenderBoardSurfaces();
+}
+
+function deleteBoardComment(commentId) {
+  const comment = state.boardComments.find((item) => item.id === commentId);
+  if (!comment) return;
+  comment.deletedAt = new Date().toISOString();
+  saveState();
+  rerenderBoardSurfaces();
+}
+
+function openBoardViewers(postId) {
+  boardViewerPostId = postId;
+  rerenderBoardSurfaces();
+}
+
+function renderBoardPrefixOptions(value = "") {
+  const current = boardPrefixValue(value);
+  const options = boardPrefixes().includes(current) ? boardPrefixes() : [current, ...boardPrefixes()];
+  return options.map((prefix) => `<option value="${esc(prefix)}" ${prefix === current ? "selected" : ""}>${esc(prefix)}</option>`).join("");
+}
+
+function boardNoticeChip(post) {
+  return post.isNotice ? `<span class="board-notice-chip">공지</span>` : "";
+}
+
+function renderBoardRow(post, mobile = false) {
+  const comments = boardCommentsForPost(post.id).length;
+  const views = post.viewUserIds?.length || 0;
+  const notice = isActiveNotice(post);
+  if (mobile) {
+    return `
+      <button class="mobile-board-row ${notice ? "notice" : ""}" data-board-open="${esc(post.id)}" type="button">
+        <strong>${post.isNotice ? `<span class="board-notice-chip">공지</span>` : `<span class="board-prefix-chip">${esc(post.prefix || "일반")}</span>`}${esc(post.title || "제목 없음")}</strong>
+        <span>${esc(post.prefix || "일반")} · ${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt, true))} · 조회 ${views} · 댓글 ${comments}</span>
+      </button>
+    `;
+  }
+  return `
+    <button class="board-table-row ${notice ? "notice" : ""}" data-board-open="${esc(post.id)}" type="button">
+      <span>${notice ? "공지" : esc(post.number)}</span>
+      <span><i class="board-prefix-chip">${esc(post.prefix || "일반")}</i></span>
+      <strong>${boardNoticeChip(post)}${esc(post.title || "제목 없음")}${post.updatedAt ? `<em>수정됨</em>` : ""}</strong>
+      <span>${esc(post.authorName || "사용자")}</span>
+      <span>${esc(boardDateText(post.createdAt))}</span>
+      <span>${views}</span>
+      <span>${comments}</span>
+    </button>
+  `;
+}
+
+function renderBoardList() {
+  const posts = filteredBoardPosts();
+  const prefixOptions = [`<option value="">전체</option>`, ...boardPrefixes().map((prefix) => `<option value="${esc(prefix)}" ${boardPrefixFilter === prefix ? "selected" : ""}>${esc(prefix)}</option>`)].join("");
+  return `
+    <div class="board-page">
+      <div class="board-head">
+        <div>
+          <p class="eyebrow">Community</p>
+          <h2>게시판</h2>
+        </div>
+        <button class="pill primary" type="button" data-board-write>+ 글쓰기</button>
+      </div>
+      <div class="board-toolbar">
+        <input id="boardSearchInput" placeholder="검색어를 입력하세요." value="${esc(boardSearchQuery)}" />
+        <select id="boardSearchScope">
+          <option value="title" ${boardSearchScope === "title" ? "selected" : ""}>제목</option>
+          <option value="content" ${boardSearchScope === "content" ? "selected" : ""}>내용</option>
+          <option value="titleContent" ${boardSearchScope === "titleContent" ? "selected" : ""}>제목+내용</option>
+        </select>
+        <select id="boardPrefixFilter">${prefixOptions}</select>
+        <select id="boardPostFilter">
+          <option value="all" ${boardPostFilter === "all" ? "selected" : ""}>전체</option>
+          <option value="notice" ${boardPostFilter === "notice" ? "selected" : ""}>공지</option>
+          <option value="mine" ${boardPostFilter === "mine" ? "selected" : ""}>내 글</option>
+        </select>
+      </div>
+      <div class="board-tabs">
+        ${[["all", "전체"], ["notice", "공지"], ["mine", "내 글"]].map(([key, label]) => `<button class="${boardActiveTab === key ? "active" : ""}" data-board-tab="${key}" type="button">${label}</button>`).join("")}
+      </div>
+      <div class="board-table">
+        <div class="board-table-head"><span>번호</span><span>말머리</span><span>제목</span><span>작성자</span><span>작성일</span><span>조회</span><span>댓글</span></div>
+        ${posts.length ? posts.map((post) => renderBoardRow(post)).join("") : `<div class="empty">게시글이 없습니다.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+function renderBoardEditor(postId = null) {
+  const post = postId ? state.boardPosts.find((item) => item.id === postId) : null;
+  const isAdmin = isAdminUser();
+  const periodType = post?.noticePeriodType || "week";
+  const customDate = periodType === "custom" ? post?.noticeUntil || dateKey(new Date()) : "";
+  return `
+    <div class="board-editor-shell">
+      <form id="boardEditorForm" class="board-editor-card" data-board-editor-post="${esc(post?.id || "")}">
+        <div class="board-editor-top">
+          <button type="button" data-board-close-editor>← 게시판으로</button>
+          <div>
+            <button class="pill ghost" type="button" data-board-close-editor>취소</button>
+            <button class="pill primary" type="submit">${post ? "수정" : "등록"}</button>
+          </div>
+        </div>
+        <div class="board-editor-meta">
+          <label><span>제목</span><input id="boardTitleInput" name="title" maxlength="100" placeholder="제목을 입력해주세요." value="${esc(post?.title || "")}" /></label>
+          <label><span>말머리</span><select name="prefix">${renderBoardPrefixOptions(post?.prefix)}</select><small>게시글의 분류를 선택해주세요.</small></label>
+        </div>
+        ${isAdmin ? `
+          <section class="board-notice-options ${post?.isNotice ? "open" : ""}">
+            <strong>관리자 전용</strong>
+            <label class="board-check"><input name="isNotice" type="checkbox" ${post?.isNotice ? "checked" : ""} data-board-notice-toggle /><span></span>공지로 등록</label>
+            <div class="board-notice-extra">
+              <label class="board-check"><input name="notifyOff" type="checkbox" ${post?.notifyOff ? "checked" : ""} /><span></span>알림 끄기</label>
+              <label><span>노출 기간</span>
+                <select name="noticePeriodType">
+                  <option value="week" ${periodType === "week" ? "selected" : ""}>1주일</option>
+                  <option value="month" ${periodType === "month" ? "selected" : ""}>한 달</option>
+                  <option value="forever" ${periodType === "forever" ? "selected" : ""}>무기한</option>
+                  <option value="custom" ${periodType === "custom" ? "selected" : ""}>직접 지정</option>
+                </select>
+              </label>
+              <label class="board-custom-date ${periodType === "custom" ? "open" : ""}"><span>직접 지정</span><input name="noticeCustomDate" type="date" value="${esc(customDate)}" /></label>
+            </div>
+          </section>
+        ` : ""}
+        <section class="board-rich-editor">
+          <div class="board-rich-toolbar">
+            ${[["P", "본문"], ["H1", "H1"], ["H2", "H2"], ["H3", "H3"], ["H4", "H4"]].map(([tag, label]) => `<button type="button" data-board-format="${tag}">${label}</button>`).join("")}
+            <button type="button" data-board-format="bold">B</button>
+            <button type="button" data-board-format="italic"><i>I</i></button>
+            <button type="button" data-board-format="underline"><u>U</u></button>
+            <button type="button" data-board-format="removeFormat">Tx</button>
+          </div>
+          <div class="board-content-editor" data-board-editor-content contenteditable="true">${sanitizeBoardHtml(post?.contentHtml || "")}</div>
+        </section>
+      </form>
+    </div>
+  `;
+}
+
+function renderBoardViewers(post) {
+  if (!boardViewerPostId || !post || boardViewerPostId !== post.id) return "";
+  const logs = [...new Map((post.viewLogs || []).map((log) => [log.userId, log])).values()];
+  return `
+    <div class="modal-shell open board-viewer-modal" aria-hidden="false">
+      <div class="modal-card">
+        <div class="section-head"><h3>확인한 사람</h3><button class="record-control" type="button" data-board-close-viewers>닫기</button></div>
+        <div class="board-viewer-list">${logs.length ? logs.map((log) => `<span>${esc(log.name || "사용자")} <small>${esc(boardDateText(log.viewedAt, true))}</small></span>`).join("") : '<div class="empty">아직 확인자가 없습니다.</div>'}</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderBoardDetail(postId) {
+  const post = state.boardPosts.find((item) => item.id === postId && !item.deletedAt);
+  if (!post) return "";
+  const comments = boardCommentsForPost(post.id);
+  const canEdit = isAdminUser() || post.authorUserId === currentUser()?.id;
+  return `
+    <div class="board-detail-shell">
+      <article class="board-detail-card">
+        <div class="board-detail-top">
+          <button type="button" data-board-close-detail>← 게시판으로</button>
+          <div>
+            ${canEdit ? `<button class="record-control" type="button" data-board-edit="${esc(post.id)}">수정</button><button class="delete-btn" type="button" data-board-delete="${esc(post.id)}">삭제</button>` : ""}
+          </div>
+        </div>
+        <header>
+          <span>${esc(post.prefix || "일반")}</span>
+          <h2>${boardNoticeChip(post)}${esc(post.title || "제목 없음")}</h2>
+          <p>${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt))}${post.updatedAt ? " · 수정됨" : ""} · <button type="button" data-board-viewers="${esc(post.id)}">조회 ${post.viewUserIds?.length || 0}</button> · 댓글 ${comments.length}</p>
+          ${post.isNotice ? `<small>공지 노출: ${esc(boardNoticePeriodLabel(post))}</small>` : ""}
+        </header>
+        <div class="board-detail-content">${sanitizeBoardHtml(post.contentHtml || "<p>내용이 없습니다.</p>")}</div>
+        <section class="board-comments">
+          <h3>댓글 ${comments.length}</h3>
+          ${comments.map((comment) => `
+            <article>
+              <div><strong>${esc(comment.authorName || "사용자")}</strong><small>${esc(boardDateText(comment.createdAt, true))}${comment.updatedAt ? " · 수정됨" : ""}</small></div>
+              <p>${esc(comment.body)}</p>
+              ${(isAdminUser() || comment.authorUserId === currentUser()?.id) ? `<button type="button" data-board-delete-comment="${esc(comment.id)}">삭제</button>` : ""}
+            </article>
+          `).join("") || '<div class="empty">댓글이 없습니다.</div>'}
+          <form class="board-comment-form" data-board-comment-form="${esc(post.id)}">
+            <input name="body" placeholder="댓글을 입력하세요." />
+            <button class="pill primary" type="submit">댓글 등록</button>
+          </form>
+        </section>
+      </article>
+      ${renderBoardViewers(post)}
+    </div>
+  `;
+}
+
+function renderBoard() {
+  const root = $("#boardRoot");
+  if (!root) return;
+  root.innerHTML = boardEditorPostId !== null
+    ? renderBoardEditor(boardEditorPostId || null)
+    : activeBoardPostId
+      ? renderBoardDetail(activeBoardPostId)
+      : renderBoardList();
+}
+
+function renderMobileBoard() {
+  if (boardEditorPostId !== null) return `<div class="mobile-board-full">${renderBoardEditor(boardEditorPostId || null)}</div>`;
+  if (activeBoardPostId) return `<div class="mobile-board-full">${renderBoardDetail(activeBoardPostId)}</div>`;
+  const posts = filteredBoardPosts();
+  const prefixButtons = [`<button class="${!boardPrefixFilter ? "active" : ""}" data-board-prefix-filter="" type="button">전체</button>`, ...boardPrefixes().map((prefix) => `<button class="${boardPrefixFilter === prefix ? "active" : ""}" data-board-prefix-filter="${esc(prefix)}" type="button">${esc(prefix)}</button>`)].join("");
+  return `
+    <div class="mobile-board-page">
+      <div class="mobile-section-head"><h2>게시판</h2><button class="pill primary" type="button" data-board-write>+ 글쓰기</button></div>
+      <div class="mobile-board-search">
+        <input id="mobileBoardSearchInput" placeholder="제목, 내용, 작성자 검색" value="${esc(boardSearchQuery)}" />
+        <button class="${mobileBoardFilterOpen ? "active" : ""}" type="button" data-mobile-board-filter>필터</button>
+      </div>
+      ${mobileBoardFilterOpen ? `
+        <div class="mobile-board-filter-panel">
+          <p>검색 범위</p>
+          <div>
+            ${[["titleContent", "제목+내용"], ["title", "제목"], ["content", "내용"]].map(([key, label]) => `<button class="${boardSearchScope === key ? "active" : ""}" data-board-search-scope="${key}" type="button">${label}</button>`).join("")}
+          </div>
+          <p>말머리</p>
+          <div>${prefixButtons}</div>
+          <p>게시글</p>
+          <div>
+            ${[["all", "전체"], ["notice", "공지"], ["mine", "내 글"]].map(([key, label]) => `<button class="${boardPostFilter === key ? "active" : ""}" data-board-post-filter="${key}" type="button">${label}</button>`).join("")}
+          </div>
+        </div>
+      ` : ""}
+      <div class="board-tabs">
+        ${[["all", "전체"], ["notice", "공지"], ["mine", "내 글"]].map(([key, label]) => `<button class="${boardActiveTab === key ? "active" : ""}" data-board-tab="${key}" type="button">${label}</button>`).join("")}
+      </div>
+      <div class="mobile-board-list">${posts.length ? posts.map((post) => renderBoardRow(post, true)).join("") : '<div class="empty">게시글이 없습니다.</div>'}</div>
+    </div>
+  `;
+}
+
+function rerenderBoardSurfaces() {
+  renderBoard();
+  if (mobileActiveSection === "board") renderMobileDashboard();
+}
+
+function formatBoardSelection(format) {
+  const editor = document.querySelector("[data-board-editor-content]");
+  if (!editor) return;
+  editor.focus();
+  if (["P", "H1", "H2", "H3", "H4"].includes(format)) {
+    document.execCommand("formatBlock", false, format === "P" ? "p" : format.toLowerCase());
+    return;
+  }
+  document.execCommand(format, false, null);
+}
+
+function handleBoardClick(event) {
+  const mobileFilter = event.target.closest("[data-mobile-board-filter]");
+  if (mobileFilter) {
+    mobileBoardFilterOpen = !mobileBoardFilterOpen;
+    rerenderBoardSurfaces();
+    return true;
+  }
+  const scope = event.target.closest("[data-board-search-scope]")?.dataset.boardSearchScope;
+  if (scope) {
+    boardSearchScope = scope;
+    saveViewPrefs({ boardSearchScope });
+    rerenderBoardSurfaces();
+    return true;
+  }
+  const prefixButton = event.target.closest("[data-board-prefix-filter]");
+  if (prefixButton) {
+    boardPrefixFilter = prefixButton.dataset.boardPrefixFilter || "";
+    saveViewPrefs({ boardPrefixFilter });
+    rerenderBoardSurfaces();
+    return true;
+  }
+  const postFilterButton = event.target.closest("[data-board-post-filter]");
+  if (postFilterButton) {
+    boardPostFilter = postFilterButton.dataset.boardPostFilter || "all";
+    saveViewPrefs({ boardPostFilter });
+    rerenderBoardSurfaces();
+    return true;
+  }
+  const tab = event.target.closest("[data-board-tab]")?.dataset.boardTab;
+  if (tab) {
+    boardActiveTab = tab;
+    saveViewPrefs({ boardActiveTab });
+    rerenderBoardSurfaces();
+    return true;
+  }
+  if (event.target.closest("[data-board-write]")) {
+    openBoardEditor();
+    return true;
+  }
+  if (event.target.closest("[data-board-close-editor]")) {
+    closeBoardEditor();
+    return true;
+  }
+  if (event.target.closest("[data-board-close-detail]")) {
+    closeBoardDetail();
+    return true;
+  }
+  const openId = event.target.closest("[data-board-open]")?.dataset.boardOpen;
+  if (openId) {
+    openBoardDetail(openId);
+    return true;
+  }
+  const editId = event.target.closest("[data-board-edit]")?.dataset.boardEdit;
+  if (editId) {
+    openBoardEditor(editId);
+    return true;
+  }
+  const deleteId = event.target.closest("[data-board-delete]")?.dataset.boardDelete;
+  if (deleteId) {
+    confirmDelete(() => deleteBoardPost(deleteId));
+    return true;
+  }
+  const format = event.target.closest("[data-board-format]")?.dataset.boardFormat;
+  if (format) {
+    formatBoardSelection(format);
+    return true;
+  }
+  const noticeToggle = event.target.closest("[data-board-notice-toggle]");
+  if (noticeToggle) {
+    noticeToggle.closest(".board-notice-options")?.classList.toggle("open", noticeToggle.checked);
+    return false;
+  }
+  const viewersId = event.target.closest("[data-board-viewers]")?.dataset.boardViewers;
+  if (viewersId) {
+    openBoardViewers(viewersId);
+    return true;
+  }
+  if (event.target.closest("[data-board-close-viewers]")) {
+    boardViewerPostId = null;
+    rerenderBoardSurfaces();
+    return true;
+  }
+  const commentId = event.target.closest("[data-board-delete-comment]")?.dataset.boardDeleteComment;
+  if (commentId) {
+    confirmDelete(() => deleteBoardComment(commentId));
+    return true;
+  }
+  return false;
+}
+
+function handleBoardInput(event) {
+  const search = event.target.closest("#boardSearchInput, #mobileBoardSearchInput");
+  if (!search) return false;
+  boardSearchQuery = search.value;
+  saveViewPrefs({ boardSearchQuery });
+  rerenderBoardSurfaces();
+  requestAnimationFrame(() => {
+    const next = document.getElementById(search.id);
+    if (!next) return;
+    next.focus();
+    next.setSelectionRange(next.value.length, next.value.length);
+  });
+  return true;
+}
+
+function handleBoardChange(event) {
+  if (event.target.id === "boardSearchScope") {
+    boardSearchScope = event.target.value;
+    saveViewPrefs({ boardSearchScope });
+    renderBoard();
+    return true;
+  }
+  if (event.target.id === "boardPrefixFilter") {
+    boardPrefixFilter = event.target.value;
+    saveViewPrefs({ boardPrefixFilter });
+    renderBoard();
+    return true;
+  }
+  if (event.target.id === "boardPostFilter") {
+    boardPostFilter = event.target.value;
+    saveViewPrefs({ boardPostFilter });
+    renderBoard();
+    return true;
+  }
+  if (event.target.name === "noticePeriodType") {
+    event.target.closest(".board-notice-extra")?.querySelector(".board-custom-date")?.classList.toggle("open", event.target.value === "custom");
+    return true;
+  }
+  return false;
+}
+
+function handleBoardSubmit(event) {
+  const editorForm = event.target.closest("#boardEditorForm");
+  if (editorForm) {
+    event.preventDefault();
+    const postId = editorForm.dataset.boardEditorPost;
+    if (postId) updateBoardPost(postId, editorForm);
+    else createBoardPost(editorForm);
+    return true;
+  }
+  const commentForm = event.target.closest("[data-board-comment-form]");
+  if (commentForm) {
+    event.preventDefault();
+    addBoardComment(commentForm.dataset.boardCommentForm, commentForm.elements.body?.value || "");
+    commentForm.reset();
+    return true;
+  }
+  return false;
+}
+
 function renderAdmin() {
   if (SUPABASE_ENABLED && isAdminUser() && !adminProfilesRefreshing) {
     adminProfilesRefreshing = true;
@@ -5068,6 +5828,7 @@ function renderAdmin() {
     ["workTypes", "업무", "업무분류"],
     ["workStatuses", "업무", "진행"],
     ["workClients", "업무", "발주 부서"],
+    ["boardPrefixes", "게시판", "게시판 말머리"],
     ["studioRooms", "방송실 예약 드롭다운", "장소 관리"],
     ["staffTypes", "방송실 예약 드롭다운", "스탭 종류 관리"],
     ["trainingTypes", "방송실 예약 드롭다운", "교육 유형 관리"]
@@ -5448,7 +6209,7 @@ function isMobileViewport() {
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", admin: "관리자", notifications: "알림", settings: "설정" }[view] || "영상";
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", board: "게시판", admin: "관리자", notifications: "알림", settings: "설정" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -5685,21 +6446,15 @@ function renderMobileOwnerFilterSheet() {
   const owners = ownerOptions();
   return `
     <div class="mobile-sort-backdrop" data-mobile-close-owner-filter></div>
-    <section class="mobile-sort-sheet">
+    <section class="mobile-sort-sheet mobile-owner-chip-sheet">
       <i></i>
       <h3>담당자 필터</h3>
-      <button class="${!mobileTaskOwner ? "active" : ""}" data-mobile-task-owner="" type="button">
-        <span></span>
-        전체
-        ${!mobileTaskOwner ? "<b>✓</b>" : ""}
-      </button>
-      ${owners.map((ownerId) => `
-        <button class="${mobileTaskOwner === ownerId ? "active" : ""}" data-mobile-task-owner="${esc(ownerId)}" type="button">
-          <span></span>
-          ${esc(ownerOptionLabel(ownerId))}
-          ${mobileTaskOwner === ownerId ? "<b>✓</b>" : ""}
-        </button>
-      `).join("")}
+      <div class="mobile-owner-chip-grid">
+        <button class="${!mobileTaskOwner ? "active" : ""}" data-mobile-task-owner="" type="button">전체</button>
+        ${owners.map((ownerId) => `
+          <button class="${mobileTaskOwner === ownerId ? "active" : ""}" data-mobile-task-owner="${esc(ownerId)}" type="button">${esc(ownerOptionLabel(ownerId))}</button>
+        `).join("")}
+      </div>
     </section>
   `;
 }
@@ -5727,7 +6482,7 @@ function renderMobileTasks() {
         </button>
         <label class="mobile-hide-done-toggle">
           <span>완료</span>
-          <input data-mobile-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} />
+          <input data-mobile-hide-done type="checkbox" ${!mobileTaskHideDone ? "checked" : ""} />
           <b></b>
         </label>
       </div>
@@ -5806,6 +6561,7 @@ function renderMobileMoreInline() {
       <button data-mobile-more-target="projects" type="button">프로젝트</button>
       <button data-mobile-more-target="works" type="button">업무</button>
       <button data-mobile-more-target="studio" type="button">방송실</button>
+      <button data-mobile-more-target="board" type="button">게시판</button>
       <button data-mobile-more-target="notifications" type="button">알림</button>
       <button data-mobile-more-target="settings" type="button">설정</button>
       <button id="mobileInlineLogoutBtn" type="button">로그아웃</button>
@@ -5875,6 +6631,7 @@ function renderMobileDashboard() {
     tasks: renderMobileTasks,
     calendar: renderMobileCalendar,
     studio: renderMobileCalendar,
+    board: renderMobileBoard,
     admin: renderMobileAdminInline,
     notifications: renderMobileMoreInline,
     settings: renderMobileMoreInline
@@ -5907,8 +6664,13 @@ function closeMobileDetailSheets() {
 
 function openMobileSection(section) {
   closeMobileDetailSheets();
+  if (section !== "board") {
+    activeBoardPostId = null;
+    boardEditorPostId = null;
+    boardViewerPostId = null;
+  }
   document.body.classList.toggle("mobile-pc-view", section === "admin");
-  if (["projects", "works", "tasks", "calendar"].includes(section)) {
+  if (["projects", "works", "tasks", "calendar", "board"].includes(section)) {
     mobileActiveSection = section;
     setView(section === "calendar" ? "calendar" : section);
     renderMobileDashboard();
@@ -6146,10 +6908,29 @@ function renderAll() {
   renderPriority();
   renderCalendar();
   renderStudioManage();
+  renderBoard();
   renderAdmin();
   renderAuth();
   renderMobileDashboard();
 }
+
+document.addEventListener("click", (event) => {
+  if (handleBoardClick(event)) {
+    event.stopPropagation();
+  }
+});
+
+document.addEventListener("input", (event) => {
+  handleBoardInput(event);
+});
+
+document.addEventListener("change", (event) => {
+  handleBoardChange(event);
+});
+
+document.addEventListener("submit", (event) => {
+  handleBoardSubmit(event);
+});
 
 document.addEventListener("click", () => {
   closeDropdown();
@@ -6199,7 +6980,7 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
 $("#mobileApp")?.addEventListener("change", (event) => {
   const hideDone = event.target.closest("[data-mobile-hide-done]");
   if (hideDone) {
-    mobileTaskHideDone = hideDone.checked;
+    mobileTaskHideDone = !hideDone.checked;
     saveViewPrefs({ mobileTaskHideDone });
     renderMobileDashboard();
     return;
@@ -7408,7 +8189,7 @@ $("#adminContent").addEventListener("drop", (event) => {
 });
 
 const hashView = location.hash.replace("#", "");
-if (["overview", "projects", "works", "tasks", "calendar", "studio", "admin"].includes(hashView)) setView(hashView);
+if (["overview", "projects", "works", "tasks", "calendar", "studio", "board", "admin"].includes(hashView)) setView(hashView);
 renderAll();
 initSupabaseSession();
 

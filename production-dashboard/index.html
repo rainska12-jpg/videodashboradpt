@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div id="authOverlay" class="auth-overlay">
+    <div id="authOverlay" class="auth-overlay auth-loading">
       <form id="authForm" class="auth-card">
         <section class="auth-panel auth-login-panel">
           <div>
@@ -72,6 +72,7 @@
           <button class="nav-item" data-view="tasks"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Z"/><path d="m8.5 12 2.2 2.2L15.8 9"/></svg></span><span>할 일</span></button>
           <button class="nav-item" data-view="calendar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span><span>일정 캘린더</span></button>
           <button class="nav-item" data-view="studio"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M9 14h6M12 11v6"/></svg></span><span>방송실 예약</span></button>
+          <button class="nav-item" data-view="board"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M6 19l3-3"/></svg></span><span>게시판</span></button>
           <button class="nav-item" data-view="admin"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-2 .1 7 7 0 0 1-1.7.7 1.7 1.7 0 0 0-1.2 1.6V23H9.3v-.3A1.7 1.7 0 0 0 8.1 21a7 7 0 0 1-1.7-.7 1.7 1.7 0 0 0-2-.1l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 2.6 15a7 7 0 0 1 0-2 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-3.4.2.1a1.7 1.7 0 0 0 2-.1A7 7 0 0 1 8.1 7a1.7 1.7 0 0 0 1.2-1.6V5h3.4v.3A1.7 1.7 0 0 0 13.9 7a7 7 0 0 1 1.7.7 1.7 1.7 0 0 0 2 .1l.2-.1 2 3.4-.1.1a1.7 1.7 0 0 0-.3 1.9 7 7 0 0 1 0 2Z"/></svg></span><span>관리자 모드</span></button>
         </nav>
 
@@ -354,6 +355,10 @@
               </aside>
             </div>
           </div>
+        </section>
+
+        <section id="boardView" class="view" aria-label="게시판">
+          <div id="boardRoot" class="board-root"></div>
         </section>
 
         <section id="adminView" class="view" aria-label="관리자 모드">
@@ -762,6 +767,7 @@
           <button data-mobile-more-target="admin" type="button">관리자</button>
           <button data-mobile-more-target="projects" type="button">프로젝트</button>
           <button data-mobile-more-target="works" type="button">업무</button>
+          <button data-mobile-more-target="board" type="button">게시판</button>
           <button data-mobile-more-target="studio" type="button">방송실</button>
           <button data-mobile-more-target="notifications" type="button">알림</button>
           <button data-mobile-more-target="settings" type="button">설정</button>
