@@ -5897,7 +5897,16 @@ function openMobileMoreSheet(open = true) {
   sheet.setAttribute("aria-hidden", String(!open));
 }
 
+function closeMobileDetailSheets() {
+  closeProjectDetail();
+  closeWorkDetail();
+  closeDropdown();
+  closeDatePicker();
+  closeTimePicker();
+}
+
 function openMobileSection(section) {
+  closeMobileDetailSheets();
   document.body.classList.toggle("mobile-pc-view", section === "admin");
   if (["projects", "works", "tasks", "calendar"].includes(section)) {
     mobileActiveSection = section;
@@ -6157,11 +6166,17 @@ $("#datePickerLayer").addEventListener("click", (event) => event.stopPropagation
 $("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation());
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 $$("[data-mobile-section]").forEach((button) => button.addEventListener("click", () => { openMobileSection(button.dataset.mobileSection); openMobileMoreSheet(false); toggleMobileFab(false); }));
-$("[data-mobile-more]")?.addEventListener("click", () => openMobileMoreSheet(true));
+$("[data-mobile-more]")?.addEventListener("click", () => {
+  closeMobileDetailSheets();
+  openMobileMoreSheet(true);
+});
 $$("[data-close-mobile-sheet]").forEach((button) => button.addEventListener("click", () => openMobileMoreSheet(false)));
 $$("[data-close-mobile-add]").forEach((button) => button.addEventListener("click", () => closeMobileAddSheet()));
 $("#mobileNotifyBtn")?.addEventListener("click", () => openMobileMoreSheet(true));
-$("#mobileFabBtn")?.addEventListener("click", () => toggleMobileFab());
+$("#mobileFabBtn")?.addEventListener("click", () => {
+  closeMobileDetailSheets();
+  toggleMobileFab();
+});
 $("#mobileFabMenu")?.addEventListener("click", (event) => {
   const mode = event.target.closest("[data-mobile-add]")?.dataset.mobileAdd;
   if (!mode) return;

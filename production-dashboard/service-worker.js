@@ -1,4 +1,4 @@
-const CACHE_NAME = "video-work-dashboard-v15";
+const CACHE_NAME = "video-work-dashboard-v16";
 const CORE_ASSETS = [
   "/",
   "/index.html",
