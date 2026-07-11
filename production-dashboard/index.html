@@ -197,6 +197,11 @@
             <div class="project-tools">
               <input id="projectSearchInput" placeholder="영상 프로젝트 검색" />
               <button id="projectFilterBtn" class="icon-pill" type="button" aria-expanded="false">☰ 필터</button>
+              <label class="completion-visibility-toggle">
+                <span>완료</span>
+                <input id="showCompletedProjects" type="checkbox" />
+                <b></b>
+              </label>
               <div id="projectFilterPanel" class="project-filter-panel">
                 <div id="projectTypeFilter"></div>
                 <div id="projectClientFilter"></div>
@@ -226,6 +231,11 @@
             </div>
             <div class="project-tools">
               <input id="workSearchInput" placeholder="업무 검색" />
+              <label class="completion-visibility-toggle">
+                <span>완료</span>
+                <input id="showCompletedWorks" type="checkbox" />
+                <b></b>
+              </label>
             </div>
             <div class="project-head work-head">
               <button data-work-sort="title" type="button">업무명</button>

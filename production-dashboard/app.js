@@ -283,6 +283,8 @@ let taskOverviewOwner = viewPref("taskOverviewOwner", "");
 let taskOverviewType = viewPref("taskOverviewType", "");
 let taskOverviewProject = viewPref("taskOverviewProject", "");
 let taskOverviewHideDone = viewPref("taskOverviewHideDone", true);
+let projectHideDone = viewPref("projectHideDone", true);
+let workHideDone = viewPref("workHideDone", true);
 let scheduleDraft = { editingScheduleId: null, owners: ownerOptions()[0] ? [ownerOptions()[0]] : [], date: dateKey(new Date()), allDay: true, startTime: "09:00", endTime: "10:00" };
 let staffScheduleDraft = { title: "", room: "", type: "", owner: "", trainingType: "", date: dateKey(new Date()), allDay: false, startTime: "09:00", endTime: "10:00", repeatEnabled: false, repeatCount: 8, repeatDays: [], repeatEndMode: "none", repeatUntil: "", staffRows: [] };
 let recurringTrainingDraft = { room: state.options.studioRooms[0] || "", type: state.options.staffTypes[0] || "정기교육", owner: "", trainingType: state.options.trainingTypes[0] || "", startDate: dateKey(new Date()), repeat: "매주", count: 8, allDay: true, startTime: "09:00", endTime: "10:00" };
@@ -1683,6 +1685,7 @@ function renderProjectList() {
   const query = projectSearchQuery.trim().toLowerCase();
   const filteredProjects = state.projects
     .filter((project) => {
+      if (projectHideDone && project.status === "납품 완료") return false;
       const matchesQuery = !query || `${project.title} ${ownersLabel(project)} ${project.type} ${project.client} ${project.status}`.toLowerCase().includes(query);
       const matchesType = !projectFilters.type || project.type === projectFilters.type;
       const matchesClient = !projectFilters.client || project.client === projectFilters.client;
@@ -1702,6 +1705,7 @@ function renderProjectList() {
     });
 
   $("#projectSearchInput").value = projectSearchQuery;
+  $("#showCompletedProjects").checked = !projectHideDone;
   $("#projectFilterPanel").classList.toggle("open", isProjectFilterOpen);
   $("#projectFilterBtn").setAttribute("aria-expanded", String(isProjectFilterOpen));
   renderDropdown({
@@ -1758,7 +1762,7 @@ function renderProjectList() {
           </article>
         `)
         .join("")
-    : `<div class="empty">조건에 맞는 영상 프로젝트가 없습니다.</div>`;
+    : `<div class="empty">${projectHideDone && state.projects.some((project) => project.status === "납품 완료") ? "표시할 영상 프로젝트가 없습니다. 완료 스위치를 켜면 완료된 프로젝트를 볼 수 있습니다." : "조건에 맞는 영상 프로젝트가 없습니다."}</div>`;
 
   document.querySelectorAll("[data-project-owner-cell]").forEach((target) => {
     const project = state.projects.find((item) => item.id === target.dataset.projectOwnerCell);
@@ -1869,6 +1873,7 @@ function renderProjectList() {
 function renderWorkList() {
   const query = workSearchQuery.trim().toLowerCase();
   const works = [...state.works]
+    .filter((work) => !(workHideDone && work.status === "완료"))
     .filter((work) => !query || `${work.title} ${workOwnersLabel(work)} ${work.type} ${work.client} ${work.status}`.toLowerCase().includes(query))
     .sort((a, b) => {
       const direction = workSort.direction === "asc" ? 1 : -1;
@@ -1884,6 +1889,7 @@ function renderWorkList() {
     });
 
   $("#workSearchInput").value = workSearchQuery;
+  $("#showCompletedWorks").checked = !workHideDone;
   $$("#worksView [data-work-sort]").forEach((button) => {
     const isActive = workSort.key === button.dataset.workSort;
     button.classList.toggle("active", isActive);
@@ -1907,7 +1913,7 @@ function renderWorkList() {
           </article>
         `)
         .join("")
-    : `<div class="empty">등록된 업무가 없습니다.</div>`;
+    : `<div class="empty">${workHideDone && state.works.some((work) => work.status === "완료") ? "표시할 업무가 없습니다. 완료 스위치를 켜면 완료된 업무를 볼 수 있습니다." : "등록된 업무가 없습니다."}</div>`;
 
   document.querySelectorAll("[data-work-owner-cell]").forEach((target) => {
     const work = state.works.find((item) => item.id === target.dataset.workOwnerCell);
@@ -6269,7 +6275,7 @@ function projectSortValue(project, key) {
 }
 
 function sortedMobileProjects() {
-  return [...state.projects].sort((a, b) => {
+  return state.projects.filter((project) => !(projectHideDone && project.status === "납품 완료")).sort((a, b) => {
     const direction = projectSort.direction === "desc" ? -1 : 1;
     const aValue = projectSortValue(a, projectSort.key);
     const bValue = projectSortValue(b, projectSort.key);
@@ -6330,6 +6336,11 @@ function renderMobileProjectCards() {
       <button class="mobile-project-sort ${mobileProjectSortOpen ? "active" : ""}" data-mobile-open-project-sort type="button">
         ${esc(mobileProjectSortLabel())} <span>⌄</span>
       </button>
+      <label class="mobile-hide-done-toggle">
+        <span>완료</span>
+        <input data-mobile-show-completed-projects type="checkbox" ${!projectHideDone ? "checked" : ""} />
+        <b></b>
+      </label>
     </div>
     <div class="mobile-section-head mobile-project-head"><h2>프로젝트</h2><span>총 ${projects.length}건</span></div>
     <div class="mobile-card-list mobile-project-list">
@@ -6352,17 +6363,27 @@ function renderMobileProjectCards() {
             </div>
           </button>
         `;
-      }).join("") : `<div class="empty">등록된 영상 프로젝트가 없습니다.</div>`}
+      }).join("") : `<div class="empty">${projectHideDone && state.projects.some((project) => project.status === "납품 완료") ? "완료 스위치를 켜면 완료된 프로젝트를 볼 수 있습니다." : "등록된 영상 프로젝트가 없습니다."}</div>`}
     </div>
     ${renderMobileProjectSortSheet()}
   `;
 }
 
 function renderMobileWorkCards() {
-  const works = [...state.works].sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
+  const works = state.works
+    .filter((work) => !(workHideDone && work.status === "완료"))
+    .sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
   return `
     ${renderMobileKpiStrip()}
-    <div class="mobile-section-head"><h2>업무</h2><span>${works.length}건</span></div>
+    <div class="mobile-section-head mobile-list-head-with-toggle">
+      <h2>업무</h2>
+      <label class="mobile-hide-done-toggle">
+        <span>완료</span>
+        <input data-mobile-show-completed-works type="checkbox" ${!workHideDone ? "checked" : ""} />
+        <b></b>
+      </label>
+      <span>${works.length}건</span>
+    </div>
     <div class="mobile-card-list">
       ${works.length ? works.map((work) => `
         <button class="mobile-work-card" data-mobile-open-work="${esc(work.id)}" type="button">
@@ -6370,7 +6391,7 @@ function renderMobileWorkCards() {
           <div><span class="mobile-chip">${esc(mobileStatusText(work.status))}</span><span>${esc(mobileOwnersText(workOwners(work)))}</span></div>
           <small>마감일 ${work.noSchedule ? "일정 없음" : work.finalDate ? esc(formatDate(work.finalDate)) : "없음"}</small>
         </button>
-      `).join("") : `<div class="empty">등록된 업무가 없습니다.</div>`}
+      `).join("") : `<div class="empty">${workHideDone && state.works.some((work) => work.status === "완료") ? "완료 스위치를 켜면 완료된 업무를 볼 수 있습니다." : "등록된 업무가 없습니다."}</div>`}
     </div>
   `;
 }
@@ -6978,6 +6999,18 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
   submitMobileAddForm(event.currentTarget);
 });
 $("#mobileApp")?.addEventListener("change", (event) => {
+  if (event.target.matches("[data-mobile-show-completed-projects]")) {
+    projectHideDone = !event.target.checked;
+    saveViewPrefs({ projectHideDone });
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.matches("[data-mobile-show-completed-works]")) {
+    workHideDone = !event.target.checked;
+    saveViewPrefs({ workHideDone });
+    renderMobileDashboard();
+    return;
+  }
   const hideDone = event.target.closest("[data-mobile-hide-done]");
   if (hideDone) {
     mobileTaskHideDone = !hideDone.checked;
@@ -7821,6 +7854,18 @@ $("#hideDoneTasks").addEventListener("change", (event) => {
   taskOverviewHideDone = event.target.checked;
   saveViewPrefs({ taskOverviewHideDone });
   renderTasks();
+});
+
+$("#showCompletedProjects").addEventListener("change", (event) => {
+  projectHideDone = !event.target.checked;
+  saveViewPrefs({ projectHideDone });
+  renderProjectList();
+});
+
+$("#showCompletedWorks").addEventListener("change", (event) => {
+  workHideDone = !event.target.checked;
+  saveViewPrefs({ workHideDone });
+  renderWorkList();
 });
 
 $("#taskOverviewSearch").addEventListener("input", (event) => {
