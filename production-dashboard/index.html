@@ -12,6 +12,8 @@
     <meta name="apple-mobile-web-app-title" content="영상 업무 대시보드" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./work-task.css" />
+    <link rel="stylesheet" href="./work-studio.css" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -192,16 +194,17 @@
               <div>
                 <p class="eyebrow">Notion Style</p>
               </div>
-              <button id="addProjectBtn" class="pill primary">영상 프로젝트 추가</button>
+              <div class="section-head-actions">
+                <label class="calendar-toggle overview-hide-done">
+                  <input id="hideCompletedProjects" type="checkbox" checked />
+                  <span>완료된 항목 숨기기</span>
+                </label>
+                <button id="addProjectBtn" class="pill primary">영상 프로젝트 추가</button>
+              </div>
             </div>
             <div class="project-tools">
               <input id="projectSearchInput" placeholder="영상 프로젝트 검색" />
               <button id="projectFilterBtn" class="icon-pill" type="button" aria-expanded="false">☰ 필터</button>
-              <label class="completion-visibility-toggle">
-                <span>완료</span>
-                <input id="showCompletedProjects" type="checkbox" />
-                <b></b>
-              </label>
               <div id="projectFilterPanel" class="project-filter-panel">
                 <div id="projectTypeFilter"></div>
                 <div id="projectClientFilter"></div>
@@ -227,15 +230,16 @@
               <div>
                 <p class="eyebrow">Work Control</p>
               </div>
-              <button id="addWorkBtn" class="pill primary">업무 추가</button>
+              <div class="section-head-actions">
+                <label class="calendar-toggle overview-hide-done">
+                  <input id="hideCompletedWorks" type="checkbox" checked />
+                  <span>완료된 항목 숨기기</span>
+                </label>
+                <button id="addWorkBtn" class="pill primary">업무 추가</button>
+              </div>
             </div>
             <div class="project-tools">
               <input id="workSearchInput" placeholder="업무 검색" />
-              <label class="completion-visibility-toggle">
-                <span>완료</span>
-                <input id="showCompletedWorks" type="checkbox" />
-                <b></b>
-              </label>
             </div>
             <div class="project-head work-head">
               <button data-work-sort="title" type="button">업무명</button>
@@ -756,8 +760,6 @@
       <div id="mobileFabMenu" class="mobile-fab-menu" aria-hidden="true">
         <button data-mobile-add="project" type="button">영상 추가</button>
         <button data-mobile-add="work" type="button">업무 추가</button>
-        <button data-mobile-add="task" type="button">할 일 추가</button>
-        <button data-mobile-add="schedule" type="button">일정 추가</button>
       </div>
       <button id="mobileFabBtn" class="mobile-fab" type="button" aria-label="빠른 등록">+</button>
     </div>

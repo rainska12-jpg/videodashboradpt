@@ -1,8 +1,10 @@
-const CACHE_NAME = "video-work-dashboard-v18";
+const CACHE_NAME = "video-work-dashboard-v26";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
+  "/work-task.css",
+  "/work-studio.css",
   "/app.js",
   "/manifest.webmanifest",
   "/icons/icon-192.png",

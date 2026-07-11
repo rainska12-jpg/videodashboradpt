@@ -1,0 +1,93 @@
+/* 업무 상세 > 방송실 예약 compact UI */
+#workDetail .work-studio-panel { display: grid; gap: 10px; }
+#workDetail .studio-compact-toggle { display: flex; align-items: center; min-height: 48px; width: 100%; gap: 10px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.11); border-radius: 10px; background: rgba(255,255,255,.025); }
+#workDetail .studio-compact-toggle strong { margin-right: auto; font-size: 17px; }
+#workDetail .studio-compact-toggle span { color: var(--muted); font-size: 12px; font-weight: 850; }
+#workDetail .studio-compact-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+#workDetail .studio-compact-toggle b { position: relative; width: 42px; height: 26px; border-radius: 999px; background: #3b4248; transition: background 160ms ease; }
+#workDetail .studio-compact-toggle b::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #eef1f2; transition: transform 160ms ease; }
+#workDetail .studio-compact-toggle input:checked + b { background: var(--accent); }
+#workDetail .studio-compact-toggle input:checked + b::after { transform: translateX(16px); }
+
+#workDetail .studio-reservation-form { display: grid; gap: 10px; padding: 0; }
+#workDetail .studio-reservation-basic { display: grid; gap: 10px; padding: 14px; border: 1px solid rgba(116,132,148,.24); border-radius: 10px; background: rgba(255,255,255,.018); }
+#workDetail .studio-reservation-basic label { display: grid; gap: 4px; color: var(--near); font-size: 12px; font-weight: 850; }
+#workDetail .studio-reservation-basic input,
+#workDetail .studio-reservation-basic .dropdown-trigger,
+#workDetail .studio-reservation-basic .date-button,
+#workDetail .studio-reservation-basic .time-button { min-height: 40px; height: 40px; border-radius: 9px; padding: 0 11px; font-size: 14px; }
+#workDetail .studio-reservation-grid { display: grid; gap: 10px; }
+#workDetail .studio-reservation-main-row,
+#workDetail .studio-reservation-main-row:not(.is-all-day) { grid-template-columns: minmax(120px,1fr) minmax(120px,1fr) minmax(138px,.64fr) minmax(130px,.72fr) 18px minmax(130px,.72fr); align-items: end; }
+#workDetail .studio-reservation-main-row > label:nth-child(1) { grid-column: 1; grid-row: 1; }
+#workDetail .studio-reservation-main-row > label:nth-child(2) { grid-column: 2; grid-row: 1; }
+#workDetail .studio-reservation-date { grid-column: 3; grid-row: 1; }
+#workDetail .studio-reservation-all-day { grid-column: 3; grid-row: 2; justify-self: start; }
+#workDetail .studio-reservation-start { grid-column: 4; grid-row: 1; }
+#workDetail .studio-time-separator { grid-column: 5; grid-row: 1; }
+#workDetail .studio-reservation-end { grid-column: 6; grid-row: 1; }
+#workDetail .studio-reservation-all-day { align-self: end; display: inline-flex !important; align-items: center; gap: 8px; min-height: 40px; padding: 0 6px; white-space: nowrap; cursor: pointer; }
+#workDetail .studio-reservation-all-day input { appearance: none; width: 22px; height: 22px; min-width: 22px; min-height: 22px; border: 2px solid #6b737a; border-radius: 4px; background: #171a1d; box-shadow: none; padding: 0; cursor: pointer; }
+#workDetail .studio-reservation-all-day input:checked { border-color: var(--accent); background-color: var(--accent); background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%23020b05' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-position: center; background-repeat: no-repeat; background-size: 15px; }
+#workDetail .studio-time-separator { align-self: end; display: grid; place-items: center; height: 40px; color: var(--muted); font-weight: 900; }
+#workDetail .studio-memo-toggle { display: flex; align-items: center; justify-content: space-between; min-height: 44px; border: 1px solid rgba(116,132,148,.22); border-radius: 10px; background: rgba(255,255,255,.025); color: var(--near); padding: 0 14px; font-size: 13px; font-weight: 850; text-align: left; }
+#workDetail .studio-memo-toggle b { color: var(--muted); }
+#workDetail .studio-reservation-memo textarea { width: 100%; min-height: 80px; max-height: 110px; border-radius: 9px; padding: 10px 12px; resize: vertical; }
+#workDetail .studio-staff-head { align-items: center; margin-top: 2px; }
+#workDetail .studio-staff-head h3 { font-size: 17px; }
+#workDetail .studio-staff-head .pill.small { min-height: 38px; padding: 7px 14px; }
+#workDetail .studio-staff-table { border-radius: 9px; }
+#workDetail .studio-staff-table-head,
+#workDetail .studio-staff-row { grid-template-columns: 22px 30px minmax(140px,.9fr) minmax(140px,.9fr) minmax(220px,1.3fr) 42px; gap: 8px; }
+#workDetail .studio-staff-table-head { min-height: 36px; padding: 7px 10px; }
+#workDetail .studio-staff-row { min-height: 54px; padding: 6px 10px; }
+#workDetail .studio-staff-row .dropdown-trigger,
+#workDetail .studio-staff-row input { min-height: 40px; height: 40px; border-radius: 8px; }
+#workDetail .studio-row-delete { width: 36px; height: 36px; }
+#workDetail .work-studio-actions { position: sticky; bottom: 0; z-index: 4; justify-content: flex-end; padding: 8px 0 2px; background: linear-gradient(transparent,#111 32%); }
+#workDetail .work-studio-actions .pill { min-width: 132px; min-height: 42px; }
+
+@media (min-width: 769px) {
+  #projectDetail #managementRecords .record-tools,
+  #workDetail #workManagementRecords .record-tools { display: flex; justify-content: flex-end; gap: 8px; }
+  #projectDetail #managementRecords .record-tools .record-control,
+  #workDetail #workManagementRecords .record-tools .record-control { width: auto; min-width: 58px; flex: 0 0 auto; }
+}
+
+@media (max-width: 768px) {
+  #workDetail .work-studio-panel { gap: 8px; }
+  #workDetail .studio-compact-toggle { min-height: 46px; padding: 7px 10px; }
+  #workDetail .studio-compact-toggle strong { font-size: 16px; }
+  #workDetail .studio-reservation-basic { gap: 8px; padding: 12px; }
+  #workDetail .studio-reservation-main-row,
+  #workDetail .studio-reservation-main-row:not(.is-all-day) { grid-template-columns: minmax(0,1.05fr) minmax(0,1fr) 14px minmax(0,1fr); gap: 8px; }
+  #workDetail .studio-reservation-main-row > label:nth-child(1) { grid-column: 1 / 3; grid-row: 1; }
+  #workDetail .studio-reservation-main-row > label:nth-child(2) { grid-column: 3 / 5; grid-row: 1; }
+  #workDetail .studio-reservation-date { grid-column: 1; grid-row: 2; }
+  #workDetail .studio-reservation-all-day { grid-column: 1; grid-row: 3; justify-self: start; }
+  #workDetail .studio-reservation-start { grid-column: 2; grid-row: 2; }
+  #workDetail .studio-time-separator { grid-column: 3; grid-row: 2; width: 14px; justify-self: center; }
+  #workDetail .studio-reservation-end { grid-column: 4; grid-row: 2; margin-left: 0; }
+  #workDetail .studio-reservation-main-row.is-all-day { grid-template-columns: 1fr 1fr; }
+  #workDetail .studio-reservation-main-row.is-all-day > label:nth-child(1) { grid-column: 1; grid-row: 1; }
+  #workDetail .studio-reservation-main-row.is-all-day > label:nth-child(2) { grid-column: 2; grid-row: 1; }
+  #workDetail .studio-reservation-main-row.is-all-day .studio-reservation-date { grid-column: 1; grid-row: 2; }
+  #workDetail .studio-reservation-main-row.is-all-day .studio-reservation-all-day { grid-column: 1; grid-row: 3; }
+  #workDetail .studio-memo-toggle { min-height: 44px; }
+  #workDetail .studio-reservation-memo textarea { min-height: 72px; }
+  #workDetail .studio-staff-table { border: 0; background: transparent; overflow: visible; }
+  #workDetail .studio-staff-table-head { display: none; }
+  #workDetail .studio-staff-rows { display: grid; gap: 8px; }
+  #workDetail .studio-staff-row { position: relative; display: grid; grid-template-columns: 18px 24px minmax(0,1fr) minmax(0,1fr) 38px; gap: 7px; min-height: 0; padding: 10px; border: 1px solid rgba(116,132,148,.22); border-radius: 10px; background: rgba(255,255,255,.025); }
+  #workDetail .studio-staff-row,
+  #workDetail .studio-staff-row > * { min-width: 0; max-width: 100%; }
+  #workDetail .studio-staff-rows { width: 100%; overflow-x: hidden; }
+  #workDetail .studio-staff-row > * { grid-column: auto !important; }
+  #workDetail .studio-staff-row > [id^="workStudioRowType"] { grid-column: 3; }
+  #workDetail .studio-staff-row > [id^="workStudioRowOwner"] { grid-column: 4; }
+  #workDetail .studio-staff-row > input { grid-column: 3 / 5 !important; grid-row: 2; }
+  #workDetail .studio-staff-row > .studio-row-delete { grid-column: 5 !important; grid-row: 1 / 3; align-self: center; }
+  #workDetail .work-studio-actions { bottom: calc(82px + env(safe-area-inset-bottom)); margin: 0 -4px; padding: 12px 4px 4px; }
+  #workDetail .work-studio-actions .pill { width: 100%; min-height: 44px; }
+  #workDetail #workDetailStudioTab.active { padding-bottom: calc(130px + env(safe-area-inset-bottom)); }
+}

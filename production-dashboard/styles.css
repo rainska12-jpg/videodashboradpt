@@ -17,6 +17,90 @@
   --font: SpotifyMixUI, CircularSp-Arab, CircularSp-Hebr, CircularSp-Cyrl, CircularSp-Grek, CircularSp-Deva, "Helvetica Neue", helvetica, arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, "MS Gothic", sans-serif;
 }
 
+/* Compact inline work-task composer */
+#workDetail .task-add-card.is-collapsed .task-add-head,
+#workDetail .task-add-head { min-height: 58px; padding: 10px 12px; }
+#workDetail .task-add-chevron { color: var(--muted); font-size: 20px; font-weight: 900; }
+#workDetail .project-task-composer.task-composer-expanded { gap: 8px; padding: 10px 12px 12px; }
+#workDetail .task-title-field { padding-bottom: 8px; }
+#workDetail .task-title-input,
+#workDetail .task-field .date-button,
+#workDetail .task-field .time-button,
+#workDetail .task-field .custom-select { min-height: 40px; height: 40px; border-radius: 9px; padding: 7px 10px; font-size: 13px; }
+#workDetail .task-form-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 8px; border: 0; }
+#workDetail .task-form-column,
+#workDetail .task-form-column + .task-form-column { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 0; padding: 0; }
+#workDetail .task-field { gap: 3px; }
+#workDetail .task-field > span { font-size: 12px; }
+#workDetail .task-type-chip-row { min-height: 40px; flex-wrap: nowrap; gap: 5px; overflow-x: auto; overscroll-behavior: contain; }
+#workDetail .task-type-chip { min-height: 34px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+#workDetail .is-conditionally-hidden { display: none !important; }
+#workDetail .task-option-row { min-height: 38px; gap: 8px; border: 0; padding: 2px 0; }
+#workDetail .task-detail-toggle { justify-self: start; min-height: 34px; background: transparent; color: var(--near); padding: 0 4px; font-size: 12px; font-weight: 850; }
+#workDetail .task-detail-field { display: none; padding: 0; }
+#workDetail .task-detail-field.is-open { display: grid; }
+#workDetail .task-detail-field textarea { min-height: 60px; max-height: 96px; border-radius: 9px; padding: 9px 10px; font-size: 13px; }
+#workDetail .task-form-footer { gap: 7px; padding-top: 0; }
+#workDetail .task-form-footer .pill { min-height: 38px; padding: 7px 16px; font-size: 12px; }
+#workDetail .task-sort-tools { grid-template-columns: auto auto auto 1fr; }
+#workDetail .work-task-hide-done { justify-self: end; }
+
+body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
+.picker-scroll-locked-panel { overflow: hidden !important; overscroll-behavior: none; }
+.date-picker-card, .time-picker-card, .date-picker-days, .time-picker-column { overscroll-behavior: contain; }
+.time-picker-card { display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 316px; }
+.time-picker-heading, .time-picker-actions { display: flex; align-items: center; justify-content: space-between; }
+.time-picker-heading small { color: var(--muted); font-size: 11px; }
+.time-picker-columns { display: grid; grid-template-columns: .9fr 1fr 1fr; gap: 8px; min-height: 0; }
+.time-picker-column { max-height: 210px; }
+.time-picker-actions { gap: 8px; justify-content: flex-end; }
+.time-picker-actions button { min-height: 34px; border-radius: 8px; background: var(--surface-2); color: var(--text); padding: 0 14px; font-size: 12px; font-weight: 850; }
+.time-picker-actions [data-time-apply] { background: var(--accent); color: #061007; }
+
+@media (max-width: 768px) {
+  #workDetail .task-add-card.is-collapsed .task-add-head,
+  #workDetail .task-add-head { min-height: 52px; padding: 9px 11px; }
+  #workDetail .task-add-title small { display: none; }
+  #workDetail .project-task-composer.task-composer-expanded { padding: 10px; }
+  #workDetail .task-form-grid { grid-template-columns: 1fr; }
+  #workDetail .task-form-column,
+  #workDetail .task-form-column + .task-form-column { grid-template-columns: 1fr 1fr; }
+  #workDetail .task-form-column:first-child .task-field:nth-child(2),
+  #workDetail .task-form-column:nth-child(2) > .task-field:last-child { grid-column: 1 / -1; }
+  #workDetail .task-option-row { gap: 6px; }
+  #workDetail .task-detail-toggle { width: 100%; justify-self: stretch; text-align: left; }
+  #workDetail .task-form-footer { justify-content: flex-end; }
+  #workDetail .task-sort-tools { grid-template-columns: auto auto 1fr; }
+  #workDetail .task-sort-tools > span { display: none; }
+  .date-picker-layer.open, .time-picker-layer.open { position: fixed; inset: auto 0 0 0; width: 100%; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .62); }
+  .date-picker-card, .time-picker-card { width: min(100%, 440px); margin: 0 auto; border-radius: 18px 18px 12px 12px; }
+  .time-picker-card { max-height: 320px; }
+  .time-picker-column { max-height: 210px; overflow-y: auto; touch-action: pan-y; }
+  #workDetail .detail-page { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+}
+
+#workDetail .task-form-grid {
+  display: grid;
+  grid-template-columns: .9fr .9fr .8fr 1.4fr;
+  grid-template-areas: "owner type date time";
+  gap: 8px;
+}
+#workDetail .task-form-column,
+#workDetail .task-form-column + .task-form-column { display: contents; }
+#workDetail .task-form-column:first-child > .task-field:first-child { grid-area: owner; }
+#workDetail .task-form-column:first-child > .task-field:nth-child(2) { grid-area: date; }
+#workDetail .task-form-column:nth-child(2) > .task-field:first-child { grid-area: type; }
+#workDetail .task-form-column:nth-child(2) > .task-field:nth-child(2) { grid-area: time; }
+
+@media (max-width: 768px) {
+  #workDetail .task-form-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas: "owner type" "date date" "time time";
+  }
+  #workDetail .task-form-column,
+  #workDetail .task-form-column + .task-form-column { display: contents; }
+}
+
 @media (max-width: 768px) {
   .mobile-board-page,
   .mobile-board-full {
@@ -258,6 +342,37 @@
   .mobile-board-full .board-detail-card h2 {
     font-size: 30px;
   }
+}
+
+/* Final cascade for the work-task quick form and picker sheets. */
+#workDetail .task-add-card.is-collapsed .task-add-head { min-height: 58px; padding: 10px 12px; }
+#workDetail .project-task-composer.task-composer-expanded { gap: 8px; padding: 10px 12px 12px; }
+#workDetail .task-title-field { padding-bottom: 8px; }
+#workDetail .task-form-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); gap: 8px; border: 0; }
+#workDetail .task-form-column,
+#workDetail .task-form-column + .task-form-column { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 0; padding: 0; }
+#workDetail .task-option-row { min-height: 38px; gap: 8px; border: 0; padding: 2px 0; }
+#workDetail .task-detail-field { display: none; padding: 0; }
+#workDetail .task-detail-field.is-open { display: grid; }
+#workDetail .task-detail-field textarea { min-height: 60px; max-height: 96px; }
+#workDetail .task-form-footer { gap: 7px; padding-top: 0; }
+#workDetail .task-form-footer .pill { min-height: 38px; padding: 7px 16px; }
+#workDetail .task-sort-tools { grid-template-columns: auto auto auto 1fr; }
+.time-picker-card { display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 316px; }
+.time-picker-columns { display: grid; grid-template-columns: .9fr 1fr 1fr; gap: 8px; min-height: 0; }
+.time-picker-column { max-height: 210px; overscroll-behavior: contain; }
+
+@media (max-width: 768px) {
+  #workDetail .task-add-card.is-collapsed .task-add-head { min-height: 52px; padding: 9px 11px; }
+  #workDetail .task-add-title small { display: none; }
+  #workDetail .project-task-composer.task-composer-expanded { padding: 10px; }
+  #workDetail .task-form-grid { grid-template-columns: 1fr; }
+  #workDetail .task-form-column,
+  #workDetail .task-form-column + .task-form-column { grid-template-columns: 1fr 1fr; }
+  #workDetail .task-sort-tools { grid-template-columns: auto auto 1fr; }
+  #workDetail .task-sort-tools > span { display: none; }
+  .date-picker-layer.open, .time-picker-layer.open { position: fixed; inset: auto 0 0 0; width: 100%; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); background: rgba(0, 0, 0, .62); }
+  .date-picker-card, .time-picker-card { width: min(100%, 440px); margin: 0 auto; border-radius: 18px 18px 12px 12px; }
 }
 
 * {
@@ -955,11 +1070,18 @@ h3 {
 
 .project-tools {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 8px;
   align-items: start;
   padding: 0 16px 12px;
   position: relative;
+}
+
+.section-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
 }
 
 .icon-pill {
@@ -6325,17 +6447,16 @@ h3 {
   }
 
   .mobile-project-toolbar .mobile-hide-done-toggle,
-  .mobile-list-head-with-toggle .mobile-hide-done-toggle {
+  .mobile-list-tools .mobile-hide-done-toggle {
     min-width: 92px;
     flex: 0 0 92px;
   }
 
-  .mobile-list-head-with-toggle {
+  .mobile-list-tools {
+    display: grid;
+    grid-template-columns: 1fr 92px;
+    align-items: center;
     gap: 10px;
-  }
-
-  .mobile-list-head-with-toggle h2 {
-    margin-right: auto;
   }
 
   .mobile-sort-trigger,
@@ -8112,49 +8233,3 @@ h3 {
     font-size: 30px;
   }
 }
-.completion-visibility-toggle {
-  min-height: 42px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.11);
-  color: var(--text);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 11px;
-  font-size: 13px;
-  font-weight: 850;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.completion-visibility-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.completion-visibility-toggle b {
-  width: 32px;
-  height: 19px;
-  border-radius: 999px;
-  background: #394047;
-  position: relative;
-  flex: 0 0 auto;
-  transition: background 180ms ease;
-}
-
-.completion-visibility-toggle b::after {
-  content: "";
-  position: absolute;
-  top: 3.5px;
-  left: 3.5px;
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  background: #e7e7e7;
-  transition: transform 180ms ease;
-}
-
-.completion-visibility-toggle input:checked + b { background: var(--accent); }
-.completion-visibility-toggle input:checked + b::after { transform: translateX(13px); }

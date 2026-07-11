@@ -220,7 +220,10 @@ const defaultOptions = {
 
 const sampleData = {
   options: structuredClone(defaultOptions),
-  users: [{ id: "user-admin", username: "videoadmin", email: "admin@videowork.io", password: "0314", name: "관리자", position: "관리자", role: "admin", status: "active", approved: true }],
+  users: [
+    { id: "user-admin", username: "videoadmin", email: "admin@videowork.io", password: "0314", name: "관리자", position: "관리자", role: "admin", status: "active", approved: true },
+    { id: "user-test-admin", username: "1", email: "", password: "1", name: "테스트 관리자", position: "관리자", role: "admin", status: "active", approved: true }
+  ],
   currentUser: null,
   projects: [],
   works: [],
@@ -305,6 +308,9 @@ let detailTaskSort = viewPref("detailTaskSort", "created");
 let workTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
 let workTaskComposerOpen = false;
 let workTaskSort = viewPref("workTaskSort", "created");
+let workTaskHideDone = viewPref("workTaskHideDone", true);
+let workTaskDetailOpen = false;
+let workStudioMemoOpen = false;
 let editingWorkRecordId = null;
 let workRecordSearchQuery = "";
 let workRecordFilterMode = viewPref("workRecordFilterMode", "all");
@@ -878,6 +884,9 @@ function normalizeUsers(users) {
   if (!normalized.some((user) => user.username === "videoadmin")) {
     normalized.unshift({ id: "user-admin", username: "videoadmin", email: "admin@videowork.io", password: "0314", name: "관리자", position: "관리자", role: "admin", status: "active", approved: true });
   }
+  if (!normalized.some((user) => user.username === "1")) {
+    normalized.push({ id: "user-test-admin", username: "1", email: "", password: "1", name: "테스트 관리자", position: "관리자", role: "admin", status: "active", approved: true });
+  }
   return normalized;
 }
 
@@ -990,6 +999,17 @@ function showAuthMode(mode) {
 
 async function login(username, password) {
   const cleanId = username.trim();
+  if (cleanId === "1" && password === "1") {
+    const testAdmin = state.users.find((item) => item.username === "1");
+    if (testAdmin) {
+      currentProfile = null;
+      state.currentUser = testAdmin.id;
+      saveState();
+      renderAll();
+      setAuthMessage("");
+      return;
+    }
+  }
   if (SUPABASE_ENABLED) {
     const client = getSupabaseClient();
     const { error } = await client.auth.signInWithPassword({ email: cleanId, password });
@@ -1362,14 +1382,15 @@ function normalizeTaskTimeRange(draft) {
   const end = minutesFromTime(draft.endTime || "10:00");
   if (end > start) return;
 
-  const nextEnd = Math.min(23 * 60 + 59, start + 60);
+  const latestTime = 23 * 60 + 50;
+  const nextEnd = Math.min(latestTime, start + 60);
   if (nextEnd > start) {
     draft.endTime = timeFromMinutes(nextEnd);
     return;
   }
 
-  draft.startTime = timeFromMinutes(Math.max(0, end - 60));
-  draft.endTime = timeFromMinutes(end);
+  draft.startTime = "22:50";
+  draft.endTime = "23:50";
 }
 
 function renderTimeButton({ target, value, onSelect, disabled = false }) {
@@ -1385,6 +1406,49 @@ function renderTimeButton({ target, value, onSelect, disabled = false }) {
     openTimePicker(event.currentTarget, value, onSelect);
   });
 }
+
+let pickerLockedScrollTop = 0;
+
+function lockPickerBackground() {
+  const detailCard = document.querySelector("#workDetail.open .detail-card, #projectDetail.open .detail-card");
+  pickerLockedScrollTop = detailCard?.scrollTop || 0;
+  document.body.classList.add("picker-scroll-locked");
+  detailCard?.classList.add("picker-scroll-locked-panel");
+}
+
+function unlockPickerBackground() {
+  if ($("#datePickerLayer")?.classList.contains("open") || $("#timePickerLayer")?.classList.contains("open")) return;
+  document.body.classList.remove("picker-scroll-locked");
+  document.querySelectorAll(".picker-scroll-locked-panel").forEach((panel) => {
+    panel.classList.remove("picker-scroll-locked-panel");
+    panel.scrollTop = pickerLockedScrollTop;
+  });
+}
+
+function positionPickerLayer(layer, anchor, preferredWidth, preferredHeight) {
+  if (isMobileViewport()) {
+    layer.style.left = "0px";
+    layer.style.top = "auto";
+    return;
+  }
+  const rect = anchor.getBoundingClientRect();
+  const width = Math.min(preferredWidth, window.innerWidth - 16);
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+  const below = rect.bottom + 8;
+  const top = below + preferredHeight <= window.innerHeight - 8
+    ? below
+    : Math.max(8, rect.top - preferredHeight - 8);
+  layer.style.left = `${left}px`;
+  layer.style.top = `${top}px`;
+}
+
+function repositionActivePicker() {
+  if (activeDateAnchor && $("#datePickerLayer")?.classList.contains("open")) positionPickerLayer($("#datePickerLayer"), activeDateAnchor, 320, 390);
+  if (activeTimeAnchor && $("#timePickerLayer")?.classList.contains("open")) positionPickerLayer($("#timePickerLayer"), activeTimeAnchor, 300, 316);
+}
+
+window.addEventListener("resize", repositionActivePicker);
+window.visualViewport?.addEventListener("resize", repositionActivePicker);
 
 function openDatePicker(anchor, currentValue, onSelect) {
   closeDropdown();
@@ -1465,10 +1529,9 @@ function openDatePicker(anchor, currentValue, onSelect) {
     });
   };
 
-  const rect = anchor.getBoundingClientRect();
-  layer.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 328))}px`;
-  layer.style.top = `${rect.bottom + 8}px`;
+  positionPickerLayer(layer, anchor, 320, 390);
   layer.classList.add("open");
+  lockPickerBackground();
   draw();
 }
 
@@ -1476,6 +1539,7 @@ function closeDatePicker() {
   activeDateAnchor = null;
   $("#datePickerLayer").classList.remove("open");
   $("#datePickerLayer").innerHTML = "";
+  unlockPickerBackground();
 }
 
 function openTimePicker(anchor, currentValue, onSelect) {
@@ -1491,6 +1555,8 @@ function openTimePicker(anchor, currentValue, onSelect) {
   const draw = () => {
     layer.innerHTML = `
       <div class="time-picker-card">
+        <div class="time-picker-heading"><strong>시간 선택</strong><small>10분 단위</small></div>
+        <div class="time-picker-columns">
         <div class="time-picker-column period">
           ${["AM", "PM"].map((period) => `
             <button type="button" class="${selected.period === period ? "selected" : ""}" data-time-period="${period}">
@@ -1499,18 +1565,23 @@ function openTimePicker(anchor, currentValue, onSelect) {
           `).join("")}
         </div>
         <div class="time-picker-column">
-          ${Array.from({ length: 12 }, (_, index) => index + 1).map((hour) => `
+          ${[12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((hour) => `
             <button type="button" class="${selected.hour === hour ? "selected" : ""}" data-time-hour="${hour}">
               ${String(hour).padStart(2, "0")}
             </button>
           `).join("")}
         </div>
         <div class="time-picker-column minute">
-          ${Array.from({ length: 60 }, (_, minute) => `
+          ${[0, 10, 20, 30, 40, 50].map((minute) => `
             <button type="button" class="${selected.minute === minute ? "selected" : ""}" data-time-minute="${minute}">
               ${String(minute).padStart(2, "0")}
             </button>
           `).join("")}
+        </div>
+        </div>
+        <div class="time-picker-actions">
+          <button type="button" data-time-cancel>취소</button>
+          <button type="button" data-time-apply>적용</button>
         </div>
       </div>
     `;
@@ -1518,7 +1589,6 @@ function openTimePicker(anchor, currentValue, onSelect) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         selected.period = button.dataset.timePeriod;
-        onSelect(timeValueFromParts(selected.period, selected.hour, selected.minute));
         draw();
       });
     });
@@ -1526,7 +1596,6 @@ function openTimePicker(anchor, currentValue, onSelect) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         selected.hour = Number(button.dataset.timeHour);
-        onSelect(timeValueFromParts(selected.period, selected.hour, selected.minute));
         draw();
       });
     });
@@ -1534,16 +1603,22 @@ function openTimePicker(anchor, currentValue, onSelect) {
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         selected.minute = Number(button.dataset.timeMinute);
-        onSelect(timeValueFromParts(selected.period, selected.hour, selected.minute));
         draw();
       });
     });
+    layer.querySelector("[data-time-cancel]").addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeTimePicker();
+    });
+    layer.querySelector("[data-time-apply]").addEventListener("click", (event) => {
+      event.stopPropagation();
+      onSelect(timeValueFromParts(selected.period, selected.hour, selected.minute));
+      closeTimePicker();
+    });
   };
-  const rect = anchor.getBoundingClientRect();
-  const width = Math.min(300, window.innerWidth - 16);
-  layer.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
-  layer.style.top = `${rect.bottom + 8}px`;
+  positionPickerLayer(layer, anchor, 300, 316);
   layer.classList.add("open");
+  lockPickerBackground();
   draw();
 }
 
@@ -1551,6 +1626,7 @@ function closeTimePicker() {
   activeTimeAnchor = null;
   $("#timePickerLayer").classList.remove("open");
   $("#timePickerLayer").innerHTML = "";
+  unlockPickerBackground();
 }
 
 function renderKpis() {
@@ -1705,7 +1781,7 @@ function renderProjectList() {
     });
 
   $("#projectSearchInput").value = projectSearchQuery;
-  $("#showCompletedProjects").checked = !projectHideDone;
+  $("#hideCompletedProjects").checked = projectHideDone;
   $("#projectFilterPanel").classList.toggle("open", isProjectFilterOpen);
   $("#projectFilterBtn").setAttribute("aria-expanded", String(isProjectFilterOpen));
   renderDropdown({
@@ -1889,7 +1965,7 @@ function renderWorkList() {
     });
 
   $("#workSearchInput").value = workSearchQuery;
-  $("#showCompletedWorks").checked = !workHideDone;
+  $("#hideCompletedWorks").checked = workHideDone;
   $$("#worksView [data-work-sort]").forEach((button) => {
     const isActive = workSort.key === button.dataset.workSort;
     button.classList.toggle("active", isActive);
@@ -2160,6 +2236,7 @@ function removeWorkStudioReservation(work) {
 
 function syncWorkStudioReservation(work) {
   const reservation = ensureWorkStudioReservation(work);
+  normalizeTaskTimeRange(reservation);
   const staffRows = reservation.staffRows.map((row) => ({
     type: row.type || "",
     owner: row.owner || "",
@@ -2191,6 +2268,7 @@ function syncWorkStudioReservation(work) {
     state.staffEvents.push({ id, ...eventData });
   }
   saveState();
+  queueRemoteSave();
   renderAll();
   renderWorkDetail();
   showToast("방송실 예약이 저장되었습니다.");
@@ -2291,33 +2369,39 @@ function renderWorkStudioReservation(work) {
   const target = $("#workStudioReservationPanel");
   if (!target) return;
   const editable = canEditWork(work);
+  const reservation = ensureWorkStudioReservation(work);
+  if (reservation.memo) workStudioMemoOpen = true;
   target.innerHTML = `
     <div class="work-studio-panel">
-      <label class="studio-repeat-toggle work-studio-toggle">
-        <span>방송실 예약</span>
+      <label class="work-studio-toggle studio-compact-toggle">
+        <strong>방송실 예약</strong>
+        <span>${work.studioReservationEnabled ? "사용" : "사용 안함"}</span>
         <input id="workStudioEnabled" type="checkbox" ${work.studioReservationEnabled ? "checked" : ""} ${editable ? "" : "disabled"} />
-        <b>${work.studioReservationEnabled ? "사용" : "사용 안함"}</b>
+        <b></b>
       </label>
       ${work.studioReservationEnabled ? `
-        <div class="work-studio-form studio-schedule-section">
-          <label>일정 제목<input id="workStudioTitle" type="text" placeholder="일정 제목을 입력하세요" /></label>
-          <div class="studio-field-grid two">
-            <label>장소<div id="workStudioRoomDropdown"></div></label>
-            <label>교육 유형<div id="workStudioTrainingTypeDropdown"></div></label>
-          </div>
-          <div class="studio-date-line">
-            <label>일시<div id="workStudioDatePicker"></div></label>
-            <label class="studio-checkbox-line"><input id="workStudioAllDay" type="checkbox" /> 종일 일정</label>
-          </div>
-          <div class="studio-field-grid time">
-            <label>시작 시간<div id="workStudioStartTimePicker"></div></label>
-            <span>~</span>
-            <label>종료 시간<div id="workStudioEndTimePicker"></div></label>
-          </div>
-          <label>메모 (선택)<textarea id="workStudioMemo" rows="4" maxlength="200" placeholder="스탭 배정 내용, 준비물, 교육 메모를 입력하세요."></textarea></label>
+        <div class="work-studio-form studio-reservation-form">
+          <section class="studio-reservation-basic">
+            <label class="studio-reservation-title">일정 제목<input id="workStudioTitle" type="text" placeholder="일정 제목을 입력하세요" /></label>
+            <div class="studio-reservation-grid studio-reservation-main-row ${reservation.allDay ? "is-all-day" : ""}">
+              <label>장소<div id="workStudioRoomDropdown"></div></label>
+              <label>교육 유형<div id="workStudioTrainingTypeDropdown"></div></label>
+              <label class="studio-reservation-date">날짜<div id="workStudioDatePicker"></div></label>
+              <label class="studio-checkbox-line studio-reservation-all-day"><input id="workStudioAllDay" type="checkbox" /> 종일 일정</label>
+              ${reservation.allDay ? "" : `
+                <label class="studio-reservation-start">시작 시간<div id="workStudioStartTimePicker"></div></label>
+                <span class="studio-time-separator">~</span>
+                <label class="studio-reservation-end">종료 시간<div id="workStudioEndTimePicker"></div></label>
+              `}
+            </div>
+          </section>
+          <button class="studio-memo-toggle" data-work-studio-memo-toggle type="button">
+            <span>${workStudioMemoOpen ? "−" : "+"} 메모 ${workStudioMemoOpen ? "접기" : "추가"}</span><b>${workStudioMemoOpen ? "⌃" : "⌄"}</b>
+          </button>
+          ${workStudioMemoOpen ? `<label class="studio-reservation-memo"><textarea id="workStudioMemo" rows="3" maxlength="200" placeholder="준비물, 교육 내용, 진행 메모를 입력하세요.">${esc(reservation.memo || "")}</textarea></label>` : ""}
           <div class="studio-staff-head">
-            <h3><span class="studio-section-icon staff-icon">☷</span> 스탭 목록</h3>
-            <button id="workStudioAddStaffBtn" class="pill primary small" type="button" ${editable ? "" : "disabled"}>+ 스탭 추가</button>
+            <h3>스탭 목록</h3>
+            <button id="workStudioAddStaffBtn" class="pill small" type="button" ${editable ? "" : "disabled"}>+ 스탭 추가</button>
           </div>
           <div class="studio-staff-table">
             <div class="studio-staff-table-head">
@@ -2329,7 +2413,7 @@ function renderWorkStudioReservation(work) {
             <button id="workStudioSaveBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>예약 저장</button>
           </div>
         </div>
-      ` : `<div class="empty">방송실 예약을 켜면 이 업무에서 바로 방송실을 예약할 수 있습니다.</div>`}
+      ` : ""}
     </div>
   `;
   if (work.studioReservationEnabled) renderWorkStudioControls(work);
@@ -2368,6 +2452,7 @@ function resetWorkTaskDraft(work) {
     calendar: false,
     editingTaskId: null
   };
+  workTaskDetailOpen = false;
 }
 
 function renderWorkTasks(work) {
@@ -2377,24 +2462,25 @@ function renderWorkTasks(work) {
   if (!workTaskDraft.startTime) workTaskDraft.startTime = "09:00";
   if (!workTaskDraft.endTime) workTaskDraft.endTime = "10:00";
   work.tasks = Array.isArray(work.tasks) ? work.tasks : [];
-  const tasks = [...work.tasks].sort((a, b) => {
+  const tasks = work.tasks.filter((task) => !(workTaskHideDone && task.done)).sort((a, b) => {
     if (workTaskSort === "due") return String(a.dueDate || "").localeCompare(String(b.dueDate || ""));
     return String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || ""));
   });
   const editing = work.tasks.find((task) => task.id === workTaskDraft.editingTaskId);
   const composerOpen = workTaskComposerOpen || Boolean(editing);
+  if (editing?.detail) workTaskDetailOpen = true;
 
   $("#workTaskPanel").innerHTML = `
     <div class="record-composer task-add-card ${composerOpen ? "is-expanded" : "is-collapsed"}">
       <div class="task-add-head" data-work-task-composer-toggle>
         <div class="task-add-title">
-          <span class="task-add-icon">✚</span>
+          <span class="task-add-icon">${composerOpen ? "−" : "+"}</span>
           <div>
-            <h3>할 일 추가</h3>
-            <small>새로운 할 일을 등록하세요.</small>
+            <h3>${editing ? "할 일 수정" : "할 일 추가"}</h3>
+            <small>${editing ? "할 일 내용을 수정하세요." : "새로운 할 일을 등록하세요."}</small>
           </div>
         </div>
-        ${composerOpen ? '<button id="resetWorkTaskFormBtn" class="record-control" type="button">↻ 초기화</button>' : ""}
+        <span class="task-add-chevron" aria-hidden="true">${composerOpen ? "⌃" : "⌄"}</span>
       </div>
       <div class="project-task-composer task-composer-expanded">
         <label class="task-field task-title-field">
@@ -2407,7 +2493,7 @@ function renderWorkTasks(work) {
               <span>담당자 <b>*</b></span>
               <div id="workTaskOwnerDropdown"></div>
             </label>
-            <label class="task-field">
+            <label class="task-field ${workTaskDraft.noDueDate ? "is-conditionally-hidden" : ""}">
               <span>날짜 <b>*</b></span>
               <div id="workTaskDueDatePicker"></div>
             </label>
@@ -2415,12 +2501,9 @@ function renderWorkTasks(work) {
           <div class="task-form-column">
             <label class="task-field task-type-field">
               <span>업무 분류 <b>*</b></span>
-              <input id="workTaskTypeValue" type="hidden" value="${esc(workTaskDraft.type || "")}" />
-              <div class="task-type-chip-row">
-                ${workTaskTypeOptions().map((type) => `<button class="task-type-chip ${workTaskDraft.type === type ? "active" : ""} ${taskTypeClass(type)}" data-work-task-type-chip="${esc(type)}" type="button">${esc(type)}</button>`).join("")}
-              </div>
+              <div id="workTaskTypeDropdown"></div>
             </label>
-            <div class="task-field">
+            <div class="task-field ${workTaskDraft.noDueDate || workTaskDraft.allDay !== false ? "is-conditionally-hidden" : ""}">
               <span>시간</span>
               <div class="task-time-range">
                 <div id="workTaskStartTime"></div>
@@ -2440,16 +2523,17 @@ function renderWorkTasks(work) {
             <span>마감일 없음</span>
           </label>
           <label class="calendar-toggle task-calendar-toggle">
-            <input id="workTaskCalendar" type="checkbox" ${workTaskDraft.calendar ? "checked" : ""} ${editable ? "" : "disabled"} />
+            <input id="workTaskCalendar" type="checkbox" ${workTaskDraft.calendar ? "checked" : ""} ${workTaskDraft.noDueDate || !editable ? "disabled" : ""} />
             <span>캘린더 등록</span>
           </label>
         </div>
-        <label class="task-field task-detail-field">
-          <span>세부내용 (선택)</span>
+        <button class="task-detail-toggle" data-work-task-detail-toggle type="button">${workTaskDetailOpen ? "− 세부내용 접기" : "+ 세부내용 추가"}</button>
+        <label class="task-field task-detail-field ${workTaskDetailOpen ? "is-open" : ""}">
           <textarea id="workTaskDetail" placeholder="세부내용을 입력하세요" ${editable ? "" : "disabled"}>${esc(workTaskDraft.detail || "")}</textarea>
         </label>
         <div class="task-form-footer">
-          <button id="addWorkTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 저장" : "+ 할 일 등록"}</button>
+          <button id="cancelWorkTaskBtn" class="pill ghost" type="button">취소</button>
+          <button id="addWorkTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 완료" : "등록"}</button>
         </div>
       </div>
     </div>
@@ -2457,6 +2541,10 @@ function renderWorkTasks(work) {
       <span>정렬</span>
       <button class="record-control ${workTaskSort === "created" ? "active" : ""}" data-work-task-sort="created" type="button">등록순</button>
       <button class="record-control ${workTaskSort === "due" ? "active" : ""}" data-work-task-sort="due" type="button">완료일 순</button>
+      <label class="calendar-toggle overview-hide-done work-task-hide-done">
+        <input id="workTaskHideDone" type="checkbox" ${workTaskHideDone ? "checked" : ""} />
+        <span>완료된 항목 숨기기</span>
+      </label>
     </div>
     <div class="task-list">
       ${
@@ -2480,7 +2568,7 @@ function renderWorkTasks(work) {
                 </article>
               `)
               .join("")
-          : '<div class="empty">이 업무에 등록된 할 일이 없습니다.</div>'
+          : `<div class="empty">${workTaskHideDone && work.tasks.some((task) => task.done) ? "완료된 항목 숨기기를 해제하면 완료된 할 일을 볼 수 있습니다." : "이 업무에 등록된 할 일이 없습니다."}</div>`
       }
     </div>
   `;
@@ -2495,6 +2583,18 @@ function renderWorkTasks(work) {
     onChange: (owners) => {
       syncWorkTaskDraftInputs();
       workTaskDraft.owners = owners;
+      renderWorkTasks(work);
+    }
+  });
+  renderDropdown({
+    target: $("#workTaskTypeDropdown"),
+    value: workTaskDraft.type,
+    options: workTaskTypeOptions(),
+    placeholder: "업무 분류",
+    disabled: !editable,
+    onSelect: (type) => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.type = type;
       renderWorkTasks(work);
     }
   });
@@ -2533,6 +2633,12 @@ function renderWorkTasks(work) {
 
   $("#workTaskNoDueDate")?.addEventListener("change", () => {
     syncWorkTaskDraftInputs();
+    if (workTaskDraft.noDueDate) {
+      workTaskDraft.allDay = true;
+      workTaskDraft.calendar = false;
+    } else if (!workTaskDraft.dueDate) {
+      workTaskDraft.dueDate = dateKey(new Date());
+    }
     renderWorkTasks(work);
   });
   $("#workTaskAllDay")?.addEventListener("change", () => {
@@ -2627,11 +2733,12 @@ function addWorkTask() {
     };
     work.tasks.push(newTask);
     notifyOwners(taskPayload.owners, `할 일이 추가되었습니다: ${text}`, { type: "work-task", workId: work.id, taskId: newTask.id });
-    showToast("할 일이 추가되었습니다.");
+    showToast("할 일이 등록되었습니다.");
   }
   resetWorkTaskDraft(work);
   workTaskComposerOpen = false;
   saveState();
+  queueRemoteSave();
   renderAll();
   renderWorkDetail();
 }
@@ -2656,6 +2763,7 @@ function editWorkTask(taskId) {
     calendar: Boolean(task.calendar),
     editingTaskId: task.id
   };
+  workTaskDetailOpen = Boolean(task.detail);
   workTaskComposerOpen = true;
   renderWorkTasks(work);
 }
@@ -2714,10 +2822,13 @@ function deleteWorkManagementRecord(recordId) {
 }
 
 function openWorkDetail(workId, initialTab = "basic") {
-  if (!state.works.some((work) => work.id === workId)) return;
+  const openingWork = state.works.find((work) => work.id === workId);
+  if (!openingWork) return;
   activeWorkId = workId;
   editingWorkRecordId = null;
   workTaskComposerOpen = false;
+  resetWorkTaskDraft();
+  workStudioMemoOpen = Boolean(openingWork.studioReservation?.memo);
   activeWorkDetailTab = initialTab;
   renderWorkDetail();
   $("#workDetail").classList.add("open");
@@ -2725,6 +2836,10 @@ function openWorkDetail(workId, initialTab = "basic") {
 }
 
 function closeWorkDetail() {
+  closeDatePicker();
+  closeTimePicker();
+  workTaskComposerOpen = false;
+  resetWorkTaskDraft();
   $("#workDetail").classList.remove("open");
   $("#workDetail").setAttribute("aria-hidden", "true");
   activeWorkId = null;
@@ -2871,7 +2986,7 @@ function taskDdayInfo(item) {
   if (item.task.done) return { label: "완료", className: "done" };
   const diff = taskOverviewDayDiff(item);
   if (diff === null) return { label: "마감 없음", className: "none" };
-  if (diff < 0) return { label: `${Math.abs(diff)}일 지연`, className: "overdue" };
+  if (diff < 0) return { label: "지연", className: "overdue" };
   if (diff === 0) return { label: "오늘", className: "today" };
   if (diff <= 3) return { label: `D-${diff}`, className: "soon" };
   if (diff <= 6) return { label: `D-${diff}`, className: "mid" };
@@ -6298,7 +6413,7 @@ function mobileProjectDueInfo(project) {
   if (isDone) return { label: "완료", className: "done" };
   if (!project.finalDate) return { label: "마감 없음", className: "none" };
   const diff = daysUntil(project.finalDate);
-  if (diff < 0) return { label: `${Math.abs(diff)}일 지연`, className: "overdue" };
+  if (diff < 0) return { label: "지연", className: "overdue" };
   if (diff === 0) return { label: "오늘", className: "today" };
   if (diff <= 6) return { label: `D-${diff}`, className: "soon" };
   return { label: `D-${diff}`, className: "safe" };
@@ -6375,15 +6490,15 @@ function renderMobileWorkCards() {
     .sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
   return `
     ${renderMobileKpiStrip()}
-    <div class="mobile-section-head mobile-list-head-with-toggle">
-      <h2>업무</h2>
+    <div class="mobile-list-tools">
+      <span></span>
       <label class="mobile-hide-done-toggle">
         <span>완료</span>
         <input data-mobile-show-completed-works type="checkbox" ${!workHideDone ? "checked" : ""} />
         <b></b>
       </label>
-      <span>${works.length}건</span>
     </div>
+    <div class="mobile-section-head"><h2>업무</h2><span>${works.length}건</span></div>
     <div class="mobile-card-list">
       ${works.length ? works.map((work) => `
         <button class="mobile-work-card" data-mobile-open-work="${esc(work.id)}" type="button">
@@ -6966,6 +7081,10 @@ document.addEventListener("click", () => {
 $("#dropdownLayer").addEventListener("click", (event) => event.stopPropagation());
 $("#datePickerLayer").addEventListener("click", (event) => event.stopPropagation());
 $("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation());
+[$("#datePickerLayer"), $("#timePickerLayer")].forEach((layer) => {
+  layer.addEventListener("wheel", (event) => event.stopPropagation(), { passive: false });
+  layer.addEventListener("touchmove", (event) => event.stopPropagation(), { passive: false });
+});
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 $$("[data-mobile-section]").forEach((button) => button.addEventListener("click", () => { openMobileSection(button.dataset.mobileSection); openMobileMoreSheet(false); toggleMobileFab(false); }));
 $("[data-mobile-more]")?.addEventListener("click", () => {
@@ -6983,7 +7102,18 @@ $("#mobileFabMenu")?.addEventListener("click", (event) => {
   const mode = event.target.closest("[data-mobile-add]")?.dataset.mobileAdd;
   if (!mode) return;
   toggleMobileFab(false);
-  openMobileAddSheet(mode);
+  closeMobileAddSheet();
+  if (mode === "project") {
+    mobileActiveSection = "projects";
+    saveViewPrefs({ mobileActiveSection });
+    addProject();
+    return;
+  }
+  if (mode === "work") {
+    mobileActiveSection = "works";
+    saveViewPrefs({ mobileActiveSection });
+    addWork();
+  }
 });
 $("#mobileMoreSheet")?.addEventListener("click", (event) => {
   const target = event.target.closest("[data-mobile-more-target]")?.dataset.mobileMoreTarget;
@@ -7520,11 +7650,22 @@ $("#workDetailStudioTab").addEventListener("input", (event) => {
 
 $("#workDetailStudioTab").addEventListener("click", (event) => {
   const work = state.works.find((item) => item.id === activeWorkId);
-  if (!work || !canEditWork(work) || !work.studioReservationEnabled) return;
+  if (!work || !canEditWork(work)) return;
+  if (event.target.closest("[data-work-studio-memo-toggle]")) {
+    const memo = $("#workStudioMemo");
+    if (memo) ensureWorkStudioReservation(work).memo = memo.value;
+    workStudioMemoOpen = !workStudioMemoOpen;
+    renderWorkStudioReservation(work);
+    return;
+  }
+  if (!work.studioReservationEnabled) return;
   const reservation = ensureWorkStudioReservation(work);
   if (event.target.closest("#workStudioAddStaffBtn")) {
     if (reservation.staffRows.length < 6) reservation.staffRows.push(makeDefaultStaffRow(reservation.staffRows.length));
     renderWorkStudioReservation(work);
+    const newRow = $("#workStudioRows")?.lastElementChild;
+    newRow?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    newRow?.querySelector("button")?.focus();
     return;
   }
   const deleteButton = event.target.closest("[data-delete-work-studio-row]");
@@ -7564,6 +7705,22 @@ document.querySelector(".detail-tabs").addEventListener("click", (event) => {
 });
 
 $("#workTaskPanel").addEventListener("click", (event) => {
+  if (event.target.closest("[data-work-task-detail-toggle]")) {
+    syncWorkTaskDraftInputs();
+    workTaskDetailOpen = !workTaskDetailOpen;
+    const work = state.works.find((item) => item.id === activeWorkId);
+    if (work) renderWorkTasks(work);
+    return;
+  }
+  if (event.target.closest("#cancelWorkTaskBtn")) {
+    const work = state.works.find((item) => item.id === activeWorkId);
+    if (work) {
+      resetWorkTaskDraft(work);
+      workTaskComposerOpen = false;
+      renderWorkTasks(work);
+    }
+    return;
+  }
   const sortButton = event.target.closest("[data-work-task-sort]");
   if (sortButton) {
     syncWorkTaskDraftInputs();
@@ -7630,6 +7787,14 @@ $("#workTaskPanel").addEventListener("click", (event) => {
     renderAll();
     renderWorkDetail();
   });
+});
+
+$("#workTaskPanel").addEventListener("change", (event) => {
+  if (!event.target.matches("#workTaskHideDone")) return;
+  workTaskHideDone = event.target.checked;
+  saveViewPrefs({ workTaskHideDone });
+  const work = state.works.find((item) => item.id === activeWorkId);
+  if (work) renderWorkTasks(work);
 });
 
 $("#workTaskPanel").addEventListener("change", (event) => {
@@ -7856,14 +8021,14 @@ $("#hideDoneTasks").addEventListener("change", (event) => {
   renderTasks();
 });
 
-$("#showCompletedProjects").addEventListener("change", (event) => {
-  projectHideDone = !event.target.checked;
+$("#hideCompletedProjects").addEventListener("change", (event) => {
+  projectHideDone = event.target.checked;
   saveViewPrefs({ projectHideDone });
   renderProjectList();
 });
 
-$("#showCompletedWorks").addEventListener("change", (event) => {
-  workHideDone = !event.target.checked;
+$("#hideCompletedWorks").addEventListener("change", (event) => {
+  workHideDone = event.target.checked;
   saveViewPrefs({ workHideDone });
   renderWorkList();
 });
