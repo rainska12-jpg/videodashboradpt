@@ -38,7 +38,48 @@ body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
 .time-picker-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .time-picker-actions button { min-height: 34px; border-radius: 8px; background: var(--surface-2); color: var(--text); padding: 0 14px; font-size: 12px; font-weight: 850; }
 .time-picker-actions [data-time-apply] { background: var(--accent); color: #061007; }
+
+/* 영상 프로젝트 할 일 추가를 업무 할 일 추가 양식과 통일 */
+#projectDetail .task-add-card.is-collapsed .task-add-head,
+#projectDetail .task-add-head { min-height: 58px; padding: 10px 12px; }
+#projectDetail .task-add-chevron { color: var(--muted); font-size: 20px; font-weight: 900; }
+#projectDetail .project-task-composer.task-composer-expanded { gap: 8px; padding: 10px 12px 12px; }
+#projectDetail .task-title-field { padding-bottom: 8px; }
+#projectDetail .task-title-input,
+#projectDetail .task-field .date-button,
+#projectDetail .task-field .time-button,
+#projectDetail .task-field .custom-select { min-height: 40px; height: 40px; border-radius: 9px; padding: 7px 10px; font-size: 13px; }
+#projectDetail .task-form-grid { display: grid; grid-template-columns: .9fr .9fr .8fr 1.4fr; grid-template-areas: "owner type date time"; gap: 8px; border: 0; }
+#projectDetail .task-form-column,
+#projectDetail .task-form-column + .task-form-column { display: contents; }
+#projectDetail .task-form-column:first-child > .task-field:first-child { grid-area: owner; }
+#projectDetail .task-form-column:first-child > .task-field:nth-child(2) { grid-area: date; }
+#projectDetail .task-form-column:nth-child(2) > .task-field:first-child { grid-area: type; }
+#projectDetail .task-form-column:nth-child(2) > .task-field:nth-child(2) { grid-area: time; }
+#projectDetail .task-field { gap: 3px; }
+#projectDetail .task-field > span { font-size: 12px; }
+#projectDetail .is-conditionally-hidden { display: none !important; }
+#projectDetail .task-option-row { min-height: 38px; gap: 8px; border: 0; padding: 2px 0; }
+#projectDetail .task-detail-toggle { justify-self: start; min-height: 34px; background: transparent; color: var(--near); padding: 0 4px; font-size: 12px; font-weight: 850; }
+#projectDetail .task-detail-field { display: none; padding: 0; }
+#projectDetail .task-detail-field.is-open { display: grid; }
+#projectDetail .task-detail-field textarea { min-height: 60px; max-height: 96px; border-radius: 9px; padding: 9px 10px; font-size: 13px; }
+#projectDetail .task-form-footer { gap: 7px; padding-top: 0; }
+#projectDetail .task-form-footer .pill { min-height: 38px; padding: 7px 16px; font-size: 12px; }
 @media (max-width: 768px) {
+  #projectDetail.detail-shell.open,
+  #workDetail.detail-shell.open {
+    inset: 0;
+    min-height: 100dvh;
+    overflow-y: auto;
+    background: #05090b;
+  }
+  #projectDetail .detail-page,
+  #workDetail .detail-page {
+    min-height: 100dvh;
+    padding-bottom: calc(118px + env(safe-area-inset-bottom));
+    background: #05090b;
+  }
   #workDetail .task-add-card.is-collapsed .task-add-head,
   #workDetail .task-add-head { min-height: 52px; padding: 9px 11px; }
   #workDetail .task-add-title small { display: none; }
@@ -91,18 +132,40 @@ body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
   .mobile-fab {
     display: grid;
     place-items: center;
+    position: relative;
     padding: 0;
     font-size: 0;
     line-height: 1;
   }
-  .mobile-fab::before {
-    content: "+";
-    display: block;
-    color: #031006;
-    font-family: Arial, sans-serif;
-    font-size: 43px;
-    font-weight: 700;
-    line-height: 1;
-    transform: translateY(-1px);
+  .mobile-fab::before,
+  .mobile-fab::after { content: ""; position: absolute; left: 50%; top: 50%; border-radius: 2px; background: #031006; transform: translate(-50%, -50%); }
+  .mobile-fab::before { width: 30px; height: 5px; }
+  .mobile-fab::after { width: 5px; height: 30px; }
+
+  #projectDetail .task-main > input[type="checkbox"],
+  #workDetail .task-main > input[type="checkbox"] {
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    max-width: 22px;
+    max-height: 22px;
+    aspect-ratio: 1;
+    flex: 0 0 22px;
+    border: 2px solid #70777d;
+    border-radius: 4px;
+    background: #171a1d;
+    box-shadow: none;
+    padding: 0;
+  }
+  #projectDetail .task-main > input[type="checkbox"]:checked,
+  #workDetail .task-main > input[type="checkbox"]:checked {
+    border-color: var(--accent);
+    background-color: var(--accent);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%23020b05' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 15px;
   }
 }

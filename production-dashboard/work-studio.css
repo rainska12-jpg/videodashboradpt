@@ -1,4 +1,15 @@
 /* 업무 상세 > 방송실 예약 compact UI */
+.calendar-filter-checks { display: grid; gap: 10px; }
+.calendar-filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.calendar-filter-group > strong { min-width: 54px; color: var(--muted); font-size: 12px; }
+.calendar-owner-filters { display: flex; gap: 8px; flex-wrap: wrap; }
+.calendar-owner-filters label { display: inline-flex; }
+.calendar-recurring-filter { justify-self: start; }
+.studio-filter-label { display: block; margin: 16px 0 8px; color: var(--near); font-size: 13px; }
+.studio-owner-filters label { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 9999px; background: rgba(255,255,255,.04); padding: 11px 13px; color: var(--near); font-weight: 900; }
+.studio-owner-filters input { width: 16px; height: 16px; accent-color: var(--accent); }
+.studio-recurring-filter { margin-top: 12px; border-color: rgba(255,138,31,.3); }
+
 #workDetail .work-studio-panel { display: grid; gap: 10px; }
 #workDetail .studio-compact-toggle { display: flex; align-items: center; min-height: 48px; width: 100%; gap: 10px; padding: 8px 12px; border: 1px solid rgba(255,255,255,.11); border-radius: 10px; background: rgba(255,255,255,.025); }
 #workDetail .studio-compact-toggle strong { margin-right: auto; font-size: 17px; }
@@ -55,6 +66,11 @@
 }
 
 @media (max-width: 768px) {
+  .calendar-filter-checks { display: grid; overflow: visible; }
+  .calendar-filter-group { min-width: 100%; overflow-x: auto; flex-wrap: nowrap; padding-bottom: 3px; }
+  .calendar-filter-group > strong { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+  .calendar-owner-filters { flex-wrap: nowrap; }
+  .calendar-recurring-filter { width: max-content; }
   #workDetail .work-studio-panel { gap: 8px; }
   #workDetail .studio-compact-toggle { min-height: 46px; padding: 7px 10px; }
   #workDetail .studio-compact-toggle strong { font-size: 16px; }

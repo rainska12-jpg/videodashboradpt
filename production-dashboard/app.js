@@ -272,6 +272,8 @@ let calendarDate = new Date(viewPref("calendarDate", dateKey(new Date())));
 let studioWeekDate = new Date(viewPref("studioWeekDate", dateKey(new Date())));
 let studioViewMode = viewPref("studioViewMode", "week");
 let studioTrainingTypeFilters = viewPref("studioTrainingTypeFilters", {});
+let studioOwnerFilters = viewPref("studioOwnerFilters", {});
+let studioHideRecurring = viewPref("studioHideRecurring", false);
 let studioDragDraft = null;
 let staffRowDragId = null;
 let activeProjectId = null;
@@ -300,6 +302,7 @@ let pendingDeleteAction = null;
 let pendingRepeatDeleteEventId = null;
 let detailTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
 let detailTaskComposerOpen = false;
+let detailTaskDetailOpen = false;
 let editingRecordId = null;
 let recordSearchQuery = "";
 let recordFilterMode = viewPref("recordFilterMode", "all");
@@ -323,6 +326,19 @@ let workSort = viewPref("workSort", { key: "finalDate", direction: "asc" });
 let isProjectFilterOpen = false;
 let activeCalendarMode = viewPref("activeCalendarMode", "all");
 let calendarFilters = viewPref("calendarFilters", { video: true, work: true, staff: true });
+let calendarOwnerFilters = viewPref("calendarOwnerFilters", {});
+let calendarHideRecurring = viewPref("calendarHideRecurring", false);
+let calendarTypeFilters = viewPref("calendarTypeFilters", {});
+let calendarSourceFilters = viewPref("calendarSourceFilters", { project: true, work: true, task: true, staff: true, schedule: true });
+let calendarRecurringFilter = viewPref("calendarRecurringFilter", "include");
+let calendarShowCompleted = viewPref("calendarShowCompleted", true);
+let selectedCalendarDate = viewPref("selectedCalendarDate", dateKey(new Date()));
+let mobileCalendarViewMode = viewPref("mobileCalendarViewMode", "month");
+let mobileCalendarFilterOpen = false;
+let mobileCalendarFilterDraft = null;
+let mobileCalendarSearchOpen = false;
+let mobileCalendarSearchQuery = "";
+let mobileCalendarSwipeStart = null;
 let boardSearchQuery = viewPref("boardSearchQuery", "");
 let boardSearchScope = viewPref("boardSearchScope", "titleContent");
 let boardPrefixFilter = viewPref("boardPrefixFilter", "");
@@ -1408,6 +1424,8 @@ function renderTimeButton({ target, value, onSelect, disabled = false }) {
 }
 
 let pickerLockedScrollTop = 0;
+let activeDateAnchor = null;
+let activeTimeAnchor = null;
 
 function lockPickerBackground() {
   const detailCard = document.querySelector("#workDetail.open .detail-card, #projectDetail.open .detail-card");
@@ -3221,7 +3239,38 @@ function renderPriority() {
   $("#priorityNote").textContent = nextItem ? `${nextItem.sourceTitle} · ${nextItem.task.text}` : "미완료 업무가 없습니다.";
 }
 
-function projectEventsForDate(key) {
+const UNASSIGNED_FILTER_KEY = "__unassigned__";
+
+function ownerFilterKeys() {
+  return [...ownerOptions(), UNASSIGNED_FILTER_KEY];
+}
+
+function ownerFilterEnabled(filters, ownerId) {
+  const key = ownerId || UNASSIGNED_FILTER_KEY;
+  return !(key in filters) || Boolean(filters[key]);
+}
+
+function eventMatchesOwnerFilter(owners, filters) {
+  const ids = Array.isArray(owners) ? owners.filter(Boolean) : [];
+  if (!ids.length) return ownerFilterEnabled(filters, UNASSIGNED_FILTER_KEY);
+  return ids.some((ownerId) => ownerFilterEnabled(filters, ownerId));
+}
+
+function ownerFilterLabel(ownerId) {
+  return ownerId === UNASSIGNED_FILTER_KEY ? "미배정" : ownerOptionLabel(ownerId);
+}
+
+function renderOwnerFilterChecks(target, filters, dataAttribute) {
+  if (!target) return;
+  const keys = ownerFilterKeys();
+  const allChecked = keys.every((ownerId) => ownerFilterEnabled(filters, ownerId));
+  target.innerHTML = `
+    <label><input type="checkbox" ${dataAttribute}="all" ${allChecked ? "checked" : ""} /><span>전체</span></label>
+    ${keys.map((ownerId) => `<label><input type="checkbox" ${dataAttribute}="${esc(ownerId)}" ${ownerFilterEnabled(filters, ownerId) ? "checked" : ""} /><span>${esc(ownerFilterLabel(ownerId))}</span></label>`).join("")}
+  `;
+}
+
+function allCalendarEventsForDate(key) {
   const milestoneLabels = [
     ["kickoffDate", "시작"],
     ["shootDate", "촬영"],
@@ -3238,7 +3287,13 @@ function projectEventsForDate(key) {
         field,
         label: label === "완료" ? project.title : `${label} · ${project.title}`,
         type: label === "완료" ? "due" : "start",
-        allDay: true
+        allDay: true,
+        owners: projectOwners(project),
+        category: project.type || label,
+        parentTitle: project.title,
+        memo: project.memo || "",
+        completed: project.status === "납품 완료",
+        createdAt: project.createdAt || project.id
       }))
   );
   const workMilestoneLabels = [
@@ -3257,7 +3312,13 @@ function projectEventsForDate(key) {
             field,
             label: label.includes("완료") ? work.title : `${label} · ${work.title}`,
             type: label.includes("완료") ? "due" : "start",
-            allDay: true
+            allDay: true,
+            owners: workOwners(work),
+            category: work.type || label,
+            parentTitle: work.title,
+            memo: work.memo || "",
+            completed: work.status === "완료",
+            createdAt: work.createdAt || work.id
           }))
   );
   const projectTaskEvents = state.tasks
@@ -3271,7 +3332,13 @@ function projectEventsForDate(key) {
       type: "custom",
       allDay: task.allDay !== false,
       startTime: task.startTime || "09:00",
-      endTime: task.endTime || "10:00"
+      endTime: task.endTime || "10:00",
+      owners: taskOwners(task),
+      category: task.type || "할 일",
+      parentTitle: projectName(task.projectId),
+      memo: task.detail || "",
+      completed: Boolean(task.done),
+      createdAt: task.createdAt || task.id
     }));
   const workTaskEvents = state.works.flatMap((work) =>
     (Array.isArray(work.tasks) ? work.tasks : [])
@@ -3285,7 +3352,13 @@ function projectEventsForDate(key) {
         type: "work",
         allDay: task.allDay !== false,
         startTime: task.startTime || "09:00",
-        endTime: task.endTime || "10:00"
+        endTime: task.endTime || "10:00",
+        owners: taskOwners(task),
+        category: task.type || "할 일",
+        parentTitle: work.title,
+        memo: task.detail || "",
+        completed: Boolean(task.done),
+        createdAt: task.createdAt || task.id
       }))
   );
   const schedules = state.schedules
@@ -3298,7 +3371,14 @@ function projectEventsForDate(key) {
       type: "schedule",
       allDay: schedule.allDay !== false,
       startTime: schedule.startTime || "09:00",
-      endTime: schedule.endTime || "10:00"
+      endTime: schedule.endTime || "10:00",
+      owners: Array.isArray(schedule.owners) ? schedule.owners : [],
+      category: schedule.type || "일반 일정",
+      parentTitle: schedule.projectId ? projectName(schedule.projectId) : "",
+      location: schedule.location || "",
+      memo: schedule.memo || "",
+      completed: Boolean(schedule.done),
+      createdAt: schedule.createdAt || schedule.id
     }));
   const staffEvents = state.staffEvents
     .filter((event) => event.date === key)
@@ -3310,8 +3390,36 @@ function projectEventsForDate(key) {
       type: staffEventTypeColor(event.type),
       allDay: event.allDay !== false,
       startTime: event.startTime || "09:00",
-      endTime: event.endTime || "10:00"
+      endTime: event.endTime || "10:00",
+      owners: Array.isArray(event.owners) ? event.owners : [event.owner].filter(Boolean),
+      seriesId: event.seriesId || "",
+      category: event.trainingType || event.type || "방송실",
+      parentTitle: event.workTitle || "",
+      location: event.room || "",
+      memo: event.memo || "",
+      completed: Boolean(event.done),
+      createdAt: event.createdAt || event.id
     }));
+  return [...milestones, ...workMilestones, ...projectTaskEvents, ...workTaskEvents, ...schedules, ...staffEvents];
+}
+
+function sortCalendarEvents(events) {
+  return [...events].sort((a, b) => {
+    if ((a.allDay !== false) !== (b.allDay !== false)) return a.allDay === false ? 1 : -1;
+    const timeCompare = (a.startTime || "99:99").localeCompare(b.startTime || "99:99");
+    if (timeCompare) return timeCompare;
+    return String(a.createdAt || a.label || "").localeCompare(String(b.createdAt || b.label || ""), "ko");
+  });
+}
+
+function projectEventsForDate(key) {
+  const allEvents = allCalendarEventsForDate(key);
+  const milestones = allEvents.filter((event) => event.source === "project");
+  const workMilestones = allEvents.filter((event) => event.source === "work");
+  const projectTaskEvents = allEvents.filter((event) => event.source === "projectTask");
+  const workTaskEvents = allEvents.filter((event) => event.source === "workTask");
+  const schedules = allEvents.filter((event) => event.source === "schedule");
+  const staffEvents = allEvents.filter((event) => event.source === "staff");
   const videoEvents = [...milestones, ...projectTaskEvents];
   const workEvents = [...workMilestones, ...workTaskEvents];
   const showAllCalendarGroups = calendarFilters.video && calendarFilters.work && calendarFilters.staff;
@@ -3320,11 +3428,9 @@ function projectEventsForDate(key) {
     ...(calendarFilters.work ? workEvents : []),
     ...(showAllCalendarGroups ? schedules : [])
   ];
-  const sortEvents = (events) => [...events].sort((a, b) => {
-    if ((a.allDay !== false) !== (b.allDay !== false)) return a.allDay === false ? 1 : -1;
-    return (a.startTime || "").localeCompare(b.startTime || "");
-  });
-  return sortEvents([...projectEvents, ...(calendarFilters.staff ? staffEvents : [])]);
+  return sortCalendarEvents([...projectEvents, ...(calendarFilters.staff ? staffEvents : [])]
+    .filter((event) => eventMatchesOwnerFilter(event.owners, calendarOwnerFilters))
+    .filter((event) => !(calendarHideRecurring && event.seriesId)));
 }
 
 function renderCalendar() {
@@ -3341,6 +3447,8 @@ function renderCalendar() {
     const key = input.dataset.calendarFilter;
     input.checked = key === "all" ? allChecked : Boolean(calendarFilters[key]);
   });
+  renderOwnerFilterChecks($("#calendarOwnerFilters"), calendarOwnerFilters, "data-calendar-owner-filter");
+  if ($("#calendarHideRecurring")) $("#calendarHideRecurring").checked = calendarHideRecurring;
   $("#calendarGrid").innerHTML = Array.from({ length: 42 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
@@ -3806,6 +3914,7 @@ function resetProjectTaskDraft(project) {
     calendar: false,
     editingTaskId: null
   };
+  detailTaskDetailOpen = false;
 }
 
 function renderProjectTasks(project) {
@@ -3823,18 +3932,19 @@ function renderProjectTasks(project) {
   });
   const editing = state.tasks.find((task) => task.id === detailTaskDraft.editingTaskId);
   const composerOpen = detailTaskComposerOpen || Boolean(editing);
+  if (editing?.detail) detailTaskDetailOpen = true;
 
   $("#projectTaskPanel").innerHTML = `
     <div class="record-composer task-add-card ${composerOpen ? "is-expanded" : "is-collapsed"}">
       <div class="task-add-head" data-project-task-composer-toggle>
         <div class="task-add-title">
-          <span class="task-add-icon">✚</span>
+          <span class="task-add-icon">${composerOpen ? "−" : "+"}</span>
           <div>
-            <h3>할 일 추가</h3>
-            <small>새로운 할 일을 등록하세요.</small>
+            <h3>${editing ? "할 일 수정" : "할 일 추가"}</h3>
+            <small>${editing ? "할 일 내용을 수정하세요." : "새로운 할 일을 등록하세요."}</small>
           </div>
         </div>
-        ${composerOpen ? '<button id="resetProjectTaskFormBtn" class="record-control" type="button">↻ 초기화</button>' : ""}
+        <span class="task-add-chevron" aria-hidden="true">${composerOpen ? "⌃" : "⌄"}</span>
       </div>
       <div class="project-task-composer task-composer-expanded">
         <label class="task-field task-title-field">
@@ -3843,7 +3953,7 @@ function renderProjectTasks(project) {
         </label>
         <div class="task-form-grid">
           <div class="task-form-column">
-            <label class="task-field">
+            <label class="task-field ${detailTaskDraft.noDueDate ? "is-conditionally-hidden" : ""}">
               <span>담당자 <b>*</b></span>
               <div id="projectTaskOwnerDropdown"></div>
             </label>
@@ -3855,12 +3965,9 @@ function renderProjectTasks(project) {
           <div class="task-form-column">
             <label class="task-field task-type-field">
               <span>업무 분류 <b>*</b></span>
-              <input id="projectTaskTypeValue" type="hidden" value="${esc(detailTaskDraft.type || "")}" />
-              <div class="task-type-chip-row">
-                ${projectTaskTypeOptions().map((type) => `<button class="task-type-chip ${detailTaskDraft.type === type ? "active" : ""} ${taskTypeClass(type)}" data-project-task-type-chip="${esc(type)}" type="button">${esc(type)}</button>`).join("")}
-              </div>
+              <div id="projectTaskTypeDropdown"></div>
             </label>
-            <div class="task-field">
+            <div class="task-field ${detailTaskDraft.noDueDate || detailTaskDraft.allDay !== false ? "is-conditionally-hidden" : ""}">
               <span>시간</span>
               <div class="task-time-range">
                 <div id="projectTaskStartTime"></div>
@@ -3880,16 +3987,17 @@ function renderProjectTasks(project) {
             <span>마감일 없음</span>
           </label>
           <label class="calendar-toggle task-calendar-toggle">
-            <input id="projectTaskCalendar" type="checkbox" ${detailTaskDraft.calendar ? "checked" : ""} ${editable ? "" : "disabled"} />
+            <input id="projectTaskCalendar" type="checkbox" ${detailTaskDraft.calendar ? "checked" : ""} ${detailTaskDraft.noDueDate || !editable ? "disabled" : ""} />
             <span>캘린더 등록</span>
           </label>
         </div>
-        <label class="task-field task-detail-field">
-          <span>세부내용 (선택)</span>
+        <button class="task-detail-toggle" data-project-task-detail-toggle type="button">${detailTaskDetailOpen ? "− 세부내용 접기" : "+ 세부내용 추가"}</button>
+        <label class="task-field task-detail-field ${detailTaskDetailOpen ? "is-open" : ""}">
           <textarea id="projectTaskDetail" placeholder="세부내용을 입력하세요" ${editable ? "" : "disabled"}>${esc(detailTaskDraft.detail || "")}</textarea>
         </label>
         <div class="task-form-footer">
-          <button id="addProjectTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 저장" : "+ 할 일 등록"}</button>
+          <button id="cancelProjectTaskBtn" class="pill ghost" type="button">취소</button>
+          <button id="addProjectTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 완료" : "등록"}</button>
         </div>
       </div>
     </div>
@@ -3938,6 +4046,18 @@ function renderProjectTasks(project) {
       renderProjectTasks(project);
     }
   });
+  renderDropdown({
+    target: $("#projectTaskTypeDropdown"),
+    value: detailTaskDraft.type,
+    options: projectTaskTypeOptions(),
+    placeholder: "업무 분류",
+    disabled: !editable,
+    onSelect: (type) => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.type = type;
+      renderProjectTasks(project);
+    }
+  });
   renderDateButton({
     target: $("#projectTaskDueDatePicker"),
     value: detailTaskDraft.dueDate,
@@ -3973,6 +4093,12 @@ function renderProjectTasks(project) {
 
   $("#projectTaskNoDueDate")?.addEventListener("change", () => {
     syncProjectTaskDraftInputs();
+    if (detailTaskDraft.noDueDate) {
+      detailTaskDraft.allDay = true;
+      detailTaskDraft.calendar = false;
+    } else if (!detailTaskDraft.dueDate) {
+      detailTaskDraft.dueDate = dateKey(new Date());
+    }
     renderProjectTasks(project);
   });
   $("#projectTaskAllDay")?.addEventListener("change", () => {
@@ -4045,6 +4171,7 @@ function editProjectTask(taskId) {
     calendar: Boolean(task.calendar),
     editingTaskId: task.id
   };
+  detailTaskDetailOpen = Boolean(task.detail);
   detailTaskComposerOpen = true;
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (project) renderProjectTasks(project);
@@ -4959,7 +5086,10 @@ function studioTrainingFilterEnabled(type) {
 }
 
 function studioEventMatchesFilter(event) {
-  return studioTrainingFilterEnabled(staffEventTitle(event));
+  const owners = Array.isArray(event.owners) ? event.owners : [event.owner].filter(Boolean);
+  return studioTrainingFilterEnabled(staffEventTitle(event))
+    && eventMatchesOwnerFilter(owners, studioOwnerFilters)
+    && !(studioHideRecurring && event.seriesId);
 }
 
 function studioWeekEventClass(event) {
@@ -4996,6 +5126,11 @@ function renderStudioTrainingTypeFilters() {
       </label>
     `).join("")}
   `;
+}
+
+function renderStudioOwnerFilters() {
+  renderOwnerFilterChecks($("#studioOwnerFilters"), studioOwnerFilters, "data-studio-owner-filter");
+  if ($("#studioHideRecurring")) $("#studioHideRecurring").checked = studioHideRecurring;
 }
 
 function renderStudioUnassignedNotice() {
@@ -5125,6 +5260,7 @@ function renderStudioManage({ preserveScroll = false } = {}) {
   renderStudioLegend();
   renderStudioUnassignedNotice();
   renderStudioTrainingTypeFilters();
+  renderStudioOwnerFilters();
   const grid = $("#studioWeekGrid");
   if (!grid) return;
   const scrollTop = preserveScroll ? grid.scrollTop : null;
@@ -6642,50 +6778,268 @@ function mobileScheduleItems(from, to) {
   return items.sort((a, b) => `${a.date} ${a.startTime || ""}`.localeCompare(`${b.date} ${b.startTime || ""}`));
 }
 
-function renderMobileScheduleList(title, items) {
+const mobileCalendarSources = [
+  ["project", "영상"],
+  ["work", "업무"],
+  ["task", "할 일"],
+  ["staff", "방송실"],
+  ["schedule", "일반"]
+];
+
+function mobileCalendarSourceKey(source) {
+  if (["projectTask", "workTask"].includes(source)) return "task";
+  return source;
+}
+
+function mobileCalendarSourceLabel(source) {
+  const key = mobileCalendarSourceKey(source);
+  return mobileCalendarSources.find(([value]) => value === key)?.[1] || "일정";
+}
+
+function mobileCalendarFilterEnabled(filters, key) {
+  return !Object.prototype.hasOwnProperty.call(filters || {}, key) || filters[key] !== false;
+}
+
+function mobileCalendarTypeOptions() {
+  return [...new Set([
+    ...(state.options.types || []),
+    ...(state.options.workTypes || []),
+    ...projectTaskTypeOptions(),
+    ...workTaskTypeOptions(),
+    ...(state.options.trainingTypes || []),
+    ...(state.options.staffTypes || []),
+    ...state.staffEvents.map((event) => event.trainingType || event.type).filter(Boolean),
+    "일반 일정"
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
+}
+
+function mobileCalendarEventMatches(event, query = "") {
+  const sourceKey = mobileCalendarSourceKey(event.source);
+  if (!mobileCalendarFilterEnabled(calendarSourceFilters, sourceKey)) return false;
+  if (!eventMatchesOwnerFilter(event.owners, calendarOwnerFilters)) return false;
+  if (!mobileCalendarFilterEnabled(calendarTypeFilters, event.category || "기타")) return false;
+  if (calendarRecurringFilter === "only" && !event.seriesId) return false;
+  if (calendarRecurringFilter === "hide" && event.seriesId) return false;
+  if (!calendarShowCompleted && event.completed) return false;
+  const normalizedQuery = String(query || "").trim().toLocaleLowerCase("ko");
+  if (!normalizedQuery) return true;
+  const searchable = [
+    event.label,
+    event.category,
+    event.parentTitle,
+    event.location,
+    event.memo,
+    ...ownerNames(event.owners || [])
+  ].join(" ").toLocaleLowerCase("ko");
+  return searchable.includes(normalizedQuery);
+}
+
+function mobileCalendarEventsForDate(key, query = "") {
+  return sortCalendarEvents(allCalendarEventsForDate(key).filter((event) => mobileCalendarEventMatches(event, query)));
+}
+
+function mobileCalendarDateLabel(key, includeYear = false) {
+  const date = new Date(`${key}T00:00:00`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    ...(includeYear ? { year: "numeric" } : {}),
+    month: "long",
+    day: "numeric",
+    weekday: "long"
+  }).format(date);
+}
+
+function mobileCalendarCard(event, key) {
+  const ownerText = mobileOwnersText(event.owners || []);
+  const sourceKey = mobileCalendarSourceKey(event.source);
   return `
-    <section class="mobile-schedule-section">
-      <h3>${esc(title)}</h3>
-      ${items.length ? items.map((event) => `
-        <button class="mobile-schedule-card ${esc(event.source)}" data-mobile-calendar-source="${esc(event.source)}" data-mobile-calendar-id="${esc(event.id)}" data-mobile-calendar-date="${esc(event.date)}" type="button">
-          <b>${esc(event.label)}</b>
-          <span>${esc(formatDate(event.date))} · ${event.allDay === false ? `${esc(event.startTime || "")}-${esc(event.endTime || "")}` : "종일"}</span>
-        </button>
-      `).join("") : `<div class="empty">일정이 없습니다.</div>`}
+    <button class="mobile-calendar-event-card source-${esc(sourceKey)} ${event.completed ? "is-completed" : ""}"
+      data-mobile-calendar-event
+      data-event-source="${esc(event.source)}"
+      data-event-id="${esc(event.id)}"
+      data-project-id="${esc(event.projectId || "")}"
+      data-work-id="${esc(event.workId || "")}"
+      data-schedule-id="${esc(event.scheduleId || "")}"
+      data-staff-event-id="${esc(event.staffEventId || "")}"
+      data-mobile-calendar-date="${esc(key)}" type="button">
+      <span class="mobile-calendar-event-time">${event.allDay === false ? esc(event.startTime || "시간 미정") : "종일"}${event.allDay === false && event.endTime ? `<small>${esc(event.endTime)}</small>` : ""}</span>
+      <span class="mobile-calendar-event-body">
+        <strong>${esc(event.label)}</strong>
+        <span>${esc(event.category || mobileCalendarSourceLabel(event.source))} · 담당 ${esc(ownerText)}</span>
+        ${event.location ? `<small>${esc(event.location)}</small>` : ""}
+        <span class="mobile-calendar-event-chips"><i>${esc(mobileCalendarSourceLabel(event.source))}</i>${event.seriesId ? "<i>↻ 반복</i>" : ""}${event.completed ? "<i>완료</i>" : ""}</span>
+      </span>
+      <span class="mobile-calendar-event-arrow" aria-hidden="true">›</span>
+    </button>
+  `;
+}
+
+function renderMobileSelectedDateList(key = selectedCalendarDate) {
+  const items = mobileCalendarEventsForDate(key);
+  return `
+    <section class="mobile-calendar-day-list" aria-live="polite">
+      <header><h3>${esc(mobileCalendarDateLabel(key))}</h3><span>일정 ${items.length}개</span></header>
+      <div class="mobile-calendar-event-list">
+        ${items.length ? items.map((event) => mobileCalendarCard(event, key)).join("") : `
+          <div class="mobile-calendar-empty">
+            <strong>등록된 일정이 없습니다.</strong>
+            <span>선택한 날짜에 새 일정을 등록할 수 있습니다.</span>
+            <button data-mobile-calendar-add type="button">＋ 일정 추가</button>
+          </div>
+        `}
+      </div>
     </section>
   `;
 }
 
-function renderMobileMonthMini() {
+function renderMobileMonthCalendar() {
   const year = calendarDate.getFullYear();
   const month = calendarDate.getMonth();
   const firstDay = new Date(year, month, 1);
   const start = new Date(year, month, 1 - firstDay.getDay());
   return `
-    <section class="mobile-month-mini">
-      <div class="mobile-section-head"><h3>${year}년 ${month + 1}월</h3><span>월간</span></div>
+    <section class="mobile-month-calendar" data-mobile-calendar-swipe>
       <div class="mobile-month-weekdays"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div>
       <div class="mobile-month-grid">
         ${Array.from({ length: 42 }, (_, index) => {
           const date = new Date(start);
           date.setDate(start.getDate() + index);
           const key = dateKey(date);
-          const count = projectEventsForDate(key).length;
-          return `<button class="${date.getMonth() !== month ? "muted" : ""} ${key === mobileTodayKey() ? "today" : ""}" data-mobile-month-date="${key}" type="button"><b>${date.getDate()}</b>${count ? `<i>${count}</i>` : ""}</button>`;
+          const events = mobileCalendarEventsForDate(key);
+          const dots = [...new Set(events.map((event) => mobileCalendarSourceKey(event.source)))].slice(0, 3);
+          return `<button class="${date.getMonth() !== month ? "muted" : ""} ${key === mobileTodayKey() ? "today" : ""} ${key === selectedCalendarDate ? "selected" : ""}" data-mobile-month-date="${key}" type="button" aria-label="${esc(mobileCalendarDateLabel(key, true))}, 일정 ${events.length}개" aria-selected="${key === selectedCalendarDate}"><b>${date.getDate()}</b><span class="mobile-calendar-dots">${dots.map((source) => `<i class="source-${esc(source)}"></i>`).join("")}${events.length > 3 ? `<em>+${events.length - 3}</em>` : ""}</span></button>`;
         }).join("")}
       </div>
     </section>
   `;
 }
 
-function renderMobileCalendar() {
-  const today = mobileTodayKey();
-  const week = mobileWeekLimitKey();
+function mobileCalendarMonthRange() {
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  return [dateKey(new Date(year, month, 1)), dateKey(new Date(year, month + 1, 0))];
+}
+
+function renderMobileCalendarListView(query = "") {
+  const [from, to] = mobileCalendarMonthRange();
+  const groups = [];
+  for (let cursor = new Date(`${from}T00:00:00`); dateKey(cursor) <= to; cursor.setDate(cursor.getDate() + 1)) {
+    const key = dateKey(cursor);
+    const items = mobileCalendarEventsForDate(key, query);
+    if (items.length) groups.push({ key, items });
+  }
+  return `<div class="mobile-calendar-month-list">${groups.length ? groups.map(({ key, items }) => `
+    <section><header><h3>${esc(mobileCalendarDateLabel(key))}</h3><span>${items.length}개</span></header>${items.map((event) => mobileCalendarCard(event, key)).join("")}</section>
+  `).join("") : `<div class="mobile-calendar-empty"><strong>${query ? "검색 결과가 없습니다." : "이번 달 일정이 없습니다."}</strong><span>필터를 변경하거나 새 일정을 등록해보세요.</span></div>`}</div>`;
+}
+
+function renderMobileWeekCalendar() {
+  const selected = new Date(`${selectedCalendarDate}T00:00:00`);
+  const start = new Date(selected);
+  start.setDate(selected.getDate() - selected.getDay());
   return `
-    <div class="mobile-section-head"><h2>캘린더</h2><span>방송실 포함</span></div>
-    ${renderMobileScheduleList("오늘 일정", mobileScheduleItems(today, today))}
-    ${renderMobileScheduleList("이번주 일정", mobileScheduleItems(today, week))}
-    ${renderMobileMonthMini()}
+    <section class="mobile-week-calendar" data-mobile-calendar-swipe>
+      ${Array.from({ length: 7 }, (_, index) => {
+        const date = new Date(start);
+        date.setDate(start.getDate() + index);
+        const key = dateKey(date);
+        const count = mobileCalendarEventsForDate(key).length;
+        return `<button class="${key === selectedCalendarDate ? "selected" : ""} ${key === mobileTodayKey() ? "today" : ""}" data-mobile-month-date="${key}" type="button" aria-selected="${key === selectedCalendarDate}"><span>${["일", "월", "화", "수", "목", "금", "토"][index]}</span><b>${date.getDate()}</b>${count ? `<i>${count}</i>` : ""}</button>`;
+      }).join("")}
+    </section>
+    ${renderMobileSelectedDateList()}
+  `;
+}
+
+function mobileCalendarFilterCount() {
+  let count = 0;
+  if (!ownerFilterKeys().every((key) => ownerFilterEnabled(calendarOwnerFilters, key))) count += 1;
+  if (!mobileCalendarTypeOptions().every((key) => mobileCalendarFilterEnabled(calendarTypeFilters, key))) count += 1;
+  if (!mobileCalendarSources.every(([key]) => mobileCalendarFilterEnabled(calendarSourceFilters, key))) count += 1;
+  if (calendarRecurringFilter !== "include") count += 1;
+  if (!calendarShowCompleted) count += 1;
+  return count;
+}
+
+function cloneMobileCalendarFilters() {
+  return {
+    owners: { ...calendarOwnerFilters },
+    types: { ...calendarTypeFilters },
+    sources: { ...calendarSourceFilters },
+    recurring: calendarRecurringFilter,
+    showCompleted: calendarShowCompleted
+  };
+}
+
+function mobileFilterChip(label, key, selected, attribute) {
+  return `<button class="${selected ? "selected" : ""}" ${attribute}="${esc(key)}" type="button"><span>${selected ? "✓" : ""}</span>${esc(label)}</button>`;
+}
+
+function renderMobileCalendarFilterSheet() {
+  if (!mobileCalendarFilterOpen) return "";
+  const draft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+  const owners = ownerFilterKeys();
+  const types = mobileCalendarTypeOptions();
+  return `
+    <div class="mobile-calendar-filter-sheet open" role="dialog" aria-modal="true" aria-label="캘린더 필터">
+      <button class="mobile-calendar-filter-backdrop" data-mobile-calendar-filter-close type="button" aria-label="필터 닫기"></button>
+      <section>
+        <i class="mobile-sheet-handle"></i>
+        <header><h2>필터</h2><button data-mobile-calendar-filter-reset type="button">초기화</button></header>
+        <div class="mobile-calendar-filter-scroll">
+          <fieldset><legend>담당자</legend><div class="mobile-calendar-filter-chips">
+            ${mobileFilterChip("전체", "all", owners.every((key) => ownerFilterEnabled(draft.owners, key)), "data-mobile-calendar-filter-owner")}
+            ${owners.map((key) => mobileFilterChip(ownerFilterLabel(key), key, ownerFilterEnabled(draft.owners, key), "data-mobile-calendar-filter-owner")).join("")}
+          </div></fieldset>
+          <fieldset><legend>일정 유형</legend><div class="mobile-calendar-filter-chips">
+            ${mobileFilterChip("전체", "all", types.every((key) => mobileCalendarFilterEnabled(draft.types, key)), "data-mobile-calendar-filter-type")}
+            ${types.map((key) => mobileFilterChip(key, key, mobileCalendarFilterEnabled(draft.types, key), "data-mobile-calendar-filter-type")).join("")}
+          </div></fieldset>
+          <fieldset><legend>일정 출처</legend><div class="mobile-calendar-filter-chips">
+            ${mobileFilterChip("전체", "all", mobileCalendarSources.every(([key]) => mobileCalendarFilterEnabled(draft.sources, key)), "data-mobile-calendar-filter-source")}
+            ${mobileCalendarSources.map(([key, label]) => mobileFilterChip(label, key, mobileCalendarFilterEnabled(draft.sources, key), "data-mobile-calendar-filter-source")).join("")}
+          </div></fieldset>
+          <fieldset><legend>반복 일정 표시</legend><div class="mobile-calendar-segmented">
+            ${[["include", "포함"], ["only", "반복 일정만"], ["hide", "숨기기"]].map(([key, label]) => `<button class="${draft.recurring === key ? "selected" : ""}" data-mobile-calendar-filter-recurring="${key}" type="button">${label}</button>`).join("")}
+          </div></fieldset>
+          <label class="mobile-calendar-completed-toggle"><span><b>완료 일정 표시</b><small>완료된 프로젝트와 할 일을 목록에 포함합니다.</small></span><input data-mobile-calendar-filter-completed type="checkbox" ${draft.showCompleted ? "checked" : ""} /><i></i></label>
+        </div>
+        <footer><button data-mobile-calendar-filter-reset type="button">초기화</button><button data-mobile-calendar-filter-apply type="button">필터 적용</button></footer>
+      </section>
+    </div>
+  `;
+}
+
+function renderMobileCalendar() {
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
+  const filterCount = mobileCalendarFilterCount();
+  const searchView = mobileCalendarSearchOpen;
+  const content = searchView
+    ? renderMobileCalendarListView(mobileCalendarSearchQuery)
+    : mobileCalendarViewMode === "list"
+      ? renderMobileCalendarListView()
+      : mobileCalendarViewMode === "week"
+        ? renderMobileWeekCalendar()
+        : `${renderMobileMonthCalendar()}${renderMobileSelectedDateList()}`;
+  return `
+    <div class="mobile-calendar-page ${searchView ? "is-searching" : ""}">
+      <header class="mobile-calendar-toolbar">
+        <button data-mobile-calendar-prev type="button" aria-label="이전 달">‹</button>
+        <label class="mobile-calendar-month-title"><span>${year}년 ${month + 1}월</span><input data-mobile-calendar-month-picker type="month" value="${year}-${String(month + 1).padStart(2, "0")}" aria-label="월 선택" /></label>
+        <button data-mobile-calendar-next type="button" aria-label="다음 달">›</button>
+        <button class="mobile-calendar-today" data-mobile-calendar-today type="button">오늘</button>
+        <button class="mobile-calendar-icon ${searchView ? "active" : ""}" data-mobile-calendar-search-toggle type="button" aria-label="일정 검색">⌕</button>
+        <button class="mobile-calendar-icon ${filterCount ? "active" : ""}" data-mobile-calendar-filter-open type="button" aria-label="필터${filterCount ? ` ${filterCount}개 적용` : ""}">▽${filterCount ? `<b>${filterCount}</b>` : ""}</button>
+        <button class="mobile-calendar-icon add" data-mobile-calendar-add type="button" aria-label="일정 추가">＋</button>
+      </header>
+      ${searchView ? `<div class="mobile-calendar-search"><input data-mobile-calendar-search-input value="${esc(mobileCalendarSearchQuery)}" placeholder="제목, 담당자, 장소, 메모 검색" autocomplete="off" /><button data-mobile-calendar-search-close type="button">취소</button></div>` : ""}
+      <div class="mobile-calendar-view-switch" aria-label="캘린더 보기 방식">
+        ${[["month", "월간"], ["week", "주간"], ["list", "목록"]].map(([key, label]) => `<button class="${mobileCalendarViewMode === key ? "active" : ""}" data-mobile-calendar-view="${key}" type="button">${label}</button>`).join("")}
+      </div>
+      ${!searchView ? `<div class="mobile-calendar-quick-filters"><button class="${mobileCalendarSources.every(([key]) => mobileCalendarFilterEnabled(calendarSourceFilters, key)) ? "active" : ""}" data-mobile-calendar-quick-source="all" type="button">전체</button>${mobileCalendarSources.slice(0, 4).map(([key, label]) => `<button class="${mobileCalendarFilterEnabled(calendarSourceFilters, key) && mobileCalendarSources.filter(([item]) => mobileCalendarFilterEnabled(calendarSourceFilters, item)).length === 1 ? "active" : ""}" data-mobile-calendar-quick-source="${key}" type="button">${label}</button>`).join("")}</div>` : ""}
+      ${content}
+      ${renderMobileCalendarFilterSheet()}
+    </div>
   `;
 }
 
@@ -6746,6 +7100,7 @@ function renderMobileDashboard() {
   if (!app) return;
   const current = mobileActiveSection || "projects";
   $("#mobileViewTitle") && ($("#mobileViewTitle").textContent = mobileTitleForView(current));
+  $("#mobileFabWrap")?.classList.toggle("calendar-mode", current === "calendar");
   $$(".mobile-tab").forEach((button) => {
     const section = button.dataset.mobileSection;
     button.classList.toggle("active", section === current);
@@ -6828,6 +7183,37 @@ function openMobileSection(section) {
   renderMobileDashboard();
 }
 
+let mobileDetailSwipeStart = null;
+
+function bindMobileDetailSwipe(target, onBack) {
+  if (!target) return;
+  target.addEventListener("touchstart", (event) => {
+    if (!isMobileViewport() || event.touches.length !== 1) return;
+    if (event.target.closest("input, textarea, select, button, .dropdown-layer, .date-picker-layer, .time-picker-layer")) return;
+    const touch = event.touches[0];
+    mobileDetailSwipeStart = { x: touch.clientX, y: touch.clientY };
+  }, { passive: true });
+  target.addEventListener("touchend", (event) => {
+    if (!mobileDetailSwipeStart || !isMobileViewport()) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - mobileDetailSwipeStart.x;
+    const dy = touch.clientY - mobileDetailSwipeStart.y;
+    const startedAtLeftEdge = mobileDetailSwipeStart.x <= 32;
+    mobileDetailSwipeStart = null;
+    if (Math.abs(dy) > 55) return;
+    if (dx <= -85 || (startedAtLeftEdge && dx >= 75)) onBack();
+  }, { passive: true });
+  target.addEventListener("touchcancel", () => { mobileDetailSwipeStart = null; }, { passive: true });
+}
+
+bindMobileDetailSwipe($("#projectDetail"), closeProjectDetail);
+bindMobileDetailSwipe($("#workDetail"), closeWorkDetail);
+
+document.addEventListener("gesturestart", (event) => event.preventDefault(), { passive: false });
+document.addEventListener("touchmove", (event) => {
+  if (event.touches.length > 1) event.preventDefault();
+}, { passive: false });
+
 function closeMobileAddSheet() {
   const sheet = $("#mobileAddSheet");
   if (!sheet) return;
@@ -6861,7 +7247,7 @@ function mobileProjectWorkSelect() {
 }
 
 function renderMobileAddForm(mode) {
-  const today = dateKey(new Date());
+  const today = mode === "schedule" && selectedCalendarDate ? selectedCalendarDate : dateKey(new Date());
   const configs = {
     project: ["영상 추가", "영상 등록"],
     work: ["업무 추가", "업무 등록"],
@@ -6895,7 +7281,7 @@ function renderMobileAddForm(mode) {
   } else {
     body = `
       <section><h3>기본정보</h3><input name="title" placeholder="일정명" required />${mobileProjectWorkSelect()}</section>
-      <section><h3>일정</h3><label>날짜<input name="date" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" value="09:00" /><input name="endTime" type="time" value="10:00" /></div></section>
+      <section><h3>일정</h3><label>날짜<input name="date" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" step="600" value="09:00" /><input name="endTime" type="time" step="600" value="10:00" /></div></section>
       <section><h3>담당자</h3>${mobileOwnerCheckboxes("owners")}</section>
       <section><h3>메모</h3><input name="location" placeholder="장소" /><textarea name="memo" placeholder="메모"></textarea></section>
     `;
@@ -7096,6 +7482,10 @@ $$("[data-close-mobile-add]").forEach((button) => button.addEventListener("click
 $("#mobileNotifyBtn")?.addEventListener("click", () => openMobileMoreSheet(true));
 $("#mobileFabBtn")?.addEventListener("click", () => {
   closeMobileDetailSheets();
+  if (mobileActiveSection === "calendar") {
+    openMobileAddSheet("schedule");
+    return;
+  }
   toggleMobileFab();
 });
 $("#mobileFabMenu")?.addEventListener("click", (event) => {
@@ -7129,6 +7519,23 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
   submitMobileAddForm(event.currentTarget);
 });
 $("#mobileApp")?.addEventListener("change", (event) => {
+  if (event.target.matches("[data-mobile-calendar-month-picker]")) {
+    const [year, month] = String(event.target.value || "").split("-").map(Number);
+    if (year && month) {
+      calendarDate = new Date(year, month - 1, 1);
+      const selectedDay = Math.min(new Date(`${selectedCalendarDate}T00:00:00`).getDate() || 1, new Date(year, month, 0).getDate());
+      selectedCalendarDate = dateKey(new Date(year, month - 1, selectedDay));
+      saveViewPrefs({ calendarDate: dateKey(calendarDate), selectedCalendarDate });
+      renderMobileDashboard();
+    }
+    return;
+  }
+  if (event.target.matches("[data-mobile-calendar-filter-completed]")) {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    mobileCalendarFilterDraft.showCompleted = event.target.checked;
+    renderMobileDashboard();
+    return;
+  }
   if (event.target.matches("[data-mobile-show-completed-projects]")) {
     projectHideDone = !event.target.checked;
     saveViewPrefs({ projectHideDone });
@@ -7283,8 +7690,190 @@ $("#mobileApp")?.addEventListener("click", (event) => {
       renderWorkDetailTabs();
     }
   }
+  const calendarEvent = event.target.closest("[data-mobile-calendar-event]");
+  if (calendarEvent) {
+    openCalendarEventDetail(calendarEvent);
+    return;
+  }
   const monthDate = event.target.closest("[data-mobile-month-date]")?.dataset.mobileMonthDate;
-  if (monthDate) openScheduleModal(monthDate);
+  if (monthDate) {
+    selectedCalendarDate = monthDate;
+    const selected = new Date(`${monthDate}T00:00:00`);
+    if (selected.getFullYear() !== calendarDate.getFullYear() || selected.getMonth() !== calendarDate.getMonth()) {
+      calendarDate = new Date(selected.getFullYear(), selected.getMonth(), 1);
+    }
+    saveViewPrefs({ selectedCalendarDate, calendarDate: dateKey(calendarDate) });
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-add]")) {
+    openMobileAddSheet("schedule");
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-prev]")) {
+    moveMobileCalendarMonth(-1);
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-next]")) {
+    moveMobileCalendarMonth(1);
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-today]")) {
+    selectedCalendarDate = mobileTodayKey();
+    calendarDate = new Date(`${selectedCalendarDate}T00:00:00`);
+    saveViewPrefs({ selectedCalendarDate, calendarDate: dateKey(calendarDate) });
+    renderMobileDashboard();
+    return;
+  }
+  const calendarViewMode = event.target.closest("[data-mobile-calendar-view]")?.dataset.mobileCalendarView;
+  if (calendarViewMode) {
+    mobileCalendarViewMode = calendarViewMode;
+    saveViewPrefs({ mobileCalendarViewMode });
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-search-toggle]")) {
+    mobileCalendarSearchOpen = !mobileCalendarSearchOpen;
+    if (!mobileCalendarSearchOpen) mobileCalendarSearchQuery = "";
+    renderMobileDashboard();
+    if (mobileCalendarSearchOpen) setTimeout(() => $("[data-mobile-calendar-search-input]")?.focus(), 0);
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-search-close]")) {
+    mobileCalendarSearchOpen = false;
+    mobileCalendarSearchQuery = "";
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-filter-open]")) {
+    mobileCalendarFilterDraft = cloneMobileCalendarFilters();
+    mobileCalendarFilterOpen = true;
+    renderMobileDashboard();
+    setTimeout(() => $(".mobile-calendar-filter-sheet header [data-mobile-calendar-filter-reset]")?.focus(), 0);
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-filter-close]")) {
+    closeMobileCalendarFilter();
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-filter-reset]")) {
+    mobileCalendarFilterDraft = {
+      owners: {},
+      types: {},
+      sources: { project: true, work: true, task: true, staff: true, schedule: true },
+      recurring: "include",
+      showCompleted: true
+    };
+    renderMobileDashboard();
+    return;
+  }
+  const ownerFilter = event.target.closest("[data-mobile-calendar-filter-owner]")?.dataset.mobileCalendarFilterOwner;
+  if (ownerFilter) {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (ownerFilter === "all") mobileCalendarFilterDraft.owners = {};
+    else if (ownerFilterKeys().every((key) => ownerFilterEnabled(mobileCalendarFilterDraft.owners, key))) {
+      mobileCalendarFilterDraft.owners = Object.fromEntries(ownerFilterKeys().map((key) => [key, key === ownerFilter]));
+    } else mobileCalendarFilterDraft.owners[ownerFilter] = !ownerFilterEnabled(mobileCalendarFilterDraft.owners, ownerFilter);
+    renderMobileDashboard();
+    return;
+  }
+  const typeFilter = event.target.closest("[data-mobile-calendar-filter-type]")?.dataset.mobileCalendarFilterType;
+  if (typeFilter) {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (typeFilter === "all") mobileCalendarFilterDraft.types = {};
+    else if (mobileCalendarTypeOptions().every((key) => mobileCalendarFilterEnabled(mobileCalendarFilterDraft.types, key))) {
+      mobileCalendarFilterDraft.types = Object.fromEntries(mobileCalendarTypeOptions().map((key) => [key, key === typeFilter]));
+    } else mobileCalendarFilterDraft.types[typeFilter] = !mobileCalendarFilterEnabled(mobileCalendarFilterDraft.types, typeFilter);
+    renderMobileDashboard();
+    return;
+  }
+  const sourceFilter = event.target.closest("[data-mobile-calendar-filter-source]")?.dataset.mobileCalendarFilterSource;
+  if (sourceFilter) {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (sourceFilter === "all") mobileCalendarFilterDraft.sources = { project: true, work: true, task: true, staff: true, schedule: true };
+    else if (mobileCalendarSources.every(([key]) => mobileCalendarFilterEnabled(mobileCalendarFilterDraft.sources, key))) {
+      mobileCalendarFilterDraft.sources = Object.fromEntries(mobileCalendarSources.map(([key]) => [key, key === sourceFilter]));
+    } else mobileCalendarFilterDraft.sources[sourceFilter] = !mobileCalendarFilterEnabled(mobileCalendarFilterDraft.sources, sourceFilter);
+    renderMobileDashboard();
+    return;
+  }
+  const recurringFilter = event.target.closest("[data-mobile-calendar-filter-recurring]")?.dataset.mobileCalendarFilterRecurring;
+  if (recurringFilter) {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    mobileCalendarFilterDraft.recurring = recurringFilter;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-calendar-filter-apply]")) {
+    const draft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    calendarOwnerFilters = { ...draft.owners };
+    calendarTypeFilters = { ...draft.types };
+    calendarSourceFilters = { ...draft.sources };
+    calendarRecurringFilter = draft.recurring;
+    calendarShowCompleted = draft.showCompleted;
+    mobileCalendarFilterOpen = false;
+    mobileCalendarFilterDraft = null;
+    saveViewPrefs({ calendarOwnerFilters, calendarTypeFilters, calendarSourceFilters, calendarRecurringFilter, calendarShowCompleted });
+    renderCalendar();
+    renderMobileDashboard();
+    setTimeout(() => $("[data-mobile-calendar-filter-open]")?.focus(), 0);
+    return;
+  }
+  const quickSource = event.target.closest("[data-mobile-calendar-quick-source]")?.dataset.mobileCalendarQuickSource;
+  if (quickSource) {
+    calendarSourceFilters = Object.fromEntries(mobileCalendarSources.map(([key]) => [key, quickSource === "all" || key === quickSource]));
+    saveViewPrefs({ calendarSourceFilters });
+    renderMobileDashboard();
+  }
+});
+
+function moveMobileCalendarMonth(delta) {
+  const target = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + delta, 1);
+  const currentDay = new Date(`${selectedCalendarDate}T00:00:00`).getDate() || 1;
+  const day = Math.min(currentDay, new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate());
+  calendarDate = target;
+  selectedCalendarDate = dateKey(new Date(target.getFullYear(), target.getMonth(), day));
+  saveViewPrefs({ calendarDate: dateKey(calendarDate), selectedCalendarDate });
+  renderCalendar();
+  renderMobileDashboard();
+}
+
+function closeMobileCalendarFilter() {
+  mobileCalendarFilterOpen = false;
+  mobileCalendarFilterDraft = null;
+  renderMobileDashboard();
+  setTimeout(() => $("[data-mobile-calendar-filter-open]")?.focus(), 0);
+}
+
+$("#mobileApp")?.addEventListener("input", (event) => {
+  if (!event.target.matches("[data-mobile-calendar-search-input]")) return;
+  mobileCalendarSearchQuery = event.target.value;
+  renderMobileDashboard();
+  const input = $("[data-mobile-calendar-search-input]");
+  if (input) {
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+});
+
+$("#mobileApp")?.addEventListener("touchstart", (event) => {
+  if (mobileActiveSection !== "calendar" || event.touches.length !== 1 || !event.target.closest("[data-mobile-calendar-swipe]")) return;
+  const touch = event.touches[0];
+  mobileCalendarSwipeStart = { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+
+$("#mobileApp")?.addEventListener("touchend", (event) => {
+  if (!mobileCalendarSwipeStart || mobileActiveSection !== "calendar") return;
+  const touch = event.changedTouches[0];
+  const dx = touch.clientX - mobileCalendarSwipeStart.x;
+  const dy = touch.clientY - mobileCalendarSwipeStart.y;
+  mobileCalendarSwipeStart = null;
+  if (Math.abs(dx) < 70 || Math.abs(dy) > 55) return;
+  moveMobileCalendarMonth(dx < 0 ? 1 : -1);
+}, { passive: true });
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && mobileCalendarFilterOpen) closeMobileCalendarFilter();
 });
 $("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
@@ -7412,6 +8001,21 @@ document.body.addEventListener("click", (event) => {
 });
 
 $("#calendarView").addEventListener("change", (event) => {
+  const ownerCheckbox = event.target.closest("[data-calendar-owner-filter]");
+  if (ownerCheckbox) {
+    const ownerId = ownerCheckbox.dataset.calendarOwnerFilter;
+    if (ownerId === "all") ownerFilterKeys().forEach((key) => { calendarOwnerFilters[key] = ownerCheckbox.checked; });
+    else calendarOwnerFilters[ownerId] = ownerCheckbox.checked;
+    saveViewPrefs({ calendarOwnerFilters });
+    renderCalendar();
+    return;
+  }
+  if (event.target.id === "calendarHideRecurring") {
+    calendarHideRecurring = event.target.checked;
+    saveViewPrefs({ calendarHideRecurring });
+    renderCalendar();
+    return;
+  }
   const checkbox = event.target.closest("[data-calendar-filter]");
   if (!checkbox) return;
   const key = checkbox.dataset.calendarFilter;
@@ -7465,6 +8069,21 @@ $("#studioView").addEventListener("click", (event) => {
 });
 
 $("#studioView").addEventListener("change", (event) => {
+  const ownerFilter = event.target.closest("[data-studio-owner-filter]");
+  if (ownerFilter) {
+    const ownerId = ownerFilter.dataset.studioOwnerFilter;
+    if (ownerId === "all") ownerFilterKeys().forEach((key) => { studioOwnerFilters[key] = ownerFilter.checked; });
+    else studioOwnerFilters[ownerId] = ownerFilter.checked;
+    saveViewPrefs({ studioOwnerFilters });
+    renderStudioManage({ preserveScroll: true });
+    return;
+  }
+  if (event.target.id === "studioHideRecurring") {
+    studioHideRecurring = event.target.checked;
+    saveViewPrefs({ studioHideRecurring });
+    renderStudioManage({ preserveScroll: true });
+    return;
+  }
   const filter = event.target.closest("[data-studio-training-filter]");
   if (!filter) return;
   const types = trainingTypeOptions();
@@ -7898,6 +8517,22 @@ $("#managementRecords").addEventListener("input", (event) => {
 });
 
 $("#projectTaskPanel").addEventListener("click", (event) => {
+  if (event.target.closest("[data-project-task-detail-toggle]")) {
+    syncProjectTaskDraftInputs();
+    detailTaskDetailOpen = !detailTaskDetailOpen;
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    if (project) renderProjectTasks(project);
+    return;
+  }
+  if (event.target.closest("#cancelProjectTaskBtn")) {
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    if (project) {
+      resetProjectTaskDraft(project);
+      detailTaskComposerOpen = false;
+      renderProjectTasks(project);
+    }
+    return;
+  }
   const sortButton = event.target.closest("[data-project-task-sort]");
   if (sortButton) {
     syncProjectTaskDraftInputs();
