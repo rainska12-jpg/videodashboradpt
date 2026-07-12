@@ -8163,7 +8163,7 @@ function renderMobilePreferences() {
     <section class="mobile-settings-section"><h3>알림 설정</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
     <section class="mobile-settings-section"><h3>화면 설정</h3><div><div class="mobile-info-row"><span>테마</span><b>다크 모드</b></div></div></section>
     <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
-    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v50</b></div></div></section>
+    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v52</b></div></div></section>
     <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
   `);
 }
@@ -8329,6 +8329,119 @@ function bindMobileCoreActions(app) {
     const item = taskOverviewItems().find((entry) => entry.id === button.dataset.mobileOpenTaskId && entry.source === button.dataset.mobileOpenTaskSource);
     if (item?.source === "project" && item.sourceId) openProjectDetail(item.sourceId, "tasks");
     if (item?.source === "work" && item.sourceId) openWorkDetail(item.sourceId, "tasks");
+  });
+  bind("[data-mobile-calendar-event]", (button) => openCalendarEventDetail(button));
+  bind("[data-mobile-month-date]", (button) => {
+    selectedCalendarDate = button.dataset.mobileMonthDate;
+    const selected = new Date(`${selectedCalendarDate}T00:00:00`);
+    if (selected.getFullYear() !== calendarDate.getFullYear() || selected.getMonth() !== calendarDate.getMonth()) {
+      calendarDate = new Date(selected.getFullYear(), selected.getMonth(), 1);
+    }
+    saveViewPrefs({ selectedCalendarDate, calendarDate: dateKey(calendarDate) });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-add]", () => openMobileAddSheet("schedule"));
+  bind("[data-mobile-calendar-prev]", () => moveMobileCalendarMonth(-1));
+  bind("[data-mobile-calendar-next]", () => moveMobileCalendarMonth(1));
+  bind("[data-mobile-calendar-today]", () => {
+    selectedCalendarDate = mobileTodayKey();
+    calendarDate = new Date(`${selectedCalendarDate}T00:00:00`);
+    saveViewPrefs({ selectedCalendarDate, calendarDate: dateKey(calendarDate) });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-view]", (button) => {
+    mobileCalendarViewMode = button.dataset.mobileCalendarView;
+    saveViewPrefs({ mobileCalendarViewMode });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-search-toggle]", () => {
+    mobileCalendarSearchOpen = !mobileCalendarSearchOpen;
+    if (!mobileCalendarSearchOpen) mobileCalendarSearchQuery = "";
+    renderMobileDashboard();
+    if (mobileCalendarSearchOpen) setTimeout(() => $("[data-mobile-calendar-search-input]")?.focus(), 0);
+  });
+  bind("[data-mobile-calendar-search-close]", () => {
+    mobileCalendarSearchOpen = false;
+    mobileCalendarSearchQuery = "";
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-open]", () => {
+    mobileCalendarFilterDraft = cloneMobileCalendarFilters();
+    mobileCalendarFilterOpen = true;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-close]", () => closeMobileCalendarFilter());
+  bind("[data-mobile-calendar-filter-reset]", () => {
+    mobileCalendarFilterDraft = {
+      owners: {},
+      types: {},
+      sources: { project: true, work: true, task: true, staff: true, schedule: true },
+      recurring: "include",
+      showCompleted: true
+    };
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-owner]", (button) => {
+    const owner = button.dataset.mobileCalendarFilterOwner;
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (owner === "all") mobileCalendarFilterDraft.owners = {};
+    else mobileCalendarFilterDraft.owners[owner] = !ownerFilterEnabled(mobileCalendarFilterDraft.owners, owner);
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-type]", (button) => {
+    const type = button.dataset.mobileCalendarFilterType;
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (type === "all") mobileCalendarFilterDraft.types = {};
+    else mobileCalendarFilterDraft.types[type] = !mobileCalendarFilterEnabled(mobileCalendarFilterDraft.types, type);
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-source]", (button) => {
+    const source = button.dataset.mobileCalendarFilterSource;
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    if (source === "all") mobileCalendarFilterDraft.sources = { project: true, work: true, task: true, staff: true, schedule: true };
+    else mobileCalendarFilterDraft.sources[source] = !mobileCalendarFilterEnabled(mobileCalendarFilterDraft.sources, source);
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-recurring]", (button) => {
+    mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    mobileCalendarFilterDraft.recurring = button.dataset.mobileCalendarFilterRecurring;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-filter-apply]", () => {
+    const draft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+    calendarOwnerFilters = { ...draft.owners };
+    calendarTypeFilters = { ...draft.types };
+    calendarSourceFilters = { ...draft.sources };
+    calendarRecurringFilter = draft.recurring;
+    calendarShowCompleted = draft.showCompleted;
+    mobileCalendarFilterOpen = false;
+    mobileCalendarFilterDraft = null;
+    saveViewPrefs({ calendarOwnerFilters, calendarTypeFilters, calendarSourceFilters, calendarRecurringFilter, calendarShowCompleted });
+    renderCalendar();
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-calendar-quick-source]", (button) => {
+    const source = button.dataset.mobileCalendarQuickSource;
+    calendarSourceFilters = Object.fromEntries(mobileCalendarSources.map(([key]) => [key, source === "all" || key === source]));
+    saveViewPrefs({ calendarSourceFilters });
+    renderMobileDashboard();
+  });
+
+  app.querySelectorAll("[data-mobile-calendar-month-picker]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const [year, month] = String(input.value || "").split("-").map(Number);
+      if (!year || !month) return;
+      calendarDate = new Date(year, month - 1, 1);
+      selectedCalendarDate = dateKey(new Date(year, month - 1, 1));
+      saveViewPrefs({ calendarDate: dateKey(calendarDate), selectedCalendarDate });
+      renderMobileDashboard();
+    });
+  });
+  app.querySelectorAll("[data-mobile-calendar-filter-completed]").forEach((input) => {
+    input.addEventListener("change", () => {
+      mobileCalendarFilterDraft = mobileCalendarFilterDraft || cloneMobileCalendarFilters();
+      mobileCalendarFilterDraft.showCompleted = input.checked;
+    });
   });
 }
 

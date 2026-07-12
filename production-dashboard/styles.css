@@ -8868,6 +8868,26 @@ h3 {
     border-radius: 50%;
     font-size: 28px;
   }
+
+  .mobile-notification-page .notification-show-read input[type="checkbox"] {
+    appearance: none;
+    width: 20px;
+    min-width: 20px;
+    max-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    padding: 0;
+    border: 1.5px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-2);
+    box-shadow: none;
+  }
+
+  .mobile-notification-page .notification-show-read input[type="checkbox"]:checked {
+    border-color: var(--accent);
+    background: var(--accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%23020b05' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/15px no-repeat;
+  }
 }
 
 @media (max-width: 768px) {
