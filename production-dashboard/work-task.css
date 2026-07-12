@@ -29,6 +29,14 @@
 #workDetail .work-task-hide-done { justify-self: end; }
 body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
 .picker-scroll-locked-panel { overflow: hidden !important; overscroll-behavior: none; }
+.basic-save-btn { min-width: 88px; opacity: .58; transition: opacity .16s ease, box-shadow .16s ease, transform .16s ease; }
+.basic-save-btn.is-dirty { opacity: 1; box-shadow: 0 0 0 3px rgba(30, 215, 96, .15); }
+.basic-save-btn.is-dirty::before { content: "•"; margin-right: 6px; }
+.unsaved-basic-modal { z-index: 420; }
+.unsaved-basic-card { width: min(470px, calc(100vw - 28px)); }
+.unsaved-basic-icon { background: rgba(30, 215, 96, .14); color: var(--accent); }
+.unsaved-basic-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.unsaved-basic-actions .pill { width: 100%; min-width: 0; }
 .date-picker-card, .time-picker-card, .date-picker-days, .time-picker-column { overscroll-behavior: contain; }
 .time-picker-card { display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 316px; }
 .time-picker-heading, .time-picker-actions { display: flex; align-items: center; justify-content: space-between; }
@@ -80,6 +88,11 @@ body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
     padding-bottom: calc(118px + env(safe-area-inset-bottom));
     background: #05090b;
   }
+  #projectDetail .basic-save-btn,
+  #workDetail .basic-save-btn { min-width: 72px; height: 44px; min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 13px; }
+  .unsaved-basic-card { padding: 18px; border-radius: 20px; }
+  .unsaved-basic-actions { gap: 7px; }
+  .unsaved-basic-actions .pill { min-height: 44px; padding-inline: 8px; }
   #workDetail .task-add-card.is-collapsed .task-add-head,
   #workDetail .task-add-head { min-height: 52px; padding: 9px 11px; }
   #workDetail .task-add-title small { display: none; }

@@ -307,6 +307,8 @@ let editingRecordId = null;
 let recordSearchQuery = "";
 let recordFilterMode = viewPref("recordFilterMode", "all");
 let activeDetailTab = "basic";
+let projectBasicDraft = null;
+let projectChangeBuffer = new Set();
 let detailTaskSort = viewPref("detailTaskSort", "created");
 let workTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
 let workTaskComposerOpen = false;
@@ -318,6 +320,10 @@ let editingWorkRecordId = null;
 let workRecordSearchQuery = "";
 let workRecordFilterMode = viewPref("workRecordFilterMode", "all");
 let activeWorkDetailTab = "basic";
+let workBasicDraft = null;
+let workChangeBuffer = new Set();
+let pendingBasicLeaveAction = null;
+let pendingBasicLeaveScope = "";
 let projectSearchQuery = viewPref("projectSearchQuery", "");
 let projectFilters = viewPref("projectFilters", { type: "", client: "", status: "" });
 let projectSort = viewPref("projectSort", { key: "finalDate", direction: "asc" });
@@ -339,6 +345,10 @@ let mobileCalendarFilterDraft = null;
 let mobileCalendarSearchOpen = false;
 let mobileCalendarSearchQuery = "";
 let mobileCalendarSwipeStart = null;
+let webNotificationsOpen = false;
+let notificationCenterOpen = false;
+let notificationSettingsOpen = false;
+let notificationShowRead = viewPref("notificationShowRead", false);
 let boardSearchQuery = viewPref("boardSearchQuery", "");
 let boardSearchScope = viewPref("boardSearchScope", "titleContent");
 let boardPrefixFilter = viewPref("boardPrefixFilter", "");
@@ -489,6 +499,9 @@ function migrateOwnerState(nextState) {
   nextState.options.studioStaffOwners = [...activeOwnerNames];
   nextState.ownerDefaultsVersion = 2;
   nextState.notifications = Array.isArray(nextState.notifications) ? nextState.notifications : [];
+  nextState.notificationSettingsByUser = nextState.notificationSettingsByUser && typeof nextState.notificationSettingsByUser === "object"
+    ? nextState.notificationSettingsByUser
+    : {};
   nextState.users = normalizeUsers(nextState.users);
   const activeUser = nextState.users.find((user) => user.id === nextState.currentUser);
   if (!activeUser || activeUser.status === "inactive" || activeUser.approved === false || activeUser.username === "PD") {
@@ -577,22 +590,208 @@ function canUserManageOwner(ownerId, user = currentUser()) {
   return linkedOwnerIdsForUser(user).includes(ownerId);
 }
 
-function notifyOwners(ownerIds, message, source = {}) {
+const defaultNotificationSettings = {
+  projectStatus: true,
+  projectContent: true,
+  ownerChange: true,
+  record: true,
+  task: true,
+  work: true,
+  studio: true,
+  schedule: true,
+  system: true
+};
+
+function notificationSettingsForUser(userId) {
+  state.notificationSettingsByUser = state.notificationSettingsByUser || {};
+  return { ...defaultNotificationSettings, ...(state.notificationSettingsByUser[userId] || {}) };
+}
+
+function notificationSettingKey(actionType = "") {
+  if (actionType.includes("owner")) return "ownerChange";
+  if (actionType.includes("record")) return "record";
+  if (actionType.includes("task")) return "task";
+  if (actionType.includes("studio") || actionType.includes("staff")) return "studio";
+  if (actionType.includes("schedule") || actionType.includes("calendar") || actionType.includes("recurring")) return "schedule";
+  if (actionType.startsWith("work_")) return "work";
+  if (actionType.includes("status")) return "projectStatus";
+  if (actionType.startsWith("project_")) return "projectContent";
+  return "system";
+}
+
+function notificationActor() {
+  const actor = currentUser();
+  return {
+    id: actor?.id || "",
+    name: actor?.name || actor?.username || actor?.email || "사용자"
+  };
+}
+
+function cleanupNotifications() {
+  const cutoff = Date.now() - 90 * 86400000;
+  const recent = (state.notifications || []).filter((item) => {
+    const created = new Date(item.createdAt || 0).getTime();
+    return !created || created >= cutoff || !item.read;
+  });
+  const grouped = new Map();
+  recent.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).forEach((item) => {
+    const key = item.userId || "global";
+    const items = grouped.get(key) || [];
+    if (items.length < 300) items.push(item);
+    grouped.set(key, items);
+  });
+  state.notifications = [...grouped.values()].flat();
+}
+
+function notifyAssignedUsers({
+  ownerIds = [],
+  actorUserId,
+  actorName,
+  actionType = "system_update",
+  category = "system",
+  title = "알림",
+  message = "",
+  sourceType = "",
+  sourceId = "",
+  parentType = "",
+  parentId = "",
+  subTargetId = "",
+  targetView = "",
+  targetTab = "basic",
+  eventDate = ""
+} = {}) {
+  const actor = notificationActor();
+  const resolvedActorId = actorUserId ?? actor.id;
+  const resolvedActorName = actorName || actor.name;
+  const now = new Date();
+  const dedupeWindow = now.getTime() - 5000;
+  let added = 0;
   uniqueValues(ownerIds).forEach((ownerId) => {
     const owner = ownerById(ownerId);
-    if (!owner?.linkedUserId) return;
+    if (!owner?.linkedUserId || owner.status === "inactive" || owner.status === "deleted") return;
     const user = state.users.find((item) => item.id === owner.linkedUserId);
-    if (!user || user.status === "inactive" || user.approved === false) return;
+    if (!user || user.id === resolvedActorId || user.status === "inactive" || user.status === "pending" || user.approved === false) return;
+    const settingKey = notificationSettingKey(actionType);
+    if (notificationSettingsForUser(user.id)[settingKey] === false) return;
+    const dedupeKey = `${user.id}:${actionType}:${sourceType}:${sourceId}:${subTargetId}`;
+    const duplicate = (state.notifications || []).some((item) => item.dedupeKey === dedupeKey && new Date(item.createdAt || 0).getTime() >= dedupeWindow);
+    if (duplicate) return;
     state.notifications.push({
       id: makeId(),
-      ownerId,
       userId: user.id,
+      ownerId,
+      actorUserId: resolvedActorId,
+      actorName: resolvedActorName,
+      actionType,
+      category,
+      title,
+      body: message,
       message,
-      source,
+      sourceType,
+      sourceId,
+      parentType,
+      parentId,
+      subTargetId,
+      targetView,
+      targetTab,
+      eventDate,
+      source: { type: sourceType, id: sourceId, projectId: parentType === "project" ? parentId : "", workId: parentType === "work" ? parentId : "", taskId: subTargetId },
+      dedupeKey,
       read: false,
-      createdAt: new Date().toISOString()
+      createdAt: now.toISOString()
     });
+    added += 1;
   });
+  if (added) {
+    cleanupNotifications();
+    saveState();
+    renderNotificationSurfaces();
+  }
+  return added;
+}
+
+function notifyOwners(ownerIds, message, source = {}) {
+  const sourceType = source.type || "system";
+  const actionType = source.actionType || `${sourceType.replaceAll("-", "_")}_${source.action || "updated"}`;
+  const parentType = source.projectId ? "project" : source.workId ? "work" : "";
+  return notifyAssignedUsers({
+    ownerIds,
+    actionType,
+    category: source.category || sourceType,
+    title: source.title || "담당 항목 변경",
+    message,
+    sourceType,
+    sourceId: source.id || source.taskId || source.recordId || source.scheduleId || source.staffEventId || source.projectId || source.workId || "",
+    parentType,
+    parentId: source.projectId || source.workId || "",
+    subTargetId: source.taskId || source.recordId || "",
+    targetView: source.projectId ? "projects" : source.workId ? "works" : source.targetView || "",
+    targetTab: source.targetTab || (sourceType.includes("record") ? "records" : sourceType.includes("task") ? "tasks" : "basic"),
+    eventDate: source.eventDate || source.date || ""
+  });
+}
+
+const notificationFieldLabels = {
+  title: "프로젝트명",
+  type: "업무 분류",
+  owners: "담당자",
+  client: "발주 부서",
+  budget: "예산",
+  kickoffDate: "시작일",
+  shootDate: "촬영일",
+  firstEditDate: "1차 완성일",
+  finalDate: "마감일",
+  status: "상태",
+  memo: "메모",
+  noSchedule: "일정 설정"
+};
+
+function notifyEntityFieldChanges({ entityType, entity, ownerIds, fields }) {
+  const changedFields = uniqueValues(fields);
+  if (!entity || !changedFields.length) return 0;
+  const actor = notificationActor();
+  const labels = changedFields.map((field) => notificationFieldLabels[field] || field);
+  const isProject = entityType === "project";
+  const label = isProject ? "영상 프로젝트" : "업무 프로젝트";
+  const actionType = changedFields.length === 1 && changedFields[0] === "status"
+    ? `${entityType}_status_changed`
+    : `${entityType}_content_changed`;
+  const detail = labels.length > 3 ? "정보" : labels.join(", ");
+  return notifyAssignedUsers({
+    ownerIds,
+    actionType,
+    category: entityType,
+    title: `${label} ${changedFields.includes("status") && changedFields.length === 1 ? "상태 변경" : "내용 수정"}`,
+    message: `${actor.name}님이 ‘${entity.title}’의 ${detail}를 수정했습니다.`,
+    sourceType: entityType,
+    sourceId: entity.id,
+    parentType: entityType,
+    parentId: entity.id,
+    targetView: isProject ? "projects" : "works",
+    targetTab: "basic"
+  });
+}
+
+function notifyOwnerAssignmentChanges({ entityType, entity, previousOwners = [], nextOwners = [] }) {
+  const actor = notificationActor();
+  const previous = uniqueValues(previousOwners);
+  const next = uniqueValues(nextOwners);
+  const added = next.filter((ownerId) => !previous.includes(ownerId));
+  const removed = previous.filter((ownerId) => !next.includes(ownerId));
+  const retained = next.filter((ownerId) => previous.includes(ownerId));
+  const targetView = entityType === "project" ? "projects" : "works";
+  const common = {
+    category: entityType,
+    sourceType: entityType,
+    sourceId: entity.id,
+    parentType: entityType,
+    parentId: entity.id,
+    targetView,
+    targetTab: "basic"
+  };
+  if (added.length) notifyAssignedUsers({ ...common, ownerIds: added, actionType: `${entityType}_owner_added`, title: "담당자 지정", message: `${actor.name}님이 회원님을 ‘${entity.title}’ 담당자로 지정했습니다.` });
+  if (removed.length) notifyAssignedUsers({ ...common, ownerIds: removed, actionType: `${entityType}_owner_removed`, title: "담당자 제외", message: `${actor.name}님이 회원님을 ‘${entity.title}’ 담당자에서 제외했습니다.` });
+  if (retained.length) notifyAssignedUsers({ ...common, ownerIds: retained, actionType: `${entityType}_owner_changed`, title: "담당자 변경", message: `${actor.name}님이 ‘${entity.title}’의 담당자를 변경했습니다.` });
 }
 
 function dateKey(date) {
@@ -2112,10 +2311,148 @@ function workDateFieldControl(field) {
   `;
 }
 
+function createProjectBasicDraft(project) {
+  return {
+    projectId: project.id,
+    status: project.status || "",
+    memo: project.memo || "",
+    originalStatus: project.status || "",
+    originalMemo: project.memo || ""
+  };
+}
+
+function createWorkBasicDraft(work) {
+  return {
+    workId: work.id,
+    status: work.status || "",
+    memo: work.memo || "",
+    originalStatus: work.status || "",
+    originalMemo: work.memo || ""
+  };
+}
+
+function ensureProjectBasicDraft(project) {
+  if (!projectBasicDraft || projectBasicDraft.projectId !== project.id) projectBasicDraft = createProjectBasicDraft(project);
+  return projectBasicDraft;
+}
+
+function ensureWorkBasicDraft(work) {
+  if (!workBasicDraft || workBasicDraft.workId !== work.id) workBasicDraft = createWorkBasicDraft(work);
+  return workBasicDraft;
+}
+
+function projectBasicIsDirty() {
+  return Boolean(projectBasicDraft && (
+    projectBasicDraft.status !== projectBasicDraft.originalStatus ||
+    projectBasicDraft.memo !== projectBasicDraft.originalMemo
+  ));
+}
+
+function workBasicIsDirty() {
+  return Boolean(workBasicDraft && (
+    workBasicDraft.status !== workBasicDraft.originalStatus ||
+    workBasicDraft.memo !== workBasicDraft.originalMemo
+  ));
+}
+
+function syncBasicSaveButton(scope, editable = true) {
+  const isProject = scope === "project";
+  const button = $(isProject ? "#saveProjectBasicBtn" : "#saveWorkBasicBtn");
+  if (!button) return;
+  const isBasicTab = isProject ? activeDetailTab === "basic" : activeWorkDetailTab === "basic";
+  const dirty = isProject ? projectBasicIsDirty() : workBasicIsDirty();
+  button.hidden = !editable || !isBasicTab;
+  button.disabled = !dirty;
+  button.classList.toggle("is-dirty", dirty);
+  button.setAttribute("aria-label", dirty ? "상태와 메모 변경사항 저장" : "저장할 상태 또는 메모 변경사항 없음");
+}
+
+function saveProjectBasicChanges({ showMessage = true } = {}) {
+  const project = state.projects.find((item) => item.id === projectBasicDraft?.projectId);
+  if (!project || !projectBasicDraft) return false;
+  const changedFields = [];
+  if (projectBasicDraft.status !== projectBasicDraft.originalStatus) changedFields.push("status");
+  if (projectBasicDraft.memo !== projectBasicDraft.originalMemo) changedFields.push("memo");
+  if (!changedFields.length) return false;
+  project.status = projectBasicDraft.status;
+  project.memo = projectBasicDraft.memo;
+  if (project.status === "납품 완료") project.progress = 100;
+  saveState();
+  notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: changedFields });
+  projectBasicDraft = createProjectBasicDraft(project);
+  renderAll();
+  if (activeProjectId === project.id) renderProjectDetail();
+  if (showMessage) showToast("영상 프로젝트 상태와 메모가 저장되었습니다.");
+  return true;
+}
+
+function saveWorkBasicChanges({ showMessage = true } = {}) {
+  const work = state.works.find((item) => item.id === workBasicDraft?.workId);
+  if (!work || !workBasicDraft) return false;
+  const changedFields = [];
+  if (workBasicDraft.status !== workBasicDraft.originalStatus) changedFields.push("status");
+  if (workBasicDraft.memo !== workBasicDraft.originalMemo) changedFields.push("memo");
+  if (!changedFields.length) return false;
+  work.status = workBasicDraft.status;
+  work.memo = workBasicDraft.memo;
+  saveState();
+  notifyEntityFieldChanges({ entityType: "work", entity: work, ownerIds: workOwners(work), fields: changedFields });
+  workBasicDraft = createWorkBasicDraft(work);
+  renderAll();
+  if (activeWorkId === work.id) renderWorkDetail();
+  if (showMessage) showToast("업무 프로젝트 상태와 메모가 저장되었습니다.");
+  return true;
+}
+
+function discardBasicChanges(scope) {
+  if (scope === "project") {
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    projectBasicDraft = project ? createProjectBasicDraft(project) : null;
+    if (project && $("#projectDetail")?.classList.contains("open")) renderProjectDetail();
+  }
+  if (scope === "work") {
+    const work = state.works.find((item) => item.id === activeWorkId);
+    workBasicDraft = work ? createWorkBasicDraft(work) : null;
+    if (work && $("#workDetail")?.classList.contains("open")) renderWorkDetail();
+  }
+}
+
+function closeUnsavedBasicModal({ restoreFocus = false } = {}) {
+  const modal = $("#unsavedBasicModal");
+  if (!modal) return;
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+  if (restoreFocus) pendingBasicLeaveAction?.focusTarget?.focus?.();
+}
+
+function requestBasicLeave(scope, action, focusTarget = document.activeElement) {
+  const dirty = scope === "project" ? projectBasicIsDirty() : workBasicIsDirty();
+  if (!dirty) {
+    action();
+    return true;
+  }
+  pendingBasicLeaveScope = scope;
+  pendingBasicLeaveAction = { run: action, focusTarget };
+  $("#unsavedBasicTitle").textContent = `${scope === "project" ? "영상 프로젝트" : "업무 프로젝트"} 변경사항을 저장할까요?`;
+  const modal = $("#unsavedBasicModal");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => $("#unsavedBasicSaveBtn")?.focus(), 0);
+  return false;
+}
+
+function requestAnyBasicLeave(action, focusTarget = document.activeElement) {
+  if ($("#projectDetail")?.classList.contains("open") && projectBasicIsDirty()) return requestBasicLeave("project", action, focusTarget);
+  if ($("#workDetail")?.classList.contains("open") && workBasicIsDirty()) return requestBasicLeave("work", action, focusTarget);
+  action();
+  return true;
+}
+
 function renderWorkDetail() {
   const work = state.works.find((item) => item.id === activeWorkId);
   if (!work) return;
   const editable = canEditWork(work);
+  const basicDraft = ensureWorkBasicDraft(work);
 
   $("#workDetail .detail-page").classList.toggle("readonly", !editable);
   $("#deleteWorkDetailBtn").disabled = !editable;
@@ -2133,7 +2470,7 @@ function renderWorkDetail() {
     ${propertyRow("↦", "시작일", workDateFieldControl("kickoffDate"))}
     ${propertyRow("✓", "완료일", workDateFieldControl("finalDate"))}
   `;
-  setRichMemoContent("workDetailMemo", work.memo || "", editable);
+  setRichMemoContent("workDetailMemo", basicDraft.memo, editable);
 
   [
     ["#workDetailType", "type", "workTypes"],
@@ -2142,11 +2479,11 @@ function renderWorkDetail() {
   ].forEach(([target, field, optionKey]) => {
     renderDropdown({
       target: $(target),
-      value: work[field],
+      value: field === "status" ? basicDraft.status : work[field],
       options: state.options[optionKey],
       placeholder: "선택",
       compact: true,
-      className: field === "status" && work.status ? workStatusClass(work.status) : "outline-cell",
+      className: field === "status" && basicDraft.status ? workStatusClass(basicDraft.status) : "outline-cell",
       disabled: !editable,
       onSelect: (value) => updateActiveWork(field, value)
     });
@@ -2196,6 +2533,7 @@ function renderWorkDetail() {
   renderWorkManagementRecords(work);
   renderWorkStudioReservation(work);
   renderWorkDetailTabs();
+  syncBasicSaveButton("work", editable);
 }
 
 function renderWorkDetailTabs() {
@@ -2242,6 +2580,16 @@ function ensureWorkStudioReservation(work) {
 }
 
 function removeWorkStudioReservation(work) {
+  const event = state.staffEvents.find((item) => item.id === work.studioReservationId);
+  const recipientOwners = uniqueValues([...workOwners(work), ...(event?.owners || [])]);
+  notifyOwners(recipientOwners, `${notificationActor().name}님이 ‘${work.title}’의 방송실 예약을 삭제했습니다.`, {
+    type: "work-studio",
+    workId: work.id,
+    staffEventId: work.studioReservationId,
+    actionType: "studio_reservation_deleted",
+    title: "방송실 예약 삭제",
+    targetTab: "studio"
+  });
   if (work.studioReservationId) {
     state.staffEvents = state.staffEvents.filter((event) => event.id !== work.studioReservationId);
   }
@@ -2278,6 +2626,8 @@ function syncWorkStudioReservation(work) {
     memo: reservation.memo || ""
   };
   const event = state.staffEvents.find((item) => item.id === work.studioReservationId);
+  const wasExisting = Boolean(event);
+  const previousOwners = event?.owners || [];
   if (event) {
     Object.assign(event, eventData);
   } else {
@@ -2285,6 +2635,14 @@ function syncWorkStudioReservation(work) {
     work.studioReservationId = id;
     state.staffEvents.push({ id, ...eventData });
   }
+  notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${work.title}’의 방송실 예약을 ${wasExisting ? "수정" : "생성"}했습니다.`, {
+    type: "work-studio",
+    workId: work.id,
+    staffEventId: work.studioReservationId,
+    actionType: wasExisting ? "studio_reservation_updated" : "studio_reservation_created",
+    title: wasExisting ? "방송실 예약 수정" : "방송실 예약 생성",
+    targetTab: "studio"
+  });
   saveState();
   queueRemoteSave();
   renderAll();
@@ -2739,8 +3097,12 @@ function addWorkTask() {
   if (workTaskDraft.editingTaskId) {
     const task = work.tasks.find((item) => item.id === workTaskDraft.editingTaskId);
     if (!task || !canManageWorkTask(work, task)) return;
+    const previous = JSON.stringify(task);
+    const previousOwners = taskOwners(task);
     Object.assign(task, taskPayload);
-    notifyOwners(taskPayload.owners, `할 일이 수정되었습니다: ${text}`, { type: "work-task", workId: work.id, taskId: task.id });
+    if (previous !== JSON.stringify(task)) {
+      notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...taskPayload.owners]), `${notificationActor().name}님이 ‘${work.title}’의 할 일 ‘${text}’을 수정했습니다.`, { type: "work-task", workId: work.id, taskId: task.id, actionType: "work_task_updated", title: "할 일 수정", targetTab: "tasks" });
+    }
     showToast("할 일이 수정되었습니다.");
   } else {
     const newTask = {
@@ -2750,7 +3112,7 @@ function addWorkTask() {
       ...taskPayload
     };
     work.tasks.push(newTask);
-    notifyOwners(taskPayload.owners, `할 일이 추가되었습니다: ${text}`, { type: "work-task", workId: work.id, taskId: newTask.id });
+    notifyOwners(uniqueValues([...workOwners(work), ...taskPayload.owners]), `${notificationActor().name}님이 ‘${work.title}’에 할 일 ‘${text}’을 추가했습니다.`, { type: "work-task", workId: work.id, taskId: newTask.id, actionType: "work_task_added", title: "할 일 추가", targetTab: "tasks" });
     showToast("할 일이 등록되었습니다.");
   }
   resetWorkTaskDraft(work);
@@ -2800,26 +3162,29 @@ function addWorkManagementRecord() {
   const user = currentUser();
   const authorName = currentRecordAuthorName(workOwners(work));
   if (editingWorkRecordId) {
+    const editedRecordId = editingWorkRecordId;
     const record = work.records.find((item) => item.id === editingWorkRecordId);
+    const changed = Boolean(record && record.body !== body);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
       record.author = authorName || record.author || "관리자";
     }
     editingWorkRecordId = null;
-    notifyOwners(workOwners(work), `관리기록이 수정되었습니다: ${work.title}`, { type: "work-record", workId: work.id });
+    if (changed) notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 수정했습니다.`, { type: "work-record", workId: work.id, recordId: editedRecordId, actionType: "work_record_updated", title: "관리기록 수정", targetTab: "records" });
     saveState();
     renderWorkDetail();
     showToast("관리기록이 수정되었습니다.");
     return;
   }
-  work.records.push({
+  const newRecord = {
     id: makeId(),
     author: authorName,
     body,
     createdAt: new Date().toISOString()
-  });
-  notifyOwners(workOwners(work), `관리기록이 등록되었습니다: ${work.title}`, { type: "work-record", workId: work.id });
+  };
+  work.records.push(newRecord);
+  notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’에 관리기록을 추가했습니다.`, { type: "work-record", workId: work.id, recordId: newRecord.id, actionType: "work_record_added", title: "관리기록 추가", targetTab: "records" });
   saveState();
   renderWorkDetail();
   showToast("관리기록이 등록되었습니다.");
@@ -2832,6 +3197,7 @@ function deleteWorkManagementRecord(recordId) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
+  notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 삭제했습니다.`, { type: "work-record", workId: work.id, recordId, actionType: "work_record_deleted", title: "관리기록 삭제", targetTab: "records" });
   work.records = (work.records || []).filter((record) => record.id !== recordId);
   if (editingWorkRecordId === recordId) editingWorkRecordId = null;
   saveState();
@@ -2839,10 +3205,12 @@ function deleteWorkManagementRecord(recordId) {
   showToast("관리기록이 삭제되었습니다.");
 }
 
-function openWorkDetail(workId, initialTab = "basic") {
+function performOpenWorkDetail(workId, initialTab = "basic") {
   const openingWork = state.works.find((work) => work.id === workId);
   if (!openingWork) return;
   activeWorkId = workId;
+  workChangeBuffer.clear();
+  if (!workBasicDraft || workBasicDraft.workId !== workId) workBasicDraft = createWorkBasicDraft(openingWork);
   editingWorkRecordId = null;
   workTaskComposerOpen = false;
   resetWorkTaskDraft();
@@ -2853,7 +3221,14 @@ function openWorkDetail(workId, initialTab = "basic") {
   $("#workDetail").setAttribute("aria-hidden", "false");
 }
 
-function closeWorkDetail() {
+function openWorkDetail(workId, initialTab = "basic") {
+  const open = () => performOpenWorkDetail(workId, initialTab);
+  if ($("#projectDetail")?.classList.contains("open") && projectBasicIsDirty()) return requestBasicLeave("project", open);
+  if ($("#workDetail")?.classList.contains("open") && activeWorkId !== workId && workBasicIsDirty()) return requestBasicLeave("work", open);
+  open();
+}
+
+function performCloseWorkDetail() {
   closeDatePicker();
   closeTimePicker();
   workTaskComposerOpen = false;
@@ -2861,7 +3236,13 @@ function closeWorkDetail() {
   $("#workDetail").classList.remove("open");
   $("#workDetail").setAttribute("aria-hidden", "true");
   activeWorkId = null;
+  workBasicDraft = null;
+  workChangeBuffer.clear();
   renderAll();
+}
+
+function closeWorkDetail() {
+  requestBasicLeave("work", performCloseWorkDetail);
 }
 
 function updateActiveWork(field, value, rerender = true) {
@@ -2872,11 +3253,25 @@ function updateActiveWork(field, value, rerender = true) {
     renderWorkDetail();
     return;
   }
+  if (field === "status" || field === "memo") {
+    const draft = ensureWorkBasicDraft(work);
+    draft[field] = value;
+    if (rerender && field === "status") renderWorkDetail();
+    else syncBasicSaveButton("work", true);
+    return;
+  }
   const previousOwners = field === "owners" ? workOwners(work) : [];
+  const previousValue = Array.isArray(work[field]) ? [...work[field]] : work[field];
+  const changed = JSON.stringify(previousValue ?? "") !== JSON.stringify(value ?? "");
+  if (!changed && !workChangeBuffer.has(field)) return;
   work[field] = value;
   if (field === "owners") {
-    notifyOwners(uniqueValues([...(Array.isArray(value) ? value : []), ...previousOwners]), `담당 업무가 변경되었습니다: ${work.title}`, { type: "work", workId: work.id });
+    notifyOwnerAssignmentChanges({ entityType: "work", entity: work, previousOwners, nextOwners: Array.isArray(value) ? value : [] });
+  } else if (rerender || workChangeBuffer.has(field)) {
+    notifyEntityFieldChanges({ entityType: "work", entity: work, ownerIds: workOwners(work), fields: [field] });
   }
+  if (!rerender) workChangeBuffer.add(field);
+  else workChangeBuffer.delete(field);
   saveState();
   if (rerender) {
     renderAll();
@@ -2890,13 +3285,18 @@ function deleteWork(workId) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
-  if (work?.studioReservationId) state.staffEvents = state.staffEvents.filter((event) => event.id !== work.studioReservationId);
-  if (work?.studioReservationId) state.staffEvents = state.staffEvents.filter((event) => event.id !== work.studioReservationId);
-  if (work?.studioReservationId) state.staffEvents = state.staffEvents.filter((event) => event.id !== work.studioReservationId);
+  notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’ 업무를 삭제했습니다.`, {
+    type: "work",
+    workId: work.id,
+    actionType: "work_deleted",
+    title: "업무 삭제",
+    targetTab: "basic"
+  });
   if (work?.studioReservationId) state.staffEvents = state.staffEvents.filter((event) => event.id !== work.studioReservationId);
   state.works = state.works.filter((item) => item.id !== workId);
+  workBasicDraft = null;
   saveState();
-  closeWorkDetail();
+  performCloseWorkDetail();
 }
 
 function taskOverviewItems() {
@@ -2924,6 +3324,50 @@ function taskOverviewItems() {
     }))
   );
   return [...projectItems, ...workItems];
+}
+
+function notifyTaskCompletion(source, task, done) {
+  if (!task) return;
+  const isWork = source === "work";
+  const parent = isWork
+    ? state.works.find((item) => item.id === task.workId || item.tasks?.some((entry) => entry.id === task.id))
+    : state.projects.find((item) => item.id === task.projectId);
+  if (!parent) return;
+  const parentOwners = isWork ? workOwners(parent) : projectOwners(parent);
+  const ownerIds = uniqueValues([...parentOwners, ...taskOwners(task)]);
+  const parentLabel = isWork ? "업무" : "영상 프로젝트";
+  const taskLabel = task.title || task.text || "할 일";
+  notifyOwners(ownerIds, `${notificationActor().name}님이 ‘${parent.title}’ ${parentLabel}의 할 일 ‘${taskLabel}’을 ${done ? "완료" : "완료 취소"} 처리했습니다.`, {
+    type: isWork ? "work-task" : "project-task",
+    workId: isWork ? parent.id : undefined,
+    projectId: isWork ? undefined : parent.id,
+    taskId: task.id,
+    actionType: isWork
+      ? (done ? "work_task_completed" : "work_task_reopened")
+      : (done ? "project_task_completed" : "project_task_reopened"),
+    title: done ? "할 일 완료" : "할 일 완료 취소",
+    targetTab: "tasks"
+  });
+}
+
+function notifyTaskDeletion(source, task) {
+  if (!task) return;
+  const isWork = source === "work";
+  const parent = isWork
+    ? state.works.find((item) => item.id === task.workId || item.tasks?.some((entry) => entry.id === task.id))
+    : state.projects.find((item) => item.id === task.projectId);
+  if (!parent) return;
+  const parentOwners = isWork ? workOwners(parent) : projectOwners(parent);
+  const taskLabel = task.title || task.text || "할 일";
+  notifyOwners(uniqueValues([...parentOwners, ...taskOwners(task)]), `${notificationActor().name}님이 ‘${parent.title}’의 할 일 ‘${taskLabel}’을 삭제했습니다.`, {
+    type: isWork ? "work-task" : "project-task",
+    workId: isWork ? parent.id : undefined,
+    projectId: isWork ? undefined : parent.id,
+    taskId: task.id,
+    actionType: isWork ? "work_task_deleted" : "project_task_deleted",
+    title: "할 일 삭제",
+    targetTab: "tasks"
+  });
 }
 
 function taskOverviewDayDiff(item) {
@@ -3727,6 +4171,7 @@ function renderProjectDetail() {
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (!project) return;
   const editable = canEditProject(project);
+  const basicDraft = ensureProjectBasicDraft(project);
 
   $(".detail-page").classList.toggle("readonly", !editable);
   $("#deleteDetailBtn").disabled = !editable;
@@ -3744,7 +4189,7 @@ function renderProjectDetail() {
     ${propertyRow("↦", "시작일", dateFieldControl("kickoffDate"))}
     ${propertyRow("✓", "완료일", dateFieldControl("finalDate"))}
   `;
-  setRichMemoContent("detailMemo", project.memo || "", editable);
+  setRichMemoContent("detailMemo", basicDraft.memo, editable);
   $("#detailBudget").value = formatMoneyInput(project.budget);
   $("#detailBudget").disabled = !editable;
 
@@ -3755,11 +4200,11 @@ function renderProjectDetail() {
   ].forEach(([target, field, optionKey]) => {
     renderDropdown({
       target: $(target),
-      value: project[field],
+      value: field === "status" ? basicDraft.status : project[field],
       options: state.options[optionKey],
       placeholder: "선택",
       compact: true,
-      className: field === "status" && project.status ? statusClass(project.status) : "outline-cell",
+      className: field === "status" && basicDraft.status ? statusClass(basicDraft.status) : "outline-cell",
       disabled: !editable,
       onSelect: (value) => updateActiveProject(field, value)
     });
@@ -3805,6 +4250,7 @@ function renderProjectDetail() {
   renderManagementRecords(project);
   renderProjectTasks(project);
   renderDetailTabs();
+  syncBasicSaveButton("project", editable);
 }
 
 function renderOwnerPicker(project) {
@@ -3817,11 +4263,7 @@ function renderOwnerPicker(project) {
     formatOptionLabel: ownerOptionLabel,
     compact: true,
     disabled: !editable,
-    onChange: (owners) => {
-      project.owners = owners;
-      saveState();
-      renderAll();
-    }
+    onChange: (owners) => updateActiveProject("owners", owners)
   });
 }
 
@@ -4131,8 +4573,12 @@ function addProjectTask() {
   if (detailTaskDraft.editingTaskId) {
     const task = state.tasks.find((item) => item.id === detailTaskDraft.editingTaskId);
     if (!task || !canManageTask(task)) return;
+    const previous = JSON.stringify(task);
+    const previousOwners = taskOwners(task);
     Object.assign(task, taskPayload);
-    notifyOwners(taskPayload.owners, `할 일이 수정되었습니다: ${text}`, { type: "project-task", projectId: project.id, taskId: task.id });
+    if (previous !== JSON.stringify(task)) {
+      notifyOwners(uniqueValues([...projectOwners(project), ...previousOwners, ...taskPayload.owners]), `${notificationActor().name}님이 ‘${project.title}’의 할 일 ‘${text}’을 수정했습니다.`, { type: "project-task", projectId: project.id, taskId: task.id, actionType: "project_task_updated", title: "할 일 수정", targetTab: "tasks" });
+    }
     showToast("할 일이 수정되었습니다.");
   } else {
     const newTask = {
@@ -4142,7 +4588,7 @@ function addProjectTask() {
       ...taskPayload
     };
     state.tasks.push(newTask);
-    notifyOwners(taskPayload.owners, `할 일이 추가되었습니다: ${text}`, { type: "project-task", projectId: project.id, taskId: newTask.id });
+    notifyOwners(uniqueValues([...projectOwners(project), ...taskPayload.owners]), `${notificationActor().name}님이 ‘${project.title}’에 할 일 ‘${text}’을 추가했습니다.`, { type: "project-task", projectId: project.id, taskId: newTask.id, actionType: "project_task_added", title: "할 일 추가", targetTab: "tasks" });
     showToast("할 일이 추가되었습니다.");
   }
   resetProjectTaskDraft(project);
@@ -4191,26 +4637,29 @@ function addManagementRecord() {
   const user = currentUser();
   const authorName = currentRecordAuthorName(projectOwners(project));
   if (editingRecordId) {
+    const editedRecordId = editingRecordId;
     const record = project.records.find((item) => item.id === editingRecordId);
+    const changed = Boolean(record && record.body !== body);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
       record.author = authorName || record.author || "관리자";
     }
     editingRecordId = null;
-    notifyOwners(projectOwners(project), `관리기록이 수정되었습니다: ${project.title}`, { type: "project-record", projectId: project.id });
+    if (changed) notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 수정했습니다.`, { type: "project-record", projectId: project.id, recordId: editedRecordId, actionType: "project_record_updated", title: "관리기록 수정", targetTab: "records" });
     saveState();
     renderProjectDetail();
     showToast("관리기록이 수정되었습니다.");
     return;
   }
-  project.records.push({
+  const newRecord = {
     id: makeId(),
     author: authorName,
     body,
     createdAt: new Date().toISOString()
-  });
-  notifyOwners(projectOwners(project), `관리기록이 등록되었습니다: ${project.title}`, { type: "project-record", projectId: project.id });
+  };
+  project.records.push(newRecord);
+  notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’에 관리기록을 추가했습니다.`, { type: "project-record", projectId: project.id, recordId: newRecord.id, actionType: "project_record_added", title: "관리기록 추가", targetTab: "records" });
   saveState();
   renderProjectDetail();
   showToast("관리기록이 등록되었습니다.");
@@ -4223,6 +4672,7 @@ function deleteManagementRecord(recordId) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
+  notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 삭제했습니다.`, { type: "project-record", projectId: project.id, recordId, actionType: "project_record_deleted", title: "관리기록 삭제", targetTab: "records" });
   project.records = (project.records || []).filter((record) => record.id !== recordId);
   if (editingRecordId === recordId) editingRecordId = null;
   saveState();
@@ -4230,9 +4680,12 @@ function deleteManagementRecord(recordId) {
   showToast("관리기록이 삭제되었습니다.");
 }
 
-function openProjectDetail(projectId, initialTab = "basic") {
-  if (!state.projects.some((project) => project.id === projectId)) return;
+function performOpenProjectDetail(projectId, initialTab = "basic") {
+  const openingProject = state.projects.find((project) => project.id === projectId);
+  if (!openingProject) return;
   activeProjectId = projectId;
+  projectChangeBuffer.clear();
+  if (!projectBasicDraft || projectBasicDraft.projectId !== projectId) projectBasicDraft = createProjectBasicDraft(openingProject);
   editingRecordId = null;
   detailTaskComposerOpen = false;
   activeDetailTab = initialTab;
@@ -4241,11 +4694,24 @@ function openProjectDetail(projectId, initialTab = "basic") {
   $("#projectDetail").setAttribute("aria-hidden", "false");
 }
 
-function closeProjectDetail() {
+function openProjectDetail(projectId, initialTab = "basic") {
+  const open = () => performOpenProjectDetail(projectId, initialTab);
+  if ($("#workDetail")?.classList.contains("open") && workBasicIsDirty()) return requestBasicLeave("work", open);
+  if ($("#projectDetail")?.classList.contains("open") && activeProjectId !== projectId && projectBasicIsDirty()) return requestBasicLeave("project", open);
+  open();
+}
+
+function performCloseProjectDetail() {
   $("#projectDetail").classList.remove("open");
   $("#projectDetail").setAttribute("aria-hidden", "true");
   activeProjectId = null;
+  projectBasicDraft = null;
+  projectChangeBuffer.clear();
   renderAll();
+}
+
+function closeProjectDetail() {
+  requestBasicLeave("project", performCloseProjectDetail);
 }
 
 function updateActiveProject(field, value, rerender = true) {
@@ -4256,11 +4722,25 @@ function updateActiveProject(field, value, rerender = true) {
     renderProjectDetail();
     return;
   }
+  if (field === "status" || field === "memo") {
+    const draft = ensureProjectBasicDraft(project);
+    draft[field] = value;
+    if (rerender && field === "status") renderProjectDetail();
+    else syncBasicSaveButton("project", true);
+    return;
+  }
   const previousOwners = field === "owners" ? projectOwners(project) : [];
+  const previousValue = Array.isArray(project[field]) ? [...project[field]] : project[field];
+  const changed = JSON.stringify(previousValue ?? "") !== JSON.stringify(value ?? "");
+  if (!changed && !projectChangeBuffer.has(field)) return;
   project[field] = ["budget", "spent", "progress"].includes(field) ? Number(value || 0) : value;
   if (field === "owners") {
-    notifyOwners(uniqueValues([...(Array.isArray(value) ? value : []), ...previousOwners]), `담당 프로젝트가 변경되었습니다: ${project.title}`, { type: "project", projectId: project.id });
+    notifyOwnerAssignmentChanges({ entityType: "project", entity: project, previousOwners, nextOwners: Array.isArray(value) ? value : [] });
+  } else if (rerender || projectChangeBuffer.has(field)) {
+    notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: [field] });
   }
+  if (!rerender) projectChangeBuffer.add(field);
+  else projectChangeBuffer.delete(field);
   if (field === "status" && value === "납품 완료") project.progress = 100;
   saveState();
   if (rerender) {
@@ -4303,11 +4783,19 @@ function deleteProject(projectId) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
+  notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 영상 프로젝트를 삭제했습니다.`, {
+    type: "project",
+    projectId: project.id,
+    actionType: "project_deleted",
+    title: "프로젝트 삭제",
+    targetTab: "basic"
+  });
   state.projects = state.projects.filter((project) => project.id !== projectId);
   state.tasks = state.tasks.filter((task) => task.projectId !== projectId);
   state.schedules = state.schedules.filter((schedule) => schedule.projectId !== projectId);
+  projectBasicDraft = null;
   saveState();
-  closeProjectDetail();
+  performCloseProjectDetail();
 }
 
 function syncTimeControls(prefix, draft) {
@@ -4600,9 +5088,32 @@ function addSchedule() {
   };
   if (scheduleDraft.editingScheduleId) {
     const schedule = state.schedules.find((item) => item.id === scheduleDraft.editingScheduleId);
-    if (schedule) Object.assign(schedule, scheduleData);
+    if (schedule) {
+      const previous = JSON.stringify(schedule);
+      const previousOwners = schedule.owners || [];
+      Object.assign(schedule, scheduleData);
+      if (previous !== JSON.stringify(schedule)) {
+        notifyOwners(uniqueValues([...previousOwners, ...schedule.owners]), `${notificationActor().name}님이 ‘${schedule.title}’ 일정을 수정했습니다.`, {
+          type: "schedule",
+          scheduleId: schedule.id,
+          actionType: "schedule_updated",
+          title: "일정 수정",
+          eventDate: schedule.date,
+          targetView: "calendar"
+        });
+      }
+    }
   } else {
-    state.schedules.push({ id: makeId(), ...scheduleData });
+    const schedule = { id: makeId(), ...scheduleData };
+    state.schedules.push(schedule);
+    notifyOwners(schedule.owners, `${notificationActor().name}님이 ‘${schedule.title}’ 일정을 생성했습니다.`, {
+      type: "schedule",
+      scheduleId: schedule.id,
+      actionType: "schedule_created",
+      title: "일정 생성",
+      eventDate: schedule.date,
+      targetView: "calendar"
+    });
   }
   saveState();
   closeScheduleModal();
@@ -4674,7 +5185,21 @@ function addStaffSchedule() {
   };
   if (staffScheduleDraft.editingStaffEventId) {
     const event = state.staffEvents.find((item) => item.id === staffScheduleDraft.editingStaffEventId);
-    if (event) Object.assign(event, eventData, { date: staffScheduleDraft.date || event.date });
+    if (event) {
+      const previous = JSON.stringify(event);
+      const previousOwners = event.owners || [];
+      Object.assign(event, eventData, { date: staffScheduleDraft.date || event.date });
+      if (previous !== JSON.stringify(event)) {
+        notifyOwners(uniqueValues([...previousOwners, ...event.owners]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약을 수정했습니다.`, {
+          type: "staff",
+          staffEventId: event.id,
+          actionType: "studio_reservation_updated",
+          title: "방송실 예약 수정",
+          eventDate: event.date,
+          targetView: "studio"
+        });
+      }
+    }
     saveState();
     closeStaffScheduleModal();
     renderAll();
@@ -4698,13 +5223,24 @@ function addStaffSchedule() {
       cursor.setDate(cursor.getDate() + 1);
     }
   }
+  let firstEventId = "";
   dates.forEach((nextDate) => {
+    const id = makeId();
+    if (!firstEventId) firstEventId = id;
     state.staffEvents.push({
-      id: makeId(),
+      id,
       ...eventData,
       seriesId,
       date: dateKey(nextDate),
     });
+  });
+  notifyOwners(owners, `${notificationActor().name}님이 ‘${title}’ 방송실 예약${staffScheduleDraft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, {
+    type: "staff",
+    staffEventId: firstEventId,
+    actionType: staffScheduleDraft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created",
+    title: staffScheduleDraft.repeatEnabled ? "반복 일정 생성" : "방송실 예약 생성",
+    eventDate: staffScheduleDraft.date,
+    targetView: "studio"
   });
   saveState();
   closeStaffScheduleModal();
@@ -4832,6 +5368,17 @@ function closeStaffEventDetail() {
 }
 
 function deleteScheduleEvent(scheduleId) {
+  const schedule = state.schedules.find((item) => item.id === scheduleId);
+  if (schedule) {
+    notifyOwners(schedule.owners || [], `${notificationActor().name}님이 ‘${schedule.title}’ 일정을 삭제했습니다.`, {
+      type: "schedule",
+      scheduleId: schedule.id,
+      actionType: "schedule_deleted",
+      title: "일정 삭제",
+      eventDate: schedule.date,
+      targetView: "calendar"
+    });
+  }
   state.schedules = state.schedules.filter((schedule) => schedule.id !== scheduleId);
   saveState();
   closeStaffEventDetail();
@@ -4839,6 +5386,17 @@ function deleteScheduleEvent(scheduleId) {
 }
 
 function deleteStaffEvent(staffEventId) {
+  const event = state.staffEvents.find((item) => item.id === staffEventId);
+  if (event) {
+    notifyOwners(event.owners || [event.owner], `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약을 삭제했습니다.`, {
+      type: "staff",
+      staffEventId: event.id,
+      actionType: "studio_reservation_deleted",
+      title: "방송실 예약 삭제",
+      eventDate: event.date,
+      targetView: "studio"
+    });
+  }
   state.staffEvents = state.staffEvents.filter((event) => event.id !== staffEventId);
   saveState();
   closeStaffEventDetail();
@@ -4851,6 +5409,16 @@ function deleteStaffEventSeries(staffEventId) {
     deleteStaffEvent(staffEventId);
     return;
   }
+  const seriesEvents = state.staffEvents.filter((item) => item.seriesId === event.seriesId);
+  const owners = uniqueValues(seriesEvents.flatMap((item) => item.owners || [item.owner]).filter(Boolean));
+  notifyOwners(owners, `${notificationActor().name}님이 ‘${event.title}’ 반복 방송실 일정을 삭제했습니다.`, {
+    type: "staff",
+    staffEventId: event.id,
+    actionType: "recurring_schedule_deleted",
+    title: "반복 일정 삭제",
+    eventDate: event.date,
+    targetView: "studio"
+  });
   state.staffEvents = state.staffEvents.filter((item) => item.seriesId !== event.seriesId);
   saveState();
   closeRepeatDeleteModal();
@@ -6474,6 +7042,256 @@ function unreadNotifications() {
   return (state.notifications || []).filter((item) => !item.read && (!item.userId || item.userId === user?.id));
 }
 
+function currentUserNotifications({ includeRead = notificationShowRead } = {}) {
+  const user = currentUser();
+  return (state.notifications || [])
+    .filter((item) => (!item.userId || item.userId === user?.id) && (includeRead || !item.read))
+    .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+function notificationDateGroup(value) {
+  const date = new Date(value || 0);
+  if (Number.isNaN(date.getTime())) return "이전 알림";
+  const today = dateKey(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const key = dateKey(date);
+  if (key === today) return "오늘";
+  if (key === dateKey(yesterdayDate)) return "어제";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function notificationTime(value) {
+  const date = new Date(value || 0);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function notificationCategoryClass(item) {
+  const action = item.actionType || item.source?.action || "";
+  if (action.includes("delete") || action.includes("removed")) return "danger";
+  if (action.includes("record")) return "record";
+  if (action.includes("task") && action.includes("complete")) return "complete";
+  if (action.includes("task")) return "task";
+  if (action.includes("studio") || action.includes("staff")) return "studio";
+  if (action.includes("owner")) return "owner";
+  if (action.includes("status")) return "status";
+  return "content";
+}
+
+function notificationCategoryIcon(item) {
+  return { danger: "×", record: "▤", complete: "✓", task: "✓", studio: "▣", owner: "♙", status: "▣", content: "▤" }[notificationCategoryClass(item)] || "•";
+}
+
+function renderNotificationItem(item) {
+  const actor = item.actorName || "알림";
+  const message = item.message || item.body || item.title || "새 알림이 있습니다.";
+  const sourceLabel = item.parentType === "project" || item.sourceType === "project" ? "영상 프로젝트"
+    : item.parentType === "work" || item.sourceType === "work" ? "업무"
+      : item.sourceType?.includes("task") ? "할 일"
+        : item.sourceType === "staff" ? "방송실" : item.sourceType === "schedule" ? "일정" : "알림";
+  return `
+    <button class="notification-item ${item.read ? "is-read" : "is-unread"} type-${notificationCategoryClass(item)}" data-notification-id="${esc(item.id)}" type="button">
+      <span class="notification-avatar">${esc(actor.slice(0, 1) || notificationCategoryIcon(item))}<i>${notificationCategoryIcon(item)}</i></span>
+      <span class="notification-copy"><strong>${esc(item.title || "알림")}</strong><span>${esc(message)}</span><small>${esc(notificationTime(item.createdAt))} · ${esc(sourceLabel)}</small></span>
+      ${item.read ? "" : '<i class="notification-unread-dot" aria-label="읽지 않음"></i>'}
+    </button>
+  `;
+}
+
+function renderNotificationGroups(items) {
+  if (!items.length) return '<div class="notification-empty"><span>✓</span><strong>새 알림이 없습니다.</strong><small>담당 항목의 변경사항이 여기에 표시됩니다.</small></div>';
+  const groups = new Map();
+  items.forEach((item) => {
+    const label = notificationDateGroup(item.createdAt);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(item);
+  });
+  return [...groups.entries()].map(([label, group]) => `<section class="notification-date-group"><h3>${esc(label)}</h3>${group.map(renderNotificationItem).join("")}</section>`).join("");
+}
+
+function renderNotificationSettings() {
+  const user = currentUser();
+  const settings = notificationSettingsForUser(user?.id || "");
+  const labels = {
+    projectStatus: "프로젝트 상태 변경",
+    projectContent: "프로젝트 내용 수정",
+    ownerChange: "담당자 변경",
+    record: "관리기록 추가·수정·삭제",
+    task: "할 일 추가·수정·완료·삭제",
+    work: "업무 상태 및 내용 변경",
+    studio: "방송실 예약 변경",
+    schedule: "일정 변경",
+    system: "기타 시스템 알림"
+  };
+  return `<section class="notification-settings ${notificationSettingsOpen ? "open" : ""}"><header><h3>알림 설정</h3><span>항목별 수신 설정</span></header>${Object.entries(labels).map(([key, label]) => `<label><span>${label}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</section>`;
+}
+
+function renderWebNotificationPopup() {
+  const popup = $("#webNotificationPopup");
+  if (!popup) return;
+  const items = currentUserNotifications().slice(0, 8);
+  popup.innerHTML = `
+    <header><h3>알림</h3><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
+    <div class="web-notification-list">${items.length ? items.map(renderNotificationItem).join("") : '<div class="notification-empty compact"><strong>새 알림이 없습니다.</strong></div>'}</div>
+    <button class="web-notification-all" data-notification-open-center type="button">모든 알림 보기</button>
+  `;
+  popup.classList.toggle("open", webNotificationsOpen);
+  popup.setAttribute("aria-hidden", String(!webNotificationsOpen));
+  $("#webNotifyBtn")?.setAttribute("aria-expanded", String(webNotificationsOpen));
+}
+
+function renderNotificationCenter() {
+  const list = $("#notificationCenterList");
+  if (list) list.innerHTML = renderNotificationGroups(currentUserNotifications());
+  const settings = $("#notificationCenterSettings");
+  if (settings) settings.innerHTML = notificationSettingsOpen ? renderNotificationSettings() : "";
+  const showRead = $("[data-notification-show-read]");
+  if (showRead) showRead.checked = notificationShowRead;
+}
+
+function renderNotificationSurfaces() {
+  const count = unreadNotifications().length;
+  const webCount = $("#webNotifyCount");
+  if (webCount) {
+    webCount.textContent = String(count);
+    webCount.hidden = count === 0;
+  }
+  const mobileCount = $("#mobileNotifyCount");
+  if (mobileCount) {
+    mobileCount.textContent = String(count);
+    mobileCount.hidden = count === 0;
+  }
+  renderWebNotificationPopup();
+  renderNotificationCenter();
+}
+
+function renderMobileNotifications() {
+  return `
+    <div class="mobile-notification-page">
+      <header><h2>알림</h2><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
+      <label class="notification-show-read"><input data-notification-show-read type="checkbox" ${notificationShowRead ? "checked" : ""} /> 읽은 알림 표시</label>
+      ${notificationSettingsOpen ? renderNotificationSettings() : ""}
+      <div class="mobile-notification-list">${renderNotificationGroups(currentUserNotifications())}</div>
+    </div>
+  `;
+}
+
+function closeWebNotifications() {
+  webNotificationsOpen = false;
+  renderWebNotificationPopup();
+}
+
+function openNotificationCenter(open = true) {
+  notificationCenterOpen = open;
+  const modal = $("#notificationCenterModal");
+  if (!modal) return;
+  modal.classList.toggle("open", open);
+  modal.setAttribute("aria-hidden", String(!open));
+  if (open) renderNotificationCenter();
+}
+
+function markAllNotificationsRead() {
+  const user = currentUser();
+  let changed = false;
+  (state.notifications || []).forEach((item) => {
+    if ((!item.userId || item.userId === user?.id) && !item.read) {
+      item.read = true;
+      changed = true;
+    }
+  });
+  if (changed) saveState();
+  if (mobileActiveSection === "notifications") renderMobileDashboard();
+  renderNotificationSurfaces();
+  showToast("모든 알림을 읽음 처리했습니다.");
+}
+
+function openNotificationClearConfirm() {
+  const modal = $("#notificationClearModal");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  setTimeout(() => $("#notificationClearCancelBtn")?.focus(), 0);
+}
+
+function closeNotificationClearConfirm() {
+  const modal = $("#notificationClearModal");
+  modal.classList.remove("open");
+  modal.setAttribute("aria-hidden", "true");
+}
+
+function clearCurrentUserNotifications() {
+  const user = currentUser();
+  state.notifications = (state.notifications || []).filter((item) => item.userId !== user?.id);
+  saveState();
+  closeNotificationClearConfirm();
+  if (mobileActiveSection === "notifications") renderMobileDashboard();
+  renderNotificationSurfaces();
+  showToast("모든 알림을 삭제했습니다.");
+}
+
+function markNotificationRead(item) {
+  if (!item || item.read) return;
+  item.read = true;
+  saveState();
+  renderNotificationSurfaces();
+}
+
+function openNotificationTarget(item) {
+  if (!item) return;
+  markNotificationRead(item);
+  closeWebNotifications();
+  openNotificationCenter(false);
+  openMobileMoreSheet(false);
+  const sourceType = item.sourceType || item.source?.type || "";
+  const projectId = item.parentType === "project" ? item.parentId : item.source?.projectId || (sourceType === "project" ? item.sourceId : "");
+  const workId = item.parentType === "work" ? item.parentId : item.source?.workId || (sourceType === "work" ? item.sourceId : "");
+  const targetId = item.subTargetId || item.source?.taskId || "";
+  if (projectId) {
+    const project = state.projects.find((entry) => entry.id === projectId);
+    if (!project) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    mobileActiveSection = "projects";
+    setView("projects");
+    if (item.targetTab === "tasks" && targetId) highlightedProjectTaskId = targetId;
+    openProjectDetail(projectId, item.targetTab || "basic");
+    return;
+  }
+  if (workId) {
+    const work = state.works.find((entry) => entry.id === workId);
+    if (!work) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    mobileActiveSection = "works";
+    setView("works");
+    if (item.targetTab === "tasks" && targetId) highlightedWorkTaskId = targetId;
+    openWorkDetail(workId, item.targetTab || "basic");
+    return;
+  }
+  if (sourceType === "schedule") {
+    const schedule = state.schedules.find((entry) => entry.id === (item.sourceId || item.source?.id));
+    if (!schedule) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    selectedCalendarDate = item.eventDate || schedule.date;
+    calendarDate = new Date(`${selectedCalendarDate}T00:00:00`);
+    mobileActiveSection = "calendar";
+    setView("calendar");
+    renderAll();
+    openScheduleEventDetail(schedule.id);
+    return;
+  }
+  if (sourceType === "staff") {
+    const staffEvent = state.staffEvents.find((entry) => entry.id === (item.sourceId || item.source?.id));
+    if (!staffEvent) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    setView("studio");
+    openStaffEventDetail(staffEvent.id);
+    return;
+  }
+  if (sourceType === "board") {
+    const postId = item.sourceId || item.source?.postId;
+    if (!(state.boardPosts || []).some((post) => post.id === postId && !post.deletedAt)) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    setView("board");
+    openBoardDetail(postId);
+    return;
+  }
+  showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+}
+
 function mobileTodayKey() {
   return dateKey(new Date());
 }
@@ -7109,7 +7927,10 @@ function renderMobileDashboard() {
   $("#mobileUserName") && ($("#mobileUserName").textContent = user?.name || user?.username || "사용자");
   $("#mobileUserMeta") && ($("#mobileUserMeta").textContent = user?.position || "과원");
   const unread = unreadNotifications();
-  $("#mobileNotifyCount") && ($("#mobileNotifyCount").textContent = String(unread.length));
+  if ($("#mobileNotifyCount")) {
+    $("#mobileNotifyCount").textContent = String(unread.length);
+    $("#mobileNotifyCount").hidden = unread.length === 0;
+  }
   const notificationTarget = $("#mobileNotifications");
   if (notificationTarget) {
     notificationTarget.innerHTML = unread.length
@@ -7124,10 +7945,11 @@ function renderMobileDashboard() {
     studio: renderMobileCalendar,
     board: renderMobileBoard,
     admin: renderMobileAdminInline,
-    notifications: renderMobileMoreInline,
+    notifications: renderMobileNotifications,
     settings: renderMobileMoreInline
   };
   app.innerHTML = (renderers[current] || renderMobileProjectCards)();
+  renderNotificationSurfaces();
 }
 
 function toggleMobileFab(force) {
@@ -7145,25 +7967,31 @@ function openMobileMoreSheet(open = true) {
   sheet.setAttribute("aria-hidden", String(!open));
 }
 
-function closeMobileDetailSheets() {
-  closeProjectDetail();
-  closeWorkDetail();
+function performCloseMobileDetailSheets() {
+  if ($("#projectDetail")?.classList.contains("open")) performCloseProjectDetail();
+  if ($("#workDetail")?.classList.contains("open")) performCloseWorkDetail();
   closeDropdown();
   closeDatePicker();
   closeTimePicker();
 }
 
-function openMobileSection(section) {
-  closeMobileDetailSheets();
+function closeMobileDetailSheets(afterClose) {
+  return requestAnyBasicLeave(() => {
+    performCloseMobileDetailSheets();
+    afterClose?.();
+  });
+}
+
+function performOpenMobileSection(section) {
   if (section !== "board") {
     activeBoardPostId = null;
     boardEditorPostId = null;
     boardViewerPostId = null;
   }
   document.body.classList.toggle("mobile-pc-view", section === "admin");
-  if (["projects", "works", "tasks", "calendar", "board"].includes(section)) {
+  if (["projects", "works", "tasks", "calendar", "board", "notifications", "settings"].includes(section)) {
     mobileActiveSection = section;
-    setView(section === "calendar" ? "calendar" : section);
+    if (!["notifications", "settings"].includes(section)) setView(section === "calendar" ? "calendar" : section);
     renderMobileDashboard();
     return;
   }
@@ -7181,6 +8009,10 @@ function openMobileSection(section) {
   }
   mobileActiveSection = "admin";
   renderMobileDashboard();
+}
+
+function openMobileSection(section) {
+  closeMobileDetailSheets(() => performOpenMobileSection(section));
 }
 
 let mobileDetailSwipeStart = null;
@@ -7331,6 +8163,13 @@ function submitMobileAddForm(form) {
       records: []
     };
     state.projects.unshift(project);
+    notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 영상 프로젝트를 생성했습니다.`, {
+      type: "project",
+      projectId: project.id,
+      actionType: "project_created",
+      title: "프로젝트 생성",
+      targetTab: "basic"
+    });
     saveState();
     closeMobileAddSheet();
     mobileActiveSection = "projects";
@@ -7357,6 +8196,13 @@ function submitMobileAddForm(form) {
       records: []
     };
     state.works.unshift(work);
+    notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’ 업무를 생성했습니다.`, {
+      type: "work",
+      workId: work.id,
+      actionType: "work_created",
+      title: "업무 생성",
+      targetTab: "basic"
+    });
     saveState();
     closeMobileAddSheet();
     mobileActiveSection = "works";
@@ -7388,11 +8234,30 @@ function submitMobileAddForm(form) {
     if (target.startsWith("project:")) {
       task.projectId = target.replace("project:", "");
       state.tasks.unshift(task);
+      const project = state.projects.find((item) => item.id === task.projectId);
+      if (project) {
+        notifyOwners(uniqueValues([...projectOwners(project), ...taskOwners(task)]), `${notificationActor().name}님이 ‘${project.title}’에 할 일 ‘${task.text}’을 추가했습니다.`, {
+          type: "project-task",
+          projectId: project.id,
+          taskId: task.id,
+          actionType: "project_task_added",
+          title: "할 일 추가",
+          targetTab: "tasks"
+        });
+      }
     } else {
       const work = state.works.find((item) => item.id === target.replace("work:", ""));
       if (!work) return;
       work.tasks = Array.isArray(work.tasks) ? work.tasks : [];
       work.tasks.unshift(task);
+      notifyOwners(uniqueValues([...workOwners(work), ...taskOwners(task)]), `${notificationActor().name}님이 ‘${work.title}’에 할 일 ‘${task.text}’을 추가했습니다.`, {
+        type: "work-task",
+        workId: work.id,
+        taskId: task.id,
+        actionType: "work_task_added",
+        title: "할 일 추가",
+        targetTab: "tasks"
+      });
     }
     saveState();
     closeMobileAddSheet();
@@ -7401,7 +8266,7 @@ function submitMobileAddForm(form) {
     return;
   }
   if (mobileAddMode === "schedule") {
-    state.schedules.push({
+    const schedule = {
       id: makeId(),
       title: String(data.get("title") || "").trim() || "새 일정",
       owners: mobileFormOwners(form),
@@ -7411,6 +8276,15 @@ function submitMobileAddForm(form) {
       allDay: Boolean(data.get("allDay")),
       startTime: String(data.get("startTime") || "09:00"),
       endTime: String(data.get("endTime") || "10:00")
+    };
+    state.schedules.push(schedule);
+    notifyOwners(schedule.owners, `${notificationActor().name}님이 ‘${schedule.title}’ 일정을 생성했습니다.`, {
+      type: "schedule",
+      scheduleId: schedule.id,
+      actionType: "schedule_created",
+      title: "일정 생성",
+      eventDate: schedule.date,
+      targetView: "calendar"
     });
     saveState();
     closeMobileAddSheet();
@@ -7474,19 +8348,88 @@ $("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 $$("[data-mobile-section]").forEach((button) => button.addEventListener("click", () => { openMobileSection(button.dataset.mobileSection); openMobileMoreSheet(false); toggleMobileFab(false); }));
 $("[data-mobile-more]")?.addEventListener("click", () => {
-  closeMobileDetailSheets();
-  openMobileMoreSheet(true);
+  closeMobileDetailSheets(() => openMobileMoreSheet(true));
 });
 $$("[data-close-mobile-sheet]").forEach((button) => button.addEventListener("click", () => openMobileMoreSheet(false)));
 $$("[data-close-mobile-add]").forEach((button) => button.addEventListener("click", () => closeMobileAddSheet()));
-$("#mobileNotifyBtn")?.addEventListener("click", () => openMobileMoreSheet(true));
-$("#mobileFabBtn")?.addEventListener("click", () => {
-  closeMobileDetailSheets();
-  if (mobileActiveSection === "calendar") {
-    openMobileAddSheet("schedule");
+$("#mobileNotifyBtn")?.addEventListener("click", () => openMobileSection("notifications"));
+$("#webNotifyBtn")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  webNotificationsOpen = !webNotificationsOpen;
+  renderWebNotificationPopup();
+});
+$("#closeNotificationCenterBtn")?.addEventListener("click", () => openNotificationCenter(false));
+$("#notificationCenterModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "notificationCenterModal") openNotificationCenter(false);
+});
+$("#notificationClearCancelBtn")?.addEventListener("click", closeNotificationClearConfirm);
+$("#notificationClearConfirmBtn")?.addEventListener("click", clearCurrentUserNotifications);
+$("#notificationClearModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "notificationClearModal") closeNotificationClearConfirm();
+});
+document.addEventListener("click", (event) => {
+  const notificationButton = event.target.closest("[data-notification-id]");
+  if (notificationButton) {
+    const item = (state.notifications || []).find((entry) => entry.id === notificationButton.dataset.notificationId);
+    openNotificationTarget(item);
     return;
   }
-  toggleMobileFab();
+  if (event.target.closest("[data-notification-read-all]")) {
+    markAllNotificationsRead();
+    return;
+  }
+  if (event.target.closest("[data-notification-clear-all]")) {
+    openNotificationClearConfirm();
+    return;
+  }
+  if (event.target.closest("[data-notification-open-center]")) {
+    closeWebNotifications();
+    openNotificationCenter(true);
+    return;
+  }
+  if (event.target.closest("[data-notification-settings]")) {
+    notificationSettingsOpen = !notificationSettingsOpen;
+    if (isMobileViewport() && mobileActiveSection === "notifications") renderMobileDashboard();
+    else {
+      closeWebNotifications();
+      openNotificationCenter(true);
+    }
+    return;
+  }
+  if (webNotificationsOpen && !event.target.closest(".web-notification-wrap")) closeWebNotifications();
+});
+document.addEventListener("change", (event) => {
+  if (event.target.matches("[data-notification-show-read]")) {
+    notificationShowRead = event.target.checked;
+    saveViewPrefs({ notificationShowRead });
+    if (isMobileViewport() && mobileActiveSection === "notifications") renderMobileDashboard();
+    renderNotificationSurfaces();
+    return;
+  }
+  const settingKey = event.target.dataset.notificationSetting;
+  if (!settingKey) return;
+  const user = currentUser();
+  if (!user) return;
+  state.notificationSettingsByUser = state.notificationSettingsByUser || {};
+  state.notificationSettingsByUser[user.id] = { ...notificationSettingsForUser(user.id), [settingKey]: event.target.checked };
+  saveState();
+  if (isMobileViewport() && mobileActiveSection === "notifications") renderMobileDashboard();
+  renderNotificationCenter();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (webNotificationsOpen) closeWebNotifications();
+  if (notificationCenterOpen) openNotificationCenter(false);
+  if ($("#notificationClearModal")?.classList.contains("open")) closeNotificationClearConfirm();
+});
+$("#mobileFabBtn")?.addEventListener("click", () => {
+  closeMobileDetailSheets(() => {
+    if (mobileActiveSection === "calendar") {
+      openMobileAddSheet("schedule");
+      return;
+    }
+    toggleMobileFab();
+  });
 });
 $("#mobileFabMenu")?.addEventListener("click", (event) => {
   const mode = event.target.closest("[data-mobile-add]")?.dataset.mobileAdd;
@@ -7565,6 +8508,7 @@ $("#mobileApp")?.addEventListener("change", (event) => {
     return;
   }
   item.task.done = event.target.checked;
+  notifyTaskCompletion(item.source, item.task, item.task.done);
   saveState();
   renderAll();
 });
@@ -7984,12 +8928,16 @@ $("#createAccountBtn").addEventListener("click", () => {
   );
 });
 
-$("#logoutBtn").addEventListener("click", async () => {
-  if (SUPABASE_ENABLED) await getSupabaseClient()?.auth.signOut();
+$("#logoutBtn").addEventListener("click", () => {
   currentProfile = null;
   state.currentUser = null;
   saveState();
   renderAll();
+  if (SUPABASE_ENABLED) {
+    getSupabaseClient()?.auth.signOut().catch(() => {
+      showToast("서버 로그아웃 처리가 지연되고 있습니다.");
+    });
+  }
 });
 
 document.body.addEventListener("click", (event) => {
@@ -8201,6 +9149,7 @@ $("#calendarGrid").addEventListener("drop", (event) => {
 });
 
 $("#closeDetailBtn").addEventListener("click", closeProjectDetail);
+$("#saveProjectBasicBtn").addEventListener("click", () => saveProjectBasicChanges());
 $("#deleteDetailBtn").addEventListener("click", () => {
   if (activeProjectId) confirmDelete(() => deleteProject(activeProjectId));
 });
@@ -8214,6 +9163,7 @@ $("#detailMemo").addEventListener("keyup", () => updateMemoToolbarState("detailM
 $("#detailMemo").addEventListener("mouseup", () => updateMemoToolbarState("detailMemo"));
 $("#detailMemo").addEventListener("focus", () => updateMemoToolbarState("detailMemo"));
 $("#closeWorkDetailBtn").addEventListener("click", closeWorkDetail);
+$("#saveWorkBasicBtn").addEventListener("click", () => saveWorkBasicChanges());
 $("#deleteWorkDetailBtn").addEventListener("click", () => {
   if (activeWorkId) confirmDelete(() => deleteWork(activeWorkId));
 });
@@ -8224,6 +9174,47 @@ $("#deleteConfirmModal").addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("#deleteConfirmModal")?.classList.contains("open")) closeDeleteConfirm();
+});
+$("#unsavedBasicSaveBtn").addEventListener("click", () => {
+  const pending = pendingBasicLeaveAction;
+  const scope = pendingBasicLeaveScope;
+  if (!pending || !scope) return;
+  if (scope === "project") saveProjectBasicChanges({ showMessage: false });
+  if (scope === "work") saveWorkBasicChanges({ showMessage: false });
+  closeUnsavedBasicModal();
+  pendingBasicLeaveAction = null;
+  pendingBasicLeaveScope = "";
+  pending.run();
+  showToast("변경사항을 저장했습니다.");
+});
+$("#unsavedBasicDiscardBtn").addEventListener("click", () => {
+  const pending = pendingBasicLeaveAction;
+  const scope = pendingBasicLeaveScope;
+  if (!pending || !scope) return;
+  discardBasicChanges(scope);
+  closeUnsavedBasicModal();
+  pendingBasicLeaveAction = null;
+  pendingBasicLeaveScope = "";
+  pending.run();
+});
+function cancelUnsavedBasicLeave() {
+  const focusTarget = pendingBasicLeaveAction?.focusTarget;
+  closeUnsavedBasicModal();
+  pendingBasicLeaveAction = null;
+  pendingBasicLeaveScope = "";
+  focusTarget?.focus?.();
+}
+$("#unsavedBasicCancelBtn").addEventListener("click", cancelUnsavedBasicLeave);
+$("#unsavedBasicModal").addEventListener("click", (event) => {
+  if (event.target.id === "unsavedBasicModal") cancelUnsavedBasicLeave();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("#unsavedBasicModal")?.classList.contains("open")) cancelUnsavedBasicLeave();
+});
+window.addEventListener("beforeunload", (event) => {
+  if (!projectBasicIsDirty() && !workBasicIsDirty()) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 $("#workDetail").addEventListener("click", (event) => {
   if (event.target.id === "workDetail") closeWorkDetail();
@@ -8313,14 +9304,26 @@ document.addEventListener("selectionchange", updateAllMemoToolbarStates);
 $("#workDetail .detail-tabs").addEventListener("click", (event) => {
   const tab = event.target.closest("[data-work-detail-tab]");
   if (!tab) return;
-  activeWorkDetailTab = tab.dataset.workDetailTab;
-  renderWorkDetailTabs();
+  const nextTab = tab.dataset.workDetailTab;
+  if (nextTab === activeWorkDetailTab) return;
+  requestBasicLeave("work", () => {
+    activeWorkDetailTab = nextTab;
+    renderWorkDetailTabs();
+    const work = state.works.find((item) => item.id === activeWorkId);
+    syncBasicSaveButton("work", canEditWork(work));
+  }, tab);
 });
 document.querySelector(".detail-tabs").addEventListener("click", (event) => {
   const tab = event.target.closest("[data-detail-tab]");
   if (!tab) return;
-  activeDetailTab = tab.dataset.detailTab;
-  renderDetailTabs();
+  const nextTab = tab.dataset.detailTab;
+  if (nextTab === activeDetailTab) return;
+  requestBasicLeave("project", () => {
+    activeDetailTab = nextTab;
+    renderDetailTabs();
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    syncBasicSaveButton("project", canEditProject(project));
+  }, tab);
 });
 
 $("#workTaskPanel").addEventListener("click", (event) => {
@@ -8401,6 +9404,7 @@ $("#workTaskPanel").addEventListener("click", (event) => {
     return;
   }
   confirmDelete(() => {
+    notifyTaskDeletion("work", task);
     work.tasks = work.tasks.filter((item) => item.id !== taskId);
     saveState();
     renderAll();
@@ -8427,6 +9431,7 @@ $("#workTaskPanel").addEventListener("change", (event) => {
     return;
   }
   task.done = event.target.checked;
+  notifyTaskCompletion("work", task, task.done);
   saveState();
   renderAll();
   renderWorkDetail();
@@ -8593,6 +9598,7 @@ $("#projectTaskPanel").addEventListener("click", (event) => {
     return;
   }
   confirmDelete(() => {
+    notifyTaskDeletion("project", task);
     state.tasks = state.tasks.filter((item) => item.id !== taskId);
     saveState();
     renderAll();
@@ -8610,6 +9616,7 @@ $("#projectTaskPanel").addEventListener("change", (event) => {
     return;
   }
   task.done = event.target.checked;
+  notifyTaskCompletion("project", task, task.done);
   saveState();
   renderAll();
   renderProjectDetail();
@@ -8626,6 +9633,7 @@ $("#taskList").addEventListener("change", (event) => {
     return;
   }
   item.task.done = event.target.checked;
+  notifyTaskCompletion(item.source, item.task, item.task.done);
   saveState();
   renderAll();
 });

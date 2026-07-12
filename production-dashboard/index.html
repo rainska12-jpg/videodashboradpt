@@ -12,9 +12,10 @@
     <meta name="apple-mobile-web-app-title" content="영상 업무 대시보드" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="stylesheet" href="./styles.css" />
-    <link rel="stylesheet" href="./work-task.css" />
+    <link rel="stylesheet" href="./work-task.css?v=36" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-calendar.css?v=35" />
+    <link rel="stylesheet" href="./notifications.css?v=39" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -103,6 +104,10 @@
             <h1 id="viewTitle">개요</h1>
           </div>
           <div class="toolbar">
+            <div class="web-notification-wrap">
+              <button id="webNotifyBtn" class="web-notification-button" type="button" aria-label="알림" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b id="webNotifyCount">0</b></button>
+              <section id="webNotificationPopup" class="web-notification-popup" aria-hidden="true"></section>
+            </div>
             <button id="seedBtn" class="pill ghost">데이터 초기화</button>
             <button id="exportBtn" class="pill primary">CSV 내보내기</button>
           </div>
@@ -410,6 +415,7 @@
       <div class="detail-page">
         <div class="detail-actions">
           <button id="closeDetailBtn" class="pill ghost">목록으로</button>
+          <button id="saveProjectBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteDetailBtn" class="pill danger-pill">삭제</button>
         </div>
         <input id="detailTitle" class="detail-title" placeholder="영상 프로젝트명을 입력하세요" />
@@ -454,6 +460,7 @@
       <div class="detail-page">
         <div class="detail-actions">
           <button id="closeWorkDetailBtn" class="pill ghost">목록으로</button>
+          <button id="saveWorkBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteWorkDetailBtn" class="pill danger-pill">삭제</button>
         </div>
         <input id="workDetailTitle" class="detail-title" placeholder="업무명을 입력하세요" />
@@ -853,8 +860,45 @@
         </div>
       </div>
     </div>
+    <div id="unsavedBasicModal" class="modal-shell confirm-modal unsaved-basic-modal" aria-hidden="true">
+      <div class="modal-card confirm-card unsaved-basic-card" role="dialog" aria-modal="true" aria-labelledby="unsavedBasicTitle">
+        <div class="confirm-icon unsaved-basic-icon">!</div>
+        <div>
+          <h3 id="unsavedBasicTitle">변경사항을 저장할까요?</h3>
+          <p>상태 또는 메모가 변경되었습니다. 이동하기 전에 저장 여부를 선택해주세요.</p>
+        </div>
+        <div class="confirm-actions three unsaved-basic-actions">
+          <button id="unsavedBasicSaveBtn" class="pill primary" type="button">저장</button>
+          <button id="unsavedBasicDiscardBtn" class="pill ghost" type="button">아니오</button>
+          <button id="unsavedBasicCancelBtn" class="pill ghost" type="button">취소</button>
+        </div>
+      </div>
+    </div>
+    <div id="notificationCenterModal" class="modal-shell notification-center-modal" aria-hidden="true">
+      <div class="modal-card notification-center-card" role="dialog" aria-modal="true" aria-labelledby="notificationCenterTitle">
+        <header class="notification-center-head">
+          <h2 id="notificationCenterTitle">알림</h2>
+          <div>
+            <button data-notification-read-all class="pill ghost" type="button">모두 읽음</button>
+            <button data-notification-clear-all class="pill ghost" type="button">모두 지우기</button>
+            <button data-notification-settings class="pill ghost" type="button">설정</button>
+            <button id="closeNotificationCenterBtn" class="circle" type="button" aria-label="닫기">×</button>
+          </div>
+        </header>
+        <label class="notification-show-read"><input data-notification-show-read type="checkbox" /> 읽은 알림 표시</label>
+        <div id="notificationCenterSettings"></div>
+        <div id="notificationCenterList" class="notification-center-list"></div>
+      </div>
+    </div>
+    <div id="notificationClearModal" class="modal-shell confirm-modal notification-clear-modal" aria-hidden="true">
+      <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="notificationClearTitle">
+        <div class="confirm-icon">!</div>
+        <div><h3 id="notificationClearTitle">모든 알림을 삭제하시겠습니까?</h3><p>삭제한 알림은 복구할 수 없습니다.</p></div>
+        <div class="confirm-actions"><button id="notificationClearCancelBtn" class="pill ghost" type="button">취소</button><button id="notificationClearConfirmBtn" class="pill danger-pill" type="button">모두 삭제</button></div>
+      </div>
+    </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=35"></script>
+    <script src="./app.js?v=39"></script>
   </body>
 </html>
