@@ -1151,8 +1151,7 @@ function isAdminUser() {
 
 function canEditProject(project) {
   const user = currentUser();
-  if (!user || !project) return false;
-  return isAdminUser() || projectOwners(project).some((ownerId) => canUserManageOwner(ownerId, user));
+  return Boolean(user && project);
 }
 
 function taskOwners(task) {
@@ -1209,8 +1208,7 @@ function workOwners(work) {
 
 function canEditWork(work) {
   const user = currentUser();
-  if (!user || !work) return false;
-  return isAdminUser() || workOwners(work).some((ownerId) => canUserManageOwner(ownerId, user));
+  return Boolean(user && work);
 }
 
 function canManageWorkTask(work, task) {
@@ -7190,8 +7188,11 @@ let mobilePendingAvatarUrl = "";
 let mobileEdgeSwipe = null;
 let mobileOrganizationLoading = false;
 let mobileOrganizationError = "";
+let mobileOrganizationNotice = "";
 let mobileOrganizationSearchTimer = null;
 let mobileOptionDrag = null;
+let mobilePreviousSection = "tasks";
+let mobileTouchActivation = null;
 
 function isMobileViewport() {
   return window.matchMedia("(max-width: 768px)").matches;
@@ -7334,7 +7335,7 @@ function renderNotificationSurfaces() {
 function renderMobileNotifications() {
   return `
     <div class="mobile-notification-page">
-      <header><h2>알림</h2><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
+      <header><button class="mobile-notification-close" data-mobile-notifications-close type="button" aria-label="알림 닫기">‹</button><h2>알림</h2><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
       <label class="notification-show-read"><input data-notification-show-read type="checkbox" ${notificationShowRead ? "checked" : ""} /> 읽은 알림 표시</label>
       ${notificationSettingsOpen ? renderNotificationSettings() : ""}
       <div class="mobile-notification-list">${renderNotificationGroups(currentUserNotifications())}</div>
@@ -8089,6 +8090,7 @@ async function refreshOrganizationDirectory() {
   if (!client || !currentProfile?.approved || mobileOrganizationLoading) return;
   mobileOrganizationLoading = true;
   mobileOrganizationError = "";
+  mobileOrganizationNotice = "";
   renderMobileDashboard();
   try {
     const { data, error } = await client.rpc("get_organization_directory");
@@ -8105,7 +8107,11 @@ async function refreshOrganizationDirectory() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     console.warn("Organization directory load failed", error);
-    mobileOrganizationError = "조직도 정보를 불러오지 못했습니다.";
+    if (organizationUsers().length) {
+      mobileOrganizationNotice = "운영 DB에 조직도 전용 설정이 아직 적용되지 않아 기존 승인 사용자 목록을 표시하고 있습니다.";
+    } else {
+      mobileOrganizationError = "조직도 전용 DB 설정이 아직 적용되지 않았고 표시 가능한 승인 사용자도 없습니다.";
+    }
   } finally {
     mobileOrganizationLoading = false;
     if (mobileActiveSection === "settings" && mobileMoreRoute === "organization") renderMobileDashboard();
@@ -8134,6 +8140,7 @@ function renderMobileOrganization() {
   return mobileSubpage("조직도", `
     <div class="mobile-directory-search"><input data-mobile-organization-search value="${esc(mobileOrganizationSearch)}" placeholder="이름, 직책 검색" /></div>
     ${isAdminUser() ? `<label class="mobile-directory-inactive"><input data-mobile-organization-inactive type="checkbox" ${mobileOrganizationIncludeInactive ? "checked" : ""} /> 비활성 사용자 포함</label>` : ""}
+    ${mobileOrganizationNotice ? `<div class="mobile-state-notice">${esc(mobileOrganizationNotice)}</div>` : ""}
     ${mobileOrganizationError ? `<div class="mobile-state-error"><b>${esc(mobileOrganizationError)}</b><button data-mobile-organization-retry type="button">다시 시도</button></div>` : ""}
     <div class="mobile-directory-groups">${mobileOrganizationLoading ? `<div class="mobile-directory-skeleton" aria-label="조직도 불러오는 중">${Array.from({ length: 5 }, () => "<i></i>").join("")}</div>` : users.length ? [...groups.entries()].map(([group, members]) => `<section><h3>${esc(group)} <small>${members.length}</small></h3><div>${members.map((user) => `<button data-mobile-member-id="${esc(user.id)}" type="button">${mobileAvatarMarkup(user, "small")}<span><strong>${esc(user.name || user.username || "사용자")}</strong><small>${esc([user.position, user.department].filter(Boolean).join(" · "))}</small></span><em>›</em></button>`).join("")}</div></section>`).join("") : `<div class="mobile-state-empty"><b>${mobileOrganizationSearch ? "검색 결과가 없습니다." : "표시할 구성원이 없습니다."}</b><span>승인된 활성 사용자가 여기에 표시됩니다.</span></div>`}</div>
   `);
@@ -8156,7 +8163,7 @@ function renderMobilePreferences() {
     <section class="mobile-settings-section"><h3>알림 설정</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
     <section class="mobile-settings-section"><h3>화면 설정</h3><div><div class="mobile-info-row"><span>테마</span><b>다크 모드</b></div></div></section>
     <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
-    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v47</b></div></div></section>
+    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v50</b></div></div></section>
     <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
   `);
 }
@@ -8262,6 +8269,69 @@ function renderMobileMoreRoute() {
   return renderMobileMoreInline();
 }
 
+function bindMobileCoreActions(app) {
+  const bind = (selector, handler) => {
+    app.querySelectorAll(selector).forEach((element) => {
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handler(element, event);
+      });
+    });
+  };
+
+  bind("[data-mobile-task-filter]", (button) => {
+    mobileTaskFilter = button.dataset.mobileTaskFilter;
+    mobileTaskSortOpen = false;
+    mobileTaskOwnerFilterOpen = false;
+    saveViewPrefs({ mobileTaskFilter });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-open-sort]", () => {
+    mobileTaskSortOpen = !mobileTaskSortOpen;
+    mobileTaskOwnerFilterOpen = false;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-close-sort]", () => { mobileTaskSortOpen = false; renderMobileDashboard(); });
+  bind("[data-mobile-open-owner-filter]", () => {
+    mobileTaskOwnerFilterOpen = !mobileTaskOwnerFilterOpen;
+    mobileTaskSortOpen = false;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-close-owner-filter]", () => { mobileTaskOwnerFilterOpen = false; renderMobileDashboard(); });
+  bind("[data-mobile-task-owner]", (button) => {
+    mobileTaskOwner = button.dataset.mobileTaskOwner || "";
+    mobileTaskOwnerFilterOpen = false;
+    saveViewPrefs({ mobileTaskOwner });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-task-sort]", (button) => {
+    mobileTaskSort = normalizeTaskSort(button.dataset.mobileTaskSort);
+    mobileTaskSortOpen = false;
+    saveViewPrefs({ mobileTaskSort });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-open-project]", (button) => openProjectDetail(button.dataset.mobileOpenProject));
+  bind("[data-mobile-open-work]", (button) => openWorkDetail(button.dataset.mobileOpenWork));
+  bind("[data-mobile-open-project-sort]", () => { mobileProjectSortOpen = !mobileProjectSortOpen; renderMobileDashboard(); });
+  bind("[data-mobile-close-project-sort]", () => { mobileProjectSortOpen = false; renderMobileDashboard(); });
+  bind("[data-mobile-project-sort-key]", (button) => {
+    projectSort = { key: button.dataset.mobileProjectSortKey, direction: button.dataset.mobileProjectSortDirection };
+    mobileProjectSortOpen = false;
+    saveViewPrefs({ projectSort });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-more-route]", (button) => navigateMobileMore(button.dataset.mobileMoreRoute));
+  bind("[data-mobile-more-back]", () => mobileMoreBack());
+  bind("[data-mobile-more-target]", (button) => openMobileSection(button.dataset.mobileMoreTarget));
+  bind("[data-mobile-notifications-close]", () => openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection));
+  bind("[data-mobile-open-task-id]", (button) => {
+    const item = taskOverviewItems().find((entry) => entry.id === button.dataset.mobileOpenTaskId && entry.source === button.dataset.mobileOpenTaskSource);
+    if (item?.source === "project" && item.sourceId) openProjectDetail(item.sourceId, "tasks");
+    if (item?.source === "work" && item.sourceId) openWorkDetail(item.sourceId, "tasks");
+  });
+}
+
 function renderMobileDashboard() {
   const app = $("#mobileApp");
   if (!app) return;
@@ -8301,6 +8371,7 @@ function renderMobileDashboard() {
     settings: renderMobileMoreRoute
   };
   app.innerHTML = (renderers[current] || renderMobileProjectCards)();
+  bindMobileCoreActions(app);
   app.querySelectorAll("[data-mobile-admin-user-open]").forEach((button) => {
     button.addEventListener("click", () => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
   });
@@ -8345,6 +8416,7 @@ function performOpenMobileSection(section) {
   }
   document.body.classList.toggle("mobile-pc-view", section === "admin");
   if (["projects", "works", "tasks", "calendar", "board", "notifications", "settings"].includes(section)) {
+    if (section === "notifications" && mobileActiveSection !== "notifications") mobilePreviousSection = mobileActiveSection || "tasks";
     mobileActiveSection = section;
     if (section === "settings") {
       mobileMoreRoute = "more";
@@ -8356,8 +8428,8 @@ function performOpenMobileSection(section) {
     return;
   }
   if (section === "studio") {
-    mobileActiveSection = "calendar";
-    setView("calendar");
+    mobileActiveSection = "studio";
+    setView("studio");
     renderMobileDashboard();
     return;
   }
@@ -9127,6 +9199,10 @@ $("#mobileApp")?.addEventListener("change", (event) => {
   renderAll();
 });
 $("#mobileApp")?.addEventListener("click", (event) => {
+  if (event.target.closest("[data-mobile-notifications-close]")) {
+    openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection);
+    return;
+  }
   const moreRoute = event.target.closest("[data-mobile-more-route]")?.dataset.mobileMoreRoute;
   if (moreRoute) {
     navigateMobileMore(moreRoute);
@@ -9434,6 +9510,29 @@ $("#mobileApp")?.addEventListener("click", (event) => {
     renderMobileDashboard();
   }
 });
+
+// iOS Safari/PWA에서 일부 동적 버튼의 click이 누락되는 경우를 보완합니다.
+$("#mobileApp")?.addEventListener("touchstart", (event) => {
+  if (event.touches.length !== 1 || !(event.target instanceof Element)) return;
+  const actionable = event.target.closest("button, label.mobile-hide-done-toggle, label.mobile-setting-toggle, label.mobile-directory-inactive");
+  if (!actionable || event.target.closest("input, textarea, select, [contenteditable='true']")) return;
+  const touch = event.touches[0];
+  mobileTouchActivation = { target: actionable, x: touch.clientX, y: touch.clientY, at: Date.now() };
+}, { passive: true });
+
+$("#mobileApp")?.addEventListener("touchend", (event) => {
+  if (!mobileTouchActivation || event.changedTouches.length !== 1) return;
+  const activation = mobileTouchActivation;
+  mobileTouchActivation = null;
+  const touch = event.changedTouches[0];
+  const dx = touch.clientX - activation.x;
+  const dy = touch.clientY - activation.y;
+  if (Math.hypot(dx, dy) > 14 || Date.now() - activation.at > 900 || !activation.target.isConnected) return;
+  event.preventDefault();
+  activation.target.click();
+}, { passive: false });
+
+$("#mobileApp")?.addEventListener("touchcancel", () => { mobileTouchActivation = null; }, { passive: true });
 
 function moveMobileCalendarMonth(delta) {
   const target = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + delta, 1);
