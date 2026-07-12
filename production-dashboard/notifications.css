@@ -1,7 +1,8 @@
 .web-notification-wrap { position: relative; }
-.web-notification-button { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.web-notification-button { position: relative; width: 44px; height: 44px; display: grid; place-items: center; overflow: visible; border-radius: 14px; background: var(--surface-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
 .web-notification-button svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.web-notification-button b { position: absolute; right: -5px; top: -5px; min-width: 20px; height: 20px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; background: #ff3d57; color: white; font-size: 11px; }
+.web-notification-button b { position: absolute; z-index: 2; right: 2px; top: 2px; min-width: 19px; height: 19px; display: grid; place-items: center; padding: 0 5px; border-radius: 999px; background: #ff3d57; color: white; font-size: 10px; line-height: 1; }
+.web-notification-button b[hidden] { display: none; }
 .web-notification-popup { position: absolute; z-index: 160; right: 0; top: 52px; width: min(410px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 90px)); display: none; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 18px; background: rgba(24,28,31,.98); color: var(--text); box-shadow: 0 24px 70px rgba(0,0,0,.58); backdrop-filter: blur(20px); }
 .web-notification-popup.open { display: grid; }
 .web-notification-popup > header { min-height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.08); }

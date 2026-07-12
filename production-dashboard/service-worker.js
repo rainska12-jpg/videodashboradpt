@@ -1,13 +1,13 @@
-const CACHE_NAME = "video-work-dashboard-v39";
+const CACHE_NAME = "video-work-dashboard-v47";
 const CORE_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css",
+  "/styles.css?v=47",
   "/work-task.css?v=36",
   "/work-studio.css",
   "/mobile-calendar.css?v=35",
-  "/notifications.css?v=39",
-  "/app.js?v=39",
+  "/notifications.css?v=47",
+  "/app.js?v=47",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

@@ -2,6 +2,7 @@ const STORAGE_KEY = "pd-production-dashboard-v4";
 const PREFS_KEY = "pd-production-dashboard-prefs-v1";
 const ADMIN_PASSWORD = "0314";
 const AUTH_DISABLED = false;
+const IS_LOCAL_ENV = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname) || window.location.hostname.endsWith(".local");
 const ENV = window.__ENV__ || {};
 const SUPABASE_URL = ENV.SUPABASE_URL || ENV.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY || ENV.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -37,6 +38,13 @@ function profileToUser(profile) {
     email: profile.email,
     name: profile.name || profile.email,
     position: profile.position || "과원",
+    department: profile.department || "",
+    phone: profile.phone || "",
+    avatarPath: profile.avatar_path || profile.avatarPath || "",
+    avatarUrl: profile.avatar_url || profile.avatarUrl || "",
+    organizationVisible: profile.organization_visible !== false,
+    sortOrder: Number(profile.sort_order || profile.sortOrder || 0),
+    createdAt: profile.created_at || profile.createdAt || "",
     role: profile.role || "user",
     status: profile.status || (profile.approved ? "active" : "pending"),
     approved: profile.approved === true || profile.status === "approved"
@@ -71,7 +79,12 @@ async function fetchCurrentProfile() {
     status: "pending",
     approved: false
   };
-  return mergeProfileUser(profile);
+  const user = mergeProfileUser(profile);
+  if (user?.avatarPath) {
+    user.avatarUrl = await signedProfileImageUrl(user.avatarPath);
+    currentProfile.avatarUrl = user.avatarUrl;
+  }
+  return user;
 }
 
 async function loadRemoteDashboardState() {
@@ -166,6 +179,9 @@ async function refreshSupabaseProfiles() {
     if (index >= 0) state.users[index] = { ...state.users[index], ...user };
     else state.users.push(user);
   });
+  await Promise.all(state.users.filter((user) => user.avatarPath).map(async (user) => {
+    user.avatarUrl = await signedProfileImageUrl(user.avatarPath);
+  }));
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
@@ -215,7 +231,8 @@ const defaultOptions = {
   staffTypes: ["정기교육", "비정기교육", "방송실 스탭", "장비 점검", "외부 지원", "촬영 지원"],
   studioStaffOwners: [...defaultOwnerNames],
   trainingTypes: ["자막 송출 교육", "카메라 기초 교육", "라이브 스위처 교육", "장비 점검 교육", "현장 실습"],
-  boardPrefixes: ["일반"]
+  boardPrefixes: ["일반"],
+  positions: ["관리자", "팀장", "PD", "기획", "촬영", "편집", "과원"]
 };
 
 const sampleData = {
@@ -357,7 +374,9 @@ let boardActiveTab = viewPref("boardActiveTab", "all");
 let activeBoardPostId = null;
 let boardEditorPostId = null;
 let boardViewerPostId = null;
+let editingBoardCommentId = null;
 let mobileBoardFilterOpen = false;
+let adminSection = viewPref("adminSection", "dropdowns");
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -574,6 +593,7 @@ function currentRecordAuthorName(fallbackOwnerIds = []) {
 function isCurrentUserRecord(record) {
   const user = currentUser();
   if (!user || !record) return false;
+  if (record.authorUserId) return record.authorUserId === user.id;
   const names = new Set([
     user.id,
     user.username,
@@ -584,6 +604,10 @@ function isCurrentUserRecord(record) {
   return names.has(record.author) || names.has(recordAuthorDisplayName(record.author));
 }
 
+function canManageRecord(record) {
+  return Boolean(record && currentUser() && (isAdminUser() || isCurrentUserRecord(record)));
+}
+
 function canUserManageOwner(ownerId, user = currentUser()) {
   if (!user) return false;
   if (isAdminUser()) return true;
@@ -591,6 +615,7 @@ function canUserManageOwner(ownerId, user = currentUser()) {
 }
 
 const defaultNotificationSettings = {
+  all: true,
   projectStatus: true,
   projectContent: true,
   ownerChange: true,
@@ -671,6 +696,7 @@ function notifyAssignedUsers({
     if (!owner?.linkedUserId || owner.status === "inactive" || owner.status === "deleted") return;
     const user = state.users.find((item) => item.id === owner.linkedUserId);
     if (!user || user.id === resolvedActorId || user.status === "inactive" || user.status === "pending" || user.approved === false) return;
+    if (notificationSettingsForUser(user.id).all === false) return;
     const settingKey = notificationSettingKey(actionType);
     if (notificationSettingsForUser(user.id)[settingKey] === false) return;
     const dedupeKey = `${user.id}:${actionType}:${sourceType}:${sourceId}:${subTargetId}`;
@@ -899,7 +925,7 @@ function normalizeState(data) {
       firstEditDate: project.firstEditDate || fallbackFinal,
       finalDate: fallbackFinal,
       calendarFields: { ...defaultCalendarFields, ...(project.calendarFields || {}) },
-      records: Array.isArray(project.records) ? project.records : []
+      records: Array.isArray(project.records) ? project.records.map((record) => ({ authorUserId: "", ...record })) : []
     };
   });
   const works = Array.isArray(data.works) ? data.works : [];
@@ -935,7 +961,7 @@ function normalizeState(data) {
             ...task
           }))
         : [],
-      records: Array.isArray(work.records) ? work.records : []
+      records: Array.isArray(work.records) ? work.records.map((record) => ({ authorUserId: "", ...record })) : []
     };
   });
   return {
@@ -1092,14 +1118,28 @@ function normalizeUsers(users) {
     email: user.email || user.username || "",
     name: user.name || (user.username === "videoadmin" ? "관리자" : user.username || user.email || ""),
     position: user.position || (user.role === "admin" || user.username === "videoadmin" ? "관리자" : "과원"),
+    department: user.department || "",
+    phone: user.phone || "",
+    avatarPath: user.avatarPath || user.avatar_path || "",
+    avatarUrl: user.avatarUrl || user.avatar_url || "",
+    organizationVisible: user.organizationVisible !== false && user.organization_visible !== false,
+    sortOrder: Number(user.sortOrder || user.sort_order || 0),
+    createdAt: user.createdAt || user.created_at || "",
     role: user.role || (index === 0 || user.username === "videoadmin" ? "admin" : "user"),
     status: user.status || "active",
     approved: user.approved !== false && user.status !== "pending"
   }));
+  normalized.forEach((user) => {
+    if (user.username === "1" && !IS_LOCAL_ENV) {
+      user.status = "inactive";
+      user.approved = false;
+      user.localOnly = true;
+    }
+  });
   if (!normalized.some((user) => user.username === "videoadmin")) {
     normalized.unshift({ id: "user-admin", username: "videoadmin", email: "admin@videowork.io", password: "0314", name: "관리자", position: "관리자", role: "admin", status: "active", approved: true });
   }
-  if (!normalized.some((user) => user.username === "1")) {
+  if (IS_LOCAL_ENV && !normalized.some((user) => user.username === "1")) {
     normalized.push({ id: "user-test-admin", username: "1", email: "", password: "1", name: "테스트 관리자", position: "관리자", role: "admin", status: "active", approved: true });
   }
   return normalized;
@@ -1110,7 +1150,9 @@ function isAdminUser() {
 }
 
 function canEditProject(project) {
-  return Boolean(currentUser() && project);
+  const user = currentUser();
+  if (!user || !project) return false;
+  return isAdminUser() || projectOwners(project).some((ownerId) => canUserManageOwner(ownerId, user));
 }
 
 function taskOwners(task) {
@@ -1151,7 +1193,12 @@ function taskTypeClass(type) {
 }
 
 function canManageTask(task) {
-  return Boolean(currentUser() && task);
+  const user = currentUser();
+  if (!user || !task) return false;
+  if (isAdminUser()) return true;
+  if (taskOwners(task).some((ownerId) => canUserManageOwner(ownerId, user))) return true;
+  const project = state.projects.find((item) => item.id === task.projectId);
+  return Boolean(project && projectOwners(project).some((ownerId) => canUserManageOwner(ownerId, user)));
 }
 
 function workOwners(work) {
@@ -1161,11 +1208,17 @@ function workOwners(work) {
 }
 
 function canEditWork(work) {
-  return Boolean(currentUser() && work);
+  const user = currentUser();
+  if (!user || !work) return false;
+  return isAdminUser() || workOwners(work).some((ownerId) => canUserManageOwner(ownerId, user));
 }
 
 function canManageWorkTask(work, task) {
-  return Boolean(currentUser() && work && task);
+  const user = currentUser();
+  if (!user || !work || !task) return false;
+  return isAdminUser()
+    || taskOwners(task).some((ownerId) => canUserManageOwner(ownerId, user))
+    || workOwners(work).some((ownerId) => canUserManageOwner(ownerId, user));
 }
 
 function workOwnersLabel(work) {
@@ -1201,7 +1254,7 @@ function renderAuth() {
   document.body.classList.toggle("auth-locked", !signedIn);
   $("#logoutBtn").classList.toggle("hidden", !signedIn);
   $("#currentUserPanel").classList.toggle("hidden", !signedIn);
-  $("#seedBtn").classList.toggle("hidden", !isAdminUser());
+  $("#seedBtn")?.classList.toggle("hidden", !isAdminUser());
   $("#currentUserBadge").textContent = AUTH_DISABLED ? "테스트 모드" : user ? (user.name || user.username || "사용자") : "";
   $("#currentUserMeta").textContent = AUTH_DISABLED ? "개발 확인용" : user ? (user.position || "과원") : "";
 }
@@ -1215,6 +1268,10 @@ function showAuthMode(mode) {
 async function login(username, password) {
   const cleanId = username.trim();
   if (cleanId === "1" && password === "1") {
+    if (!IS_LOCAL_ENV) {
+      setAuthMessage("테스트 관리자 계정은 로컬 환경에서만 사용할 수 있습니다.");
+      return;
+    }
     const testAdmin = state.users.find((item) => item.username === "1");
     if (testAdmin) {
       currentProfile = null;
@@ -2049,7 +2106,13 @@ function renderProjectList() {
             <div data-project-control data-project-owner-cell="${esc(project.id)}"></div>
             <div data-project-type-cell="${esc(project.id)}"></div>
             <div data-project-client-cell="${esc(project.id)}"></div>
-            <div class="project-status-cell" data-project-status-cell="${esc(project.id)}"></div>
+            <div class="project-status-complete-cell">
+              <div class="project-status-cell" data-project-status-cell="${esc(project.id)}"></div>
+              <label class="project-complete-check" title="완료 상태 변경">
+                <input type="checkbox" data-project-complete="${esc(project.id)}" ${project.status === "납품 완료" ? "checked" : ""} ${canEditProject(project) ? "" : "disabled"} />
+                <span></span>
+              </label>
+            </div>
             <div class="project-date-cell" data-project-first-date-cell="${esc(project.id)}"></div>
             <div class="project-date-cell" data-project-date-cell="${esc(project.id)}"></div>
           </article>
@@ -3060,8 +3123,8 @@ function renderWorkManagementRecords(work) {
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
-                    ${editable ? `<button class="record-control" data-edit-work-record="${esc(record.id)}" type="button">수정</button>` : ""}
-                    ${editable ? `<button class="record-control danger" data-delete-work-record="${esc(record.id)}" type="button">삭제</button>` : ""}
+                    ${canManageRecord(record) ? `<button class="record-control" data-edit-work-record="${esc(record.id)}" type="button">수정</button>` : ""}
+                    ${canManageRecord(record) ? `<button class="record-control danger" data-delete-work-record="${esc(record.id)}" type="button">삭제</button>` : ""}
                   </div>
                   <p>${esc(record.body).replaceAll("\n", "<br>")}</p>
                 </article>
@@ -3164,11 +3227,16 @@ function addWorkManagementRecord() {
   if (editingWorkRecordId) {
     const editedRecordId = editingWorkRecordId;
     const record = work.records.find((item) => item.id === editingWorkRecordId);
+    if (!canManageRecord(record)) {
+      showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
+      editingWorkRecordId = null;
+      renderWorkDetail();
+      return;
+    }
     const changed = Boolean(record && record.body !== body);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
-      record.author = authorName || record.author || "관리자";
     }
     editingWorkRecordId = null;
     if (changed) notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 수정했습니다.`, { type: "work-record", workId: work.id, recordId: editedRecordId, actionType: "work_record_updated", title: "관리기록 수정", targetTab: "records" });
@@ -3180,6 +3248,7 @@ function addWorkManagementRecord() {
   const newRecord = {
     id: makeId(),
     author: authorName,
+    authorUserId: user?.id || "",
     body,
     createdAt: new Date().toISOString()
   };
@@ -3193,8 +3262,9 @@ function addWorkManagementRecord() {
 function deleteWorkManagementRecord(recordId) {
   const work = state.works.find((item) => item.id === activeWorkId);
   if (!work) return;
-  if (!canEditWork(work)) {
-    showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
+  const record = work.records?.find((item) => item.id === recordId);
+  if (!canManageRecord(record)) {
+    showToast("작성자 본인만 관리기록을 삭제할 수 있습니다.");
     return;
   }
   notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 삭제했습니다.`, { type: "work-record", workId: work.id, recordId, actionType: "work_record_deleted", title: "관리기록 삭제", targetTab: "records" });
@@ -4183,15 +4253,12 @@ function renderProjectDetail() {
     ${propertyRow("☷", "업무분류", '<div id="detailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="detailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="detailClient"></div>')}
-    ${propertyRow("▣", "예산", '<input class="notion-input money-input" id="detailBudget" inputmode="numeric" />')}
     ${propertyRow("▾", "진행", '<div id="detailStatus"></div>')}
     <div class="property-break"></div>
     ${propertyRow("↦", "시작일", dateFieldControl("kickoffDate"))}
     ${propertyRow("✓", "완료일", dateFieldControl("finalDate"))}
   `;
   setRichMemoContent("detailMemo", basicDraft.memo, editable);
-  $("#detailBudget").value = formatMoneyInput(project.budget);
-  $("#detailBudget").disabled = !editable;
 
   [
     ["#detailType", "type", "types"],
@@ -4235,16 +4302,6 @@ function renderProjectDetail() {
       saveState();
       renderCalendar();
     });
-  });
-
-  [["#detailBudget", "budget"]].forEach(([selector, field]) => {
-    $(selector).addEventListener("input", (event) => {
-      const nextValue = formatMoneyInput(parseMoney(event.target.value));
-      event.target.value = nextValue;
-      event.target.setSelectionRange(nextValue.length, nextValue.length);
-      updateActiveProject(field, parseMoney(nextValue), false);
-    });
-    $(selector).addEventListener("change", (event) => updateActiveProject(field, parseMoney(event.target.value)));
   });
 
   renderManagementRecords(project);
@@ -4303,8 +4360,8 @@ function renderManagementRecords(project) {
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
-                    ${editable ? `<button class="record-control" data-edit-record="${esc(record.id)}" type="button">수정</button>` : ""}
-                    ${editable ? `<button class="record-control danger" data-delete-record="${esc(record.id)}" type="button">삭제</button>` : ""}
+                    ${canManageRecord(record) ? `<button class="record-control" data-edit-record="${esc(record.id)}" type="button">수정</button>` : ""}
+                    ${canManageRecord(record) ? `<button class="record-control danger" data-delete-record="${esc(record.id)}" type="button">삭제</button>` : ""}
                   </div>
                   <p>${esc(record.body).replaceAll("\n", "<br>")}</p>
                 </article>
@@ -4639,11 +4696,16 @@ function addManagementRecord() {
   if (editingRecordId) {
     const editedRecordId = editingRecordId;
     const record = project.records.find((item) => item.id === editingRecordId);
+    if (!canManageRecord(record)) {
+      showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
+      editingRecordId = null;
+      renderProjectDetail();
+      return;
+    }
     const changed = Boolean(record && record.body !== body);
     if (record) {
       record.body = body;
       record.updatedAt = new Date().toISOString();
-      record.author = authorName || record.author || "관리자";
     }
     editingRecordId = null;
     if (changed) notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 수정했습니다.`, { type: "project-record", projectId: project.id, recordId: editedRecordId, actionType: "project_record_updated", title: "관리기록 수정", targetTab: "records" });
@@ -4655,6 +4717,7 @@ function addManagementRecord() {
   const newRecord = {
     id: makeId(),
     author: authorName,
+    authorUserId: user?.id || "",
     body,
     createdAt: new Date().toISOString()
   };
@@ -4668,8 +4731,9 @@ function addManagementRecord() {
 function deleteManagementRecord(recordId) {
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (!project) return;
-  if (!canEditProject(project)) {
-    showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
+  const record = project.records?.find((item) => item.id === recordId);
+  if (!canManageRecord(record)) {
+    showToast("작성자 본인만 관리기록을 삭제할 수 있습니다.");
     return;
   }
   notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 삭제했습니다.`, { type: "project-record", projectId: project.id, recordId, actionType: "project_record_deleted", title: "관리기록 삭제", targetTab: "records" });
@@ -6007,6 +6071,14 @@ function boardAuthor() {
   };
 }
 
+function canManageBoardPost(post) {
+  return Boolean(post && currentUser() && (isAdminUser() || post.authorUserId === currentUser()?.id));
+}
+
+function canManageBoardComment(comment) {
+  return Boolean(comment && currentUser() && (isAdminUser() || comment.authorUserId === currentUser()?.id));
+}
+
 function notifyBoardNotice(post) {
   if (!post?.isNotice || post.notifyOff) return;
   const users = state.users || [];
@@ -6103,6 +6175,13 @@ function closeBoardDetail() {
 }
 
 function openBoardEditor(postId = null) {
+  if (postId) {
+    const post = state.boardPosts.find((item) => item.id === postId && !item.deletedAt);
+    if (!canManageBoardPost(post)) {
+      showToast("작성자 본인만 게시글을 수정할 수 있습니다.");
+      return;
+    }
+  }
   boardEditorPostId = postId || "";
   activeBoardPostId = null;
   renderBoard();
@@ -6165,6 +6244,7 @@ function createBoardPost(form) {
 function updateBoardPost(postId, form) {
   const post = state.boardPosts.find((item) => item.id === postId);
   if (!post) return;
+  if (!canManageBoardPost(post)) return showToast("작성자 본인만 게시글을 수정할 수 있습니다.");
   const wasNotice = Boolean(post.isNotice);
   const data = readBoardEditorForm(form);
   if (!data.title) {
@@ -6183,6 +6263,7 @@ function updateBoardPost(postId, form) {
 function deleteBoardPost(postId) {
   const post = state.boardPosts.find((item) => item.id === postId);
   if (!post) return;
+  if (!canManageBoardPost(post)) return showToast("작성자 본인만 게시글을 삭제할 수 있습니다.");
   post.deletedAt = new Date().toISOString();
   saveState();
   activeBoardPostId = null;
@@ -6215,6 +6296,7 @@ function updateBoardComment(commentId, body) {
   const comment = state.boardComments.find((item) => item.id === commentId && !item.deletedAt);
   const cleanBody = String(body || "").trim();
   if (!comment || !cleanBody) return;
+  if (!canManageBoardComment(comment)) return showToast("작성자 본인만 댓글을 수정할 수 있습니다.");
   comment.body = cleanBody;
   comment.updatedAt = new Date().toISOString();
   saveState();
@@ -6224,6 +6306,7 @@ function updateBoardComment(commentId, body) {
 function deleteBoardComment(commentId) {
   const comment = state.boardComments.find((item) => item.id === commentId);
   if (!comment) return;
+  if (!canManageBoardComment(comment)) return showToast("작성자 본인만 댓글을 삭제할 수 있습니다.");
   comment.deletedAt = new Date().toISOString();
   saveState();
   rerenderBoardSurfaces();
@@ -6274,11 +6357,7 @@ function renderBoardList() {
   const prefixOptions = [`<option value="">전체</option>`, ...boardPrefixes().map((prefix) => `<option value="${esc(prefix)}" ${boardPrefixFilter === prefix ? "selected" : ""}>${esc(prefix)}</option>`)].join("");
   return `
     <div class="board-page">
-      <div class="board-head">
-        <div>
-          <p class="eyebrow">Community</p>
-          <h2>게시판</h2>
-        </div>
+      <div class="board-head board-head-compact">
         <button class="pill primary" type="button" data-board-write>+ 글쓰기</button>
       </div>
       <div class="board-toolbar">
@@ -6375,7 +6454,7 @@ function renderBoardDetail(postId) {
   const post = state.boardPosts.find((item) => item.id === postId && !item.deletedAt);
   if (!post) return "";
   const comments = boardCommentsForPost(post.id);
-  const canEdit = isAdminUser() || post.authorUserId === currentUser()?.id;
+  const canEdit = canManageBoardPost(post);
   return `
     <div class="board-detail-shell">
       <article class="board-detail-card">
@@ -6394,13 +6473,15 @@ function renderBoardDetail(postId) {
         <div class="board-detail-content">${sanitizeBoardHtml(post.contentHtml || "<p>내용이 없습니다.</p>")}</div>
         <section class="board-comments">
           <h3>댓글 ${comments.length}</h3>
-          ${comments.map((comment) => `
+          ${comments.map((comment) => {
+            const canManage = canManageBoardComment(comment);
+            const editing = editingBoardCommentId === comment.id;
+            return `
             <article>
-              <div><strong>${esc(comment.authorName || "사용자")}</strong><small>${esc(boardDateText(comment.createdAt, true))}${comment.updatedAt ? " · 수정됨" : ""}</small></div>
-              <p>${esc(comment.body)}</p>
-              ${(isAdminUser() || comment.authorUserId === currentUser()?.id) ? `<button type="button" data-board-delete-comment="${esc(comment.id)}">삭제</button>` : ""}
+              <div class="board-comment-head"><strong>${esc(comment.authorName || "사용자")}</strong><span><small>${esc(boardDateText(comment.createdAt, true))}${comment.updatedAt ? " · 수정됨" : ""}</small>${canManage ? `<button type="button" data-board-edit-comment="${esc(comment.id)}">수정</button><button type="button" data-board-delete-comment="${esc(comment.id)}">삭제</button>` : ""}</span></div>
+              ${editing ? `<form class="board-comment-edit-form" data-board-comment-edit-form="${esc(comment.id)}"><input name="body" value="${esc(comment.body)}" /><button class="pill primary" type="submit">저장</button><button class="record-control" data-board-cancel-comment-edit type="button">취소</button></form>` : `<p>${esc(comment.body)}</p>`}
             </article>
-          `).join("") || '<div class="empty">댓글이 없습니다.</div>'}
+          `; }).join("") || '<div class="empty">댓글이 없습니다.</div>'}
           <form class="board-comment-form" data-board-comment-form="${esc(post.id)}">
             <input name="body" placeholder="댓글을 입력하세요." />
             <button class="pill primary" type="submit">댓글 등록</button>
@@ -6559,6 +6640,20 @@ function handleBoardClick(event) {
     confirmDelete(() => deleteBoardComment(commentId));
     return true;
   }
+  const editCommentId = event.target.closest("[data-board-edit-comment]")?.dataset.boardEditComment;
+  if (editCommentId) {
+    const comment = state.boardComments.find((item) => item.id === editCommentId && !item.deletedAt);
+    if (!canManageBoardComment(comment)) return true;
+    editingBoardCommentId = editCommentId;
+    rerenderBoardSurfaces();
+    requestAnimationFrame(() => $("[data-board-comment-edit-form] input")?.focus());
+    return true;
+  }
+  if (event.target.closest("[data-board-cancel-comment-edit]")) {
+    editingBoardCommentId = null;
+    rerenderBoardSurfaces();
+    return true;
+  }
   return false;
 }
 
@@ -6619,6 +6714,14 @@ function handleBoardSubmit(event) {
     commentForm.reset();
     return true;
   }
+  const commentEditForm = event.target.closest("[data-board-comment-edit-form]");
+  if (commentEditForm) {
+    event.preventDefault();
+    updateBoardComment(commentEditForm.dataset.boardCommentEditForm, commentEditForm.elements.body?.value || "");
+    editingBoardCommentId = null;
+    rerenderBoardSurfaces();
+    return true;
+  }
   return false;
 }
 
@@ -6643,10 +6746,9 @@ function renderAdmin() {
   $("#adminLogin").classList.add("hidden");
   $("#adminContent").classList.add("open");
 
-  const groups = [
+  const dropdownGroups = [
     ["types", "영상 프로젝트", "업무분류"],
     ["statuses", "영상 프로젝트", "진행"],
-    ["owners", "공통", "담당자 슬롯"],
     ["clients", "영상 프로젝트", "발주 부서"],
     ["projectTaskTypes", "영상 프로젝트", "할 일 분류"],
     ["workTaskTypes", "업무", "할 일 분류"],
@@ -6658,9 +6760,7 @@ function renderAdmin() {
     ["staffTypes", "방송실 예약 드롭다운", "스탭 종류 관리"],
     ["trainingTypes", "방송실 예약 드롭다운", "교육 유형 관리"]
   ];
-
-  $("#adminContent").innerHTML = groups
-    .map(([key, section, label]) => `
+  const renderOptionManager = ([key, section, label]) => `
       <article class="option-manager" data-option-group="${key}">
         <div>
           <p class="eyebrow">${esc(section)}</p>
@@ -6683,14 +6783,27 @@ function renderAdmin() {
             .join("")}
         </div>
       </article>
-    `)
-    .join("") + renderOwnerLinkManager() + renderAccountManager();
+    `;
+  const content = adminSection === "members"
+    ? `<div class="admin-member-grid">${renderOptionManager(["positions", "멤버", "직책 관리"])}${renderOptionManager(["owners", "멤버", "담당자 슬롯"])}${renderOwnerLinkManager()}${renderAccountManager()}</div>`
+    : `<div class="admin-dropdown-grid">${dropdownGroups.map(renderOptionManager).join("")}</div>`;
+
+  $("#adminContent").innerHTML = `
+    <div class="admin-hub-head">
+      <div><strong>${adminSection === "members" ? "멤버 관리" : "드롭다운 관리"}</strong><span>${adminSection === "members" ? "계정, 직책, 담당자 연결을 관리합니다." : "화면에서 사용하는 선택 항목을 관리합니다."}</span></div>
+      <nav aria-label="관리자 설정 메뉴">
+        <button class="${adminSection === "dropdowns" ? "active" : ""}" data-admin-section="dropdowns" type="button">드롭다운 관리</button>
+        <button class="${adminSection === "members" ? "active" : ""}" data-admin-section="members" type="button">멤버 관리</button>
+      </nav>
+    </div>
+    ${content}
+  `;
 }
 
 
 
 function renderOwnerLinkManager() {
-  const users = state.users.filter((user) => user.status !== "inactive" && user.approved !== false);
+  const users = state.users.filter((user) => (IS_LOCAL_ENV || user.username !== "1") && user.status !== "inactive" && user.approved !== false);
   return `
     <article class="option-manager account-manager owner-link-manager">
       <div>
@@ -6736,6 +6849,7 @@ function renderAccountManager() {
     `;
   }
 
+  const users = state.users.filter((user) => IS_LOCAL_ENV || user.username !== "1");
   return `
     <article class="option-manager account-manager">
       <div>
@@ -6743,7 +6857,7 @@ function renderAccountManager() {
         <h3>계정 관리</h3>
       </div>
       <div class="account-list">
-        ${state.users
+        ${users
           .map((user) => `
             <div class="account-row" data-user-id="${esc(user.id)}">
               <div>
@@ -6752,6 +6866,7 @@ function renderAccountManager() {
                 <small>${esc(user.email || user.username || "-")}</small>
               </div>
               <div class="account-actions">
+                <label class="account-position"><span>직책</span><select data-user-position="${esc(user.id)}">${uniqueValues([user.position, ...state.options.positions]).map((position) => `<option value="${esc(position)}" ${user.position === position ? "selected" : ""}>${esc(position)}</option>`).join("")}</select></label>
                 <button class="role-chip ${user.role === "admin" && user.approved !== false && user.status !== "pending" && user.status !== "inactive" ? "active" : ""}" data-set-role="admin" type="button">관리자</button>
                 <button class="role-chip ${user.role !== "admin" && user.approved !== false && user.status !== "pending" && user.status !== "inactive" ? "active" : ""}" data-set-role="user" type="button">일반</button>
                 <button class="role-chip ${user.approved === false || user.status === "pending" ? "active" : ""}" data-mark-pending="${esc(user.id)}" type="button">미승인</button>
@@ -6769,6 +6884,12 @@ function setUserRole(userId, role) {
   if (!isAdminUser()) return;
   const user = state.users.find((item) => item.id === userId);
   if (!user) return;
+  const activeAdmins = state.users.filter((item) => item.role === "admin" && item.approved !== false && item.status !== "pending" && item.status !== "inactive");
+  if (user.role === "admin" && role !== "admin" && activeAdmins.length <= 1) {
+    showToast("마지막 관리자 권한은 해제할 수 없습니다.");
+    renderAll();
+    return;
+  }
   user.role = role;
   user.status = "active";
   user.approved = true;
@@ -6776,6 +6897,18 @@ function setUserRole(userId, role) {
   syncProfileToSupabase(user);
   renderAll();
   showToast("계정 권한이 변경되었습니다.");
+}
+
+function setUserPosition(userId, position) {
+  if (!isAdminUser() || !state.options.positions.includes(position)) return;
+  const user = state.users.find((item) => item.id === userId);
+  if (!user) return;
+  user.position = position;
+  if (currentProfile?.id === userId) currentProfile.position = position;
+  saveState();
+  syncProfileToSupabase(user);
+  renderAll();
+  showToast("직책이 변경되었습니다.");
 }
 
 function markUserPending(userId) {
@@ -6942,6 +7075,14 @@ function renameOption(group, oldValue, nextValue) {
       if (series.title === oldValue) series.title = clean;
     }
   });
+  if (group === "positions") {
+    state.users.forEach((user) => {
+      if (user.position === oldValue) {
+        user.position = clean;
+        syncProfileToSupabase(user);
+      }
+    });
+  }
   saveState();
   renderAll();
 }
@@ -6987,6 +7128,15 @@ function deleteOption(group, value) {
       if (series.title === value) series.title = "";
     }
   });
+  if (group === "positions") {
+    const fallback = state.options.positions[0] || "과원";
+    state.users.forEach((user) => {
+      if (user.position === value) {
+        user.position = fallback;
+        syncProfileToSupabase(user);
+      }
+    });
+  }
   saveState();
   renderAll();
 }
@@ -7019,7 +7169,7 @@ function exportCsv() {
 
 
 
-let mobileActiveSection = "tasks";
+let mobileActiveSection = viewPref("mobileStartSection", "tasks");
 let mobileTaskFilter = viewPref("mobileTaskFilter", "all");
 let mobileTaskSort = viewPref("mobileTaskSort", taskOverviewSort);
 let mobileTaskHideDone = viewPref("mobileTaskHideDone", true);
@@ -7028,13 +7178,27 @@ let mobileTaskSortOpen = false;
 let mobileTaskOwnerFilterOpen = false;
 let mobileProjectSortOpen = false;
 let mobileAddMode = "";
+let mobileMoreRoute = viewPref("mobileMoreRoute", "more");
+let mobileMoreHistory = [];
+let mobileOrganizationSearch = "";
+let mobileOrganizationIncludeInactive = false;
+let mobileProfileDirty = false;
+let mobileProfileUploading = false;
+let mobileProfileUploadMessage = "";
+let mobilePendingAvatarBlob = null;
+let mobilePendingAvatarUrl = "";
+let mobileEdgeSwipe = null;
+let mobileOrganizationLoading = false;
+let mobileOrganizationError = "";
+let mobileOrganizationSearchTimer = null;
+let mobileOptionDrag = null;
 
 function isMobileViewport() {
   return window.matchMedia("(max-width: 768px)").matches;
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", board: "게시판", admin: "관리자", notifications: "알림", settings: "설정" }[view] || "영상";
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -7114,6 +7278,7 @@ function renderNotificationSettings() {
   const user = currentUser();
   const settings = notificationSettingsForUser(user?.id || "");
   const labels = {
+    all: "전체 알림",
     projectStatus: "프로젝트 상태 변경",
     projectContent: "프로젝트 내용 수정",
     ownerChange: "담당자 변경",
@@ -7861,20 +8026,139 @@ function renderMobileCalendar() {
   `;
 }
 
+function mobileAvatarMarkup(user, className = "") {
+  const label = String(user?.name || user?.username || "사용자").trim().slice(0, 1) || "사";
+  const url = user?.avatarUrl || "";
+  return `<span class="mobile-profile-avatar ${className}">${url ? `<img src="${esc(url)}" alt="${esc(user?.name || "프로필")}" loading="lazy" />` : esc(label)}</span>`;
+}
+
+function mobileMoreRow({ icon, label, route = "", target = "", badge = "", danger = false, disabled = false }) {
+  const attrs = route ? `data-mobile-more-route="${esc(route)}"` : target ? `data-mobile-more-target="${esc(target)}"` : "";
+  return `<button class="mobile-more-row ${danger ? "danger" : ""}" ${attrs} type="button" ${disabled ? "disabled" : ""}><i>${icon}</i><span>${esc(label)}</span>${badge ? `<b>${esc(badge)}</b>` : ""}<em>›</em></button>`;
+}
+
 function renderMobileMoreInline() {
+  const user = currentUser();
+  const unread = unreadNotifications().length;
   return `
-    <div class="mobile-section-head"><h2>더보기</h2><span>설정</span></div>
-    <div class="mobile-more-grid">
-      <button data-mobile-more-target="admin" type="button">관리자</button>
-      <button data-mobile-more-target="projects" type="button">프로젝트</button>
-      <button data-mobile-more-target="works" type="button">업무</button>
-      <button data-mobile-more-target="studio" type="button">방송실</button>
-      <button data-mobile-more-target="board" type="button">게시판</button>
-      <button data-mobile-more-target="notifications" type="button">알림</button>
-      <button data-mobile-more-target="settings" type="button">설정</button>
-      <button id="mobileInlineLogoutBtn" type="button">로그아웃</button>
+    <div class="mobile-more-page">
+      <button class="mobile-profile-summary" data-mobile-more-route="profile" type="button">
+        ${mobileAvatarMarkup(user)}
+        <span><strong>${esc(user?.name || user?.username || "사용자")}</strong><small>${esc([user?.position, user?.department || (user?.role === "admin" ? "관리자" : "일반 사용자")].filter(Boolean).join(" · "))}</small></span>
+        <b>프로필 수정</b>
+      </button>
+      <section><h3>조직</h3><div>${mobileMoreRow({ icon: "♙", label: "조직도", route: "organization" })}</div></section>
+      <section><h3>협업</h3><div>
+        ${mobileMoreRow({ icon: "▤", label: "게시판", target: "board" })}
+        ${mobileMoreRow({ icon: "▣", label: "방송실", target: "studio" })}
+        ${mobileMoreRow({ icon: "♢", label: "알림", target: "notifications", badge: unread ? String(unread) : "" })}
+      </div></section>
+      <section><h3>설정</h3><div>${mobileMoreRow({ icon: "⚙", label: "설정", route: "preferences" })}</div></section>
+      ${isAdminUser() ? `<section><h3>관리자</h3><div>${mobileMoreRow({ icon: "◇", label: "관리자 모드", route: "admin-home" })}</div></section>` : ""}
+      <section><h3>계정</h3><div>${mobileMoreRow({ icon: "↪", label: "로그아웃", route: "logout", danger: true })}</div></section>
     </div>
   `;
+}
+
+function mobileSubpage(title, body, action = "") {
+  return `<div class="mobile-more-subpage"><header><button data-mobile-more-back type="button" aria-label="뒤로가기">‹</button><h2>${esc(title)}</h2>${action || "<span></span>"}</header>${body}</div>`;
+}
+
+function renderMobileProfile() {
+  const user = currentUser();
+  const infoRows = [["이름", user?.name], ["직책", user?.position], ["소속", user?.department], ["이메일", user?.email], ["역할", user?.role === "admin" ? "관리자" : "일반 사용자"]].filter(([, value]) => value);
+  return mobileSubpage("프로필 관리", `
+    <form class="mobile-profile-form" data-mobile-profile-form>
+      <section class="mobile-profile-photo-card">
+        ${mobileAvatarMarkup({ ...user, avatarUrl: mobilePendingAvatarUrl || user?.avatarUrl }, "large")}
+        <strong>${esc(user?.name || "사용자")}</strong>
+        <small>${mobileProfileUploading ? "사진 업로드 중…" : esc(mobileProfileUploadMessage)}</small>
+        <div><label>사진 촬영<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" capture="user" /></label><label>앨범 선택<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" /></label></div>
+        ${mobilePendingAvatarBlob ? `<button class="pill primary" data-mobile-profile-upload type="button">사진 적용</button>` : ""}
+        ${user?.avatarPath || user?.avatarUrl ? `<button class="record-control danger" data-mobile-profile-photo-delete type="button">사진 삭제</button>` : ""}
+      </section>
+      <section class="mobile-settings-group">${infoRows.map(([label, value]) => `<div class="mobile-info-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join("")}</section>
+      <section class="mobile-settings-group"><label class="mobile-profile-edit-row"><span>연락처</span><input name="phone" value="${esc(user?.phone || "")}" placeholder="연락처 입력" /></label></section>
+      <button class="mobile-profile-save" type="submit">프로필 저장</button>
+    </form>
+  `);
+}
+
+async function refreshOrganizationDirectory() {
+  const client = getSupabaseClient();
+  if (!client || !currentProfile?.approved || mobileOrganizationLoading) return;
+  mobileOrganizationLoading = true;
+  mobileOrganizationError = "";
+  renderMobileDashboard();
+  try {
+    const { data, error } = await client.rpc("get_organization_directory");
+    if (error) throw error;
+    (data || []).forEach((profile) => {
+      const user = profileToUser(profile);
+      const index = state.users.findIndex((item) => item.id === user.id);
+      if (index >= 0) state.users[index] = { ...state.users[index], ...user };
+      else state.users.push(user);
+    });
+    await Promise.all(state.users.filter((user) => user.avatarPath).map(async (user) => {
+      user.avatarUrl = await signedProfileImageUrl(user.avatarPath);
+    }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    console.warn("Organization directory load failed", error);
+    mobileOrganizationError = "조직도 정보를 불러오지 못했습니다.";
+  } finally {
+    mobileOrganizationLoading = false;
+    if (mobileActiveSection === "settings" && mobileMoreRoute === "organization") renderMobileDashboard();
+  }
+}
+
+function organizationUsers() {
+  const query = mobileOrganizationSearch.trim().toLowerCase();
+  return state.users.filter((user) => {
+    if (!IS_LOCAL_ENV && user.username === "1") return false;
+    if (user.organizationVisible === false) return false;
+    const active = user.approved !== false && user.status !== "pending" && user.status !== "inactive";
+    if (!active && !(isAdminUser() && mobileOrganizationIncludeInactive)) return false;
+    return !query || `${user.name || ""} ${user.position || ""} ${user.department || ""} ${user.role || ""}`.toLowerCase().includes(query);
+  }).sort((a, b) => (a.sortOrder - b.sortOrder) || String(a.name || "").localeCompare(String(b.name || ""), "ko"));
+}
+
+function renderMobileOrganization() {
+  const users = organizationUsers();
+  const groups = new Map();
+  users.forEach((user) => {
+    const key = user.department || user.position || (user.role === "admin" ? "관리자" : "구성원");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(user);
+  });
+  return mobileSubpage("조직도", `
+    <div class="mobile-directory-search"><input data-mobile-organization-search value="${esc(mobileOrganizationSearch)}" placeholder="이름, 직책 검색" /></div>
+    ${isAdminUser() ? `<label class="mobile-directory-inactive"><input data-mobile-organization-inactive type="checkbox" ${mobileOrganizationIncludeInactive ? "checked" : ""} /> 비활성 사용자 포함</label>` : ""}
+    ${mobileOrganizationError ? `<div class="mobile-state-error"><b>${esc(mobileOrganizationError)}</b><button data-mobile-organization-retry type="button">다시 시도</button></div>` : ""}
+    <div class="mobile-directory-groups">${mobileOrganizationLoading ? `<div class="mobile-directory-skeleton" aria-label="조직도 불러오는 중">${Array.from({ length: 5 }, () => "<i></i>").join("")}</div>` : users.length ? [...groups.entries()].map(([group, members]) => `<section><h3>${esc(group)} <small>${members.length}</small></h3><div>${members.map((user) => `<button data-mobile-member-id="${esc(user.id)}" type="button">${mobileAvatarMarkup(user, "small")}<span><strong>${esc(user.name || user.username || "사용자")}</strong><small>${esc([user.position, user.department].filter(Boolean).join(" · "))}</small></span><em>›</em></button>`).join("")}</div></section>`).join("") : `<div class="mobile-state-empty"><b>${mobileOrganizationSearch ? "검색 결과가 없습니다." : "표시할 구성원이 없습니다."}</b><span>승인된 활성 사용자가 여기에 표시됩니다.</span></div>`}</div>
+  `);
+}
+
+function renderMobileMemberDetail(userId) {
+  const member = state.users.find((user) => user.id === userId && (isAdminUser() || (user.approved !== false && user.status !== "inactive")));
+  if (!member) return mobileSubpage("멤버 상세", '<div class="mobile-state-empty"><b>멤버 정보를 확인할 수 없습니다.</b></div>');
+  const canViewContact = isAdminUser() || member.id === currentUser()?.id;
+  const rows = [["직책", member.position], ["소속", member.department], ["역할", member.role === "admin" ? "관리자" : "일반 사용자"], ...(canViewContact ? [["이메일", member.email], ["연락처", member.phone]] : []), ["가입일", member.createdAt ? formatDate(member.createdAt.slice(0, 10)) : ""]].filter(([, value]) => value);
+  return mobileSubpage("멤버 상세", `<section class="mobile-member-detail">${mobileAvatarMarkup(member, "large")}<h3>${esc(member.name || member.username || "사용자")}</h3><p>${esc([member.position, member.department].filter(Boolean).join(" · "))}</p><div>${rows.map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("")}</div></section>`);
+}
+
+function renderMobilePreferences() {
+  const user = currentUser();
+  const settings = notificationSettingsForUser(user?.id || "");
+  const notificationLabels = { all: "전체 알림", projectStatus: "프로젝트 상태 변경", projectContent: "프로젝트 내용 수정", ownerChange: "담당자 변경", record: "관리기록 변경", task: "할 일 변경", work: "업무 변경", studio: "방송실 예약 변경", schedule: "일정 변경", system: "기타 알림" };
+  return mobileSubpage("설정", `
+    <section class="mobile-settings-section"><h3>계정 및 프로필</h3><div>${mobileMoreRow({ icon: "♙", label: "프로필 관리", route: "profile" })}<div class="mobile-info-row"><span>로그인 계정</span><b>${esc(user?.email || user?.username || "-")}</b></div></div></section>
+    <section class="mobile-settings-section"><h3>알림 설정</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
+    <section class="mobile-settings-section"><h3>화면 설정</h3><div><div class="mobile-info-row"><span>테마</span><b>다크 모드</b></div></div></section>
+    <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
+    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v47</b></div></div></section>
+    <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
+  `);
 }
 
 function renderMobileAdminInline() {
@@ -7913,16 +8197,84 @@ function renderMobileAdminInline() {
   `;
 }
 
+const mobileAdminOptionGroups = [
+  ["types", "프로젝트 분류"], ["statuses", "프로젝트 상태"], ["clients", "프로젝트 발주 부서"],
+  ["projectTaskTypes", "프로젝트 할 일"], ["workTypes", "업무 분류"], ["workStatuses", "업무 상태"],
+  ["workClients", "업무 발주 부서"], ["workTaskTypes", "업무 할 일"], ["boardPrefixes", "게시판 말머리"],
+  ["studioRooms", "방송실 장소"], ["staffTypes", "스탭 종류"], ["trainingTypes", "교육 유형"]
+];
+
+function renderMobileAdminHome() {
+  if (!isAdminUser()) return mobileSubpage("관리자 모드", '<div class="mobile-state-empty"><b>관리자 권한이 필요합니다.</b></div>');
+  const pending = state.users.filter((user) => user.approved === false || user.status === "pending").length;
+  const inactive = state.users.filter((user) => user.status === "inactive").length;
+  return mobileSubpage("관리자 모드", `
+    <section class="mobile-admin-summary"><article><span>승인 대기</span><b>${pending}</b></article><article><span>전체 사용자</span><b>${state.users.length}</b></article><article><span>비활성</span><b>${inactive}</b></article></section>
+    <section class="mobile-settings-section"><h3>사용자 관리</h3><div>${mobileMoreRow({ icon: "♙", label: "승인 대기 및 전체 사용자", route: "admin-users", badge: pending ? String(pending) : "" })}</div></section>
+    <section class="mobile-settings-section"><h3>운영 설정</h3><div>${mobileMoreRow({ icon: "◇", label: "담당자·직책 관리", route: "admin-members" })}${mobileMoreRow({ icon: "▤", label: "드롭다운 항목 관리", route: "admin-dropdowns" })}</div></section>
+  `);
+}
+
+function renderMobileAdminUsers() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  const users = state.users.filter((user) => IS_LOCAL_ENV || user.username !== "1");
+  return mobileSubpage("사용자 관리", `<div class="mobile-admin-user-list">${users.map((user) => {
+    const pending = user.approved === false || user.status === "pending";
+    return `<article data-mobile-admin-user="${esc(user.id)}"><button class="mobile-admin-user-open" data-mobile-admin-user-open="${esc(user.id)}" type="button">${mobileAvatarMarkup(user, "small")}<span><strong>${esc(user.name || user.username || "사용자")}</strong><small>${esc(user.email || user.username || "-")}</small></span><b>${pending ? "승인 대기" : user.status === "inactive" ? "비활성" : "활성"}</b></button><label>직책<select data-mobile-user-position="${esc(user.id)}">${uniqueValues([user.position, ...state.options.positions]).map((position) => `<option value="${esc(position)}" ${user.position === position ? "selected" : ""}>${esc(position)}</option>`).join("")}</select></label><div>${pending ? `<button class="primary" data-mobile-user-approve type="button">승인</button>` : ""}<button class="${user.role === "admin" ? "active" : ""}" data-mobile-user-role="admin" type="button">관리자</button><button class="${user.role !== "admin" && !pending ? "active" : ""}" data-mobile-user-role="user" type="button">일반</button><button data-mobile-user-pending type="button">미승인</button><button class="danger" data-mobile-user-delete type="button" ${user.id === currentUser()?.id ? "disabled" : ""}>삭제</button></div></article>`;
+  }).join("") || '<div class="mobile-state-empty"><b>등록된 사용자가 없습니다.</b></div>'}</div>`);
+}
+
+function renderMobileAdminUserDetail(userId) {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  const user = state.users.find((item) => item.id === userId);
+  if (!user) return mobileSubpage("사용자 상세", '<div class="mobile-state-empty"><b>사용자 정보를 찾을 수 없습니다.</b></div>');
+  const pending = user.approved === false || user.status === "pending";
+  const rows = [["이메일", user.email || user.username], ["연락처", user.phone], ["소속", user.department], ["가입일", user.createdAt ? formatDate(user.createdAt.slice(0, 10)) : ""]].filter(([, value]) => value);
+  return mobileSubpage("사용자 상세", `<section class="mobile-member-detail">${mobileAvatarMarkup(user, "large")}<h3>${esc(user.name || user.username || "사용자")}</h3><p>${esc([user.position, user.role === "admin" ? "관리자" : "일반 사용자"].filter(Boolean).join(" · "))}</p><div>${rows.map(([label, value]) => `<span><small>${esc(label)}</small><b>${esc(value)}</b></span>`).join("")}</div></section><section class="mobile-admin-user-list"><article data-mobile-admin-user="${esc(user.id)}"><label>직책<select data-mobile-user-position="${esc(user.id)}">${uniqueValues([user.position, ...state.options.positions]).map((position) => `<option value="${esc(position)}" ${user.position === position ? "selected" : ""}>${esc(position)}</option>`).join("")}</select></label><div>${pending ? `<button class="primary" data-mobile-user-approve type="button">승인</button>` : ""}<button class="${user.role === "admin" ? "active" : ""}" data-mobile-user-role="admin" type="button">관리자</button><button class="${user.role !== "admin" && !pending ? "active" : ""}" data-mobile-user-role="user" type="button">일반</button><button data-mobile-user-pending type="button" ${user.id === currentUser()?.id ? "disabled" : ""}>미승인</button><button class="danger" data-mobile-user-delete type="button" ${user.id === currentUser()?.id ? "disabled" : ""}>삭제</button></div></article></section>`);
+}
+
+function renderMobileOptionGroup(group, label) {
+  return `<details class="mobile-admin-option-group" open data-mobile-option-group="${esc(group)}"><summary><span>${esc(label)}</span><b>${state.options[group].length}</b></summary><form data-mobile-option-add="${esc(group)}"><input name="option" placeholder="새 항목" /><button type="submit">추가</button></form><div>${state.options[group].map((option, index) => `<span data-mobile-option-index="${index}"><button class="mobile-option-drag" data-mobile-option-drag type="button" aria-label="${esc(option)} 순서 이동">☰</button><input value="${esc(option)}" data-mobile-option-value="${esc(option)}" /><button data-mobile-option-save="${esc(option)}" type="button" aria-label="${esc(option)} 수정">저장</button><button data-mobile-option-delete="${esc(option)}" type="button" aria-label="${esc(option)} 삭제">×</button></span>`).join("")}</div></details>`;
+}
+
+function renderMobileAdminDropdowns() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  return mobileSubpage("드롭다운 관리", `<div class="mobile-admin-options">${mobileAdminOptionGroups.map(([group, label]) => renderMobileOptionGroup(group, label)).join("")}</div>`);
+}
+
+function renderMobileAdminMembers() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  const users = state.users.filter((user) => (IS_LOCAL_ENV || user.username !== "1") && user.status !== "inactive" && user.approved !== false);
+  return mobileSubpage("담당자·직책 관리", `<div class="mobile-admin-options">${renderMobileOptionGroup("positions", "직책")}${renderMobileOptionGroup("owners", "담당자 슬롯")}<details class="mobile-admin-option-group" open><summary><span>담당자 계정 연결</span><b>${ownerSlots().length}</b></summary><div class="mobile-owner-links">${ownerSlots().map((owner) => `<label><span>${esc(owner.name)}</span><select data-link-owner-id="${esc(owner.id)}"><option value="">미연결</option>${users.map((user) => `<option value="${esc(user.id)}" ${owner.linkedUserId === user.id ? "selected" : ""}>${esc(user.name || user.username)}</option>`).join("")}</select></label>`).join("")}</div><button class="mobile-admin-save-links" data-save-owner-links type="button">연결 저장</button></details></div>`);
+}
+
+function renderMobileMoreRoute() {
+  if (mobileMoreRoute === "more") return renderMobileMoreInline();
+  if (mobileMoreRoute === "profile") return renderMobileProfile();
+  if (mobileMoreRoute === "organization") return renderMobileOrganization();
+  if (mobileMoreRoute.startsWith("member:")) return renderMobileMemberDetail(mobileMoreRoute.slice(7));
+  if (mobileMoreRoute === "preferences") return renderMobilePreferences();
+  if (mobileMoreRoute === "admin-home") return renderMobileAdminHome();
+  if (mobileMoreRoute === "admin-users") return renderMobileAdminUsers();
+  if (mobileMoreRoute.startsWith("admin-user:")) return renderMobileAdminUserDetail(mobileMoreRoute.slice(11));
+  if (mobileMoreRoute === "admin-dropdowns") return renderMobileAdminDropdowns();
+  if (mobileMoreRoute === "admin-members") return renderMobileAdminMembers();
+  return renderMobileMoreInline();
+}
+
 function renderMobileDashboard() {
   const app = $("#mobileApp");
   if (!app) return;
   const current = mobileActiveSection || "projects";
+  app.dataset.mobileMoreRoute = mobileMoreRoute;
   $("#mobileViewTitle") && ($("#mobileViewTitle").textContent = mobileTitleForView(current));
   $("#mobileFabWrap")?.classList.toggle("calendar-mode", current === "calendar");
+  $("#mobileFabWrap")?.classList.toggle("is-hidden", ["settings", "notifications", "board"].includes(current));
   $$(".mobile-tab").forEach((button) => {
     const section = button.dataset.mobileSection;
     button.classList.toggle("active", section === current);
   });
+  $("[data-mobile-more]")?.classList.toggle("active", current === "settings");
   const user = currentUser();
   $("#mobileUserName") && ($("#mobileUserName").textContent = user?.name || user?.username || "사용자");
   $("#mobileUserMeta") && ($("#mobileUserMeta").textContent = user?.position || "과원");
@@ -7946,9 +8298,12 @@ function renderMobileDashboard() {
     board: renderMobileBoard,
     admin: renderMobileAdminInline,
     notifications: renderMobileNotifications,
-    settings: renderMobileMoreInline
+    settings: renderMobileMoreRoute
   };
   app.innerHTML = (renderers[current] || renderMobileProjectCards)();
+  app.querySelectorAll("[data-mobile-admin-user-open]").forEach((button) => {
+    button.addEventListener("click", () => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
+  });
   renderNotificationSurfaces();
 }
 
@@ -7991,6 +8346,11 @@ function performOpenMobileSection(section) {
   document.body.classList.toggle("mobile-pc-view", section === "admin");
   if (["projects", "works", "tasks", "calendar", "board", "notifications", "settings"].includes(section)) {
     mobileActiveSection = section;
+    if (section === "settings") {
+      mobileMoreRoute = "more";
+      mobileMoreHistory = [];
+      history.replaceState({ ...(history.state || {}), mobileMoreRoute: "more" }, "");
+    }
     if (!["notifications", "settings"].includes(section)) setView(section === "calendar" ? "calendar" : section);
     renderMobileDashboard();
     return;
@@ -8013,6 +8373,221 @@ function performOpenMobileSection(section) {
 
 function openMobileSection(section) {
   closeMobileDetailSheets(() => performOpenMobileSection(section));
+}
+
+function canLeaveMobileMoreRoute() {
+  if (mobileMoreRoute !== "profile" || !mobileProfileDirty) return true;
+  if (!window.confirm("저장하지 않은 변경사항을 버리고 나갈까요?")) return false;
+  mobileProfileDirty = false;
+  return true;
+}
+
+function navigateMobileMore(route) {
+  if (route === "logout") {
+    if (window.confirm("로그아웃하시겠습니까?")) $("#logoutBtn")?.click();
+    return;
+  }
+  if (route.startsWith("admin-") && !isAdminUser()) {
+    showToast("관리자 권한이 필요합니다.");
+    return;
+  }
+  if (!canLeaveMobileMoreRoute() || route === mobileMoreRoute) return;
+  mobileMoreHistory.push(mobileMoreRoute);
+  mobileMoreRoute = route;
+  saveViewPrefs({ mobileMoreRoute });
+  history.pushState({ ...(history.state || {}), mobileMoreRoute: route }, "");
+  renderMobileDashboard();
+  window.scrollTo({ top: 0, behavior: "auto" });
+  if (route === "organization") refreshOrganizationDirectory();
+}
+
+function mobileMoreBack() {
+  if (!canLeaveMobileMoreRoute()) return;
+  if (mobileMoreHistory.length) {
+    mobileMoreHistory.pop();
+    history.back();
+    return;
+  }
+  mobileMoreRoute = "more";
+  saveViewPrefs({ mobileMoreRoute });
+  renderMobileDashboard();
+}
+
+function handleMobileMorePopState(event) {
+  if (!isMobileViewport() || mobileActiveSection !== "settings") return;
+  const nextRoute = event.state?.mobileMoreRoute || "more";
+  if (mobileProfileDirty && !window.confirm("저장하지 않은 변경사항을 버리고 나갈까요?")) {
+    history.pushState({ ...(history.state || {}), mobileMoreRoute }, "");
+    return;
+  }
+  mobileProfileDirty = false;
+  if (mobileMoreHistory.at(-1) === nextRoute) mobileMoreHistory.pop();
+  mobileMoreRoute = nextRoute;
+  saveViewPrefs({ mobileMoreRoute });
+  renderMobileDashboard();
+  window.scrollTo({ top: 0, behavior: "auto" });
+}
+
+function isMobileEdgeSwipeBlocked(target) {
+  if (!(target instanceof Element)) return true;
+  if (target.closest("input, textarea, select, [contenteditable='true'], [data-drag-handle], [data-mobile-option-drag], .drag-handle, .mobile-sheet, .modal-shell, .image-crop, .horizontal-scroll")) return true;
+  const scrollArea = target.closest("[data-horizontal-scroll], .mobile-calendar-quick-filters, .mobile-board-filter-panel > div");
+  return Boolean(scrollArea && scrollArea.scrollWidth > scrollArea.clientWidth);
+}
+
+function bindMobileMoreEdgeSwipe() {
+  document.addEventListener("pointerdown", (event) => {
+    if (!isMobileViewport() || mobileActiveSection !== "settings" || mobileMoreRoute === "more") return;
+    if (event.pointerType === "mouse" || event.clientX > 28 || isMobileEdgeSwipeBlocked(event.target)) return;
+    mobileEdgeSwipe = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
+  }, { passive: true });
+  document.addEventListener("pointermove", (event) => {
+    if (!mobileEdgeSwipe || mobileEdgeSwipe.pointerId !== event.pointerId) return;
+    mobileEdgeSwipe.dx = event.clientX - mobileEdgeSwipe.x;
+    mobileEdgeSwipe.dy = event.clientY - mobileEdgeSwipe.y;
+    if (mobileEdgeSwipe.dx > 10 && Math.abs(mobileEdgeSwipe.dx) > Math.abs(mobileEdgeSwipe.dy) * 1.2) event.preventDefault();
+  }, { passive: false });
+  const finish = (event) => {
+    if (!mobileEdgeSwipe || mobileEdgeSwipe.pointerId !== event.pointerId) return;
+    const { dx, dy } = mobileEdgeSwipe;
+    mobileEdgeSwipe = null;
+    if (dx >= 80 && Math.abs(dx) > Math.abs(dy) * 1.35) mobileMoreBack();
+  };
+  document.addEventListener("pointerup", finish, { passive: true });
+  document.addEventListener("pointercancel", () => { mobileEdgeSwipe = null; }, { passive: true });
+}
+
+async function prepareMobileProfilePhoto(file) {
+  mobileProfileUploadMessage = "";
+  if (!file || !["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    mobileProfileUploadMessage = "JPG, PNG, WebP 이미지만 선택할 수 있습니다.";
+    renderMobileDashboard();
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    mobileProfileUploadMessage = "프로필 사진은 5MB 이하만 사용할 수 있습니다.";
+    renderMobileDashboard();
+    return;
+  }
+  try {
+    const image = await createImageBitmap(file);
+    const side = Math.min(image.width, image.height);
+    const sx = Math.floor((image.width - side) / 2);
+    const sy = Math.floor((image.height - side) / 2);
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    canvas.getContext("2d", { alpha: false }).drawImage(image, sx, sy, side, side, 0, 0, 512, 512);
+    image.close?.();
+    mobilePendingAvatarBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/webp", 0.82));
+    if (mobilePendingAvatarUrl) URL.revokeObjectURL(mobilePendingAvatarUrl);
+    mobilePendingAvatarUrl = URL.createObjectURL(mobilePendingAvatarBlob);
+    mobileProfileDirty = true;
+    mobileProfileUploadMessage = "정사각형으로 크롭된 사진을 확인해주세요.";
+  } catch {
+    mobileProfileUploadMessage = "사진을 처리하지 못했습니다. 다른 이미지를 선택해주세요.";
+  }
+  renderMobileDashboard();
+}
+
+async function signedProfileImageUrl(path) {
+  const client = getSupabaseClient();
+  if (!client || !path) return "";
+  const { data, error } = await client.storage.from("profile-images").createSignedUrl(path, 3600);
+  return error ? "" : `${data.signedUrl}${data.signedUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
+}
+
+async function updateMySupabaseProfile(phone, avatarPath) {
+  const client = getSupabaseClient();
+  if (!client || !currentProfile?.id) return;
+  const { error } = await client.rpc("update_my_profile", {
+    p_phone: phone || null,
+    p_avatar_path: avatarPath || null
+  });
+  if (error) throw error;
+}
+
+async function uploadMobileProfilePhoto() {
+  const user = currentUser();
+  if (!user || !mobilePendingAvatarBlob || mobileProfileUploading) return;
+  mobileProfileUploading = true;
+  mobileProfileUploadMessage = "업로드 중…";
+  renderMobileDashboard();
+  try {
+    if (SUPABASE_ENABLED && currentProfile?.id) {
+      const client = getSupabaseClient();
+      const path = `${currentProfile.id}/${Date.now()}-${makeId().slice(-8)}.webp`;
+      const { error: uploadError } = await client.storage.from("profile-images").upload(path, mobilePendingAvatarBlob, { contentType: "image/webp", upsert: false });
+      if (uploadError) throw new Error("upload");
+      try {
+        await updateMySupabaseProfile(user.phone || "", path);
+      } catch (profileError) {
+        await client.storage.from("profile-images").remove([path]);
+        throw profileError;
+      }
+      if (user.avatarPath) await client.storage.from("profile-images").remove([user.avatarPath]);
+      user.avatarPath = path;
+      user.avatarUrl = await signedProfileImageUrl(path);
+      currentProfile.avatarPath = path;
+      currentProfile.avatarUrl = user.avatarUrl;
+    } else {
+      user.avatarUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.readAsDataURL(mobilePendingAvatarBlob); });
+      user.avatarPath = "local-profile-image";
+    }
+    mobilePendingAvatarBlob = null;
+    if (mobilePendingAvatarUrl) URL.revokeObjectURL(mobilePendingAvatarUrl);
+    mobilePendingAvatarUrl = "";
+    mobileProfileDirty = false;
+    mobileProfileUploadMessage = "프로필 사진이 변경되었습니다.";
+    saveState();
+  } catch {
+    mobileProfileUploadMessage = "사진 업로드에 실패했습니다. Storage 설정과 권한을 확인해주세요.";
+  } finally {
+    mobileProfileUploading = false;
+    renderMobileDashboard();
+  }
+}
+
+async function deleteMobileProfilePhoto() {
+  const user = currentUser();
+  if (!user || !window.confirm("프로필 사진을 삭제하시겠습니까?")) return;
+  try {
+    if (SUPABASE_ENABLED && currentProfile?.id) {
+      const client = getSupabaseClient();
+      await updateMySupabaseProfile(user.phone || "", "");
+      if (user.avatarPath) await client.storage.from("profile-images").remove([user.avatarPath]);
+    }
+    user.avatarPath = "";
+    user.avatarUrl = "";
+    if (currentProfile?.id === user.id) {
+      currentProfile.avatarPath = "";
+      currentProfile.avatarUrl = "";
+    }
+    saveState();
+    mobileProfileUploadMessage = "기본 아바타로 변경되었습니다.";
+  } catch {
+    mobileProfileUploadMessage = "프로필 사진을 삭제하지 못했습니다.";
+  }
+  renderMobileDashboard();
+}
+
+async function saveMobileProfile(form) {
+  const user = currentUser();
+  if (!user) return;
+  const phone = String(form.elements.phone?.value || "").trim();
+  try {
+    if (SUPABASE_ENABLED && currentProfile?.id) {
+      await updateMySupabaseProfile(phone, user.avatarPath || "");
+    }
+    user.phone = phone;
+    if (currentProfile?.id === user.id) currentProfile.phone = phone;
+    mobileProfileDirty = false;
+    saveState();
+    showToast("프로필이 저장되었습니다.");
+    renderMobileDashboard();
+  } catch {
+    showToast("프로필을 저장하지 못했습니다. 관리자에게 문의해주세요.");
+  }
 }
 
 let mobileDetailSwipeStart = null;
@@ -8348,7 +8923,9 @@ $("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => setView(button.dataset.view)));
 $$("[data-mobile-section]").forEach((button) => button.addEventListener("click", () => { openMobileSection(button.dataset.mobileSection); openMobileMoreSheet(false); toggleMobileFab(false); }));
 $("[data-mobile-more]")?.addEventListener("click", () => {
-  closeMobileDetailSheets(() => openMobileMoreSheet(true));
+  openMobileSection("settings");
+  openMobileMoreSheet(false);
+  toggleMobileFab(false);
 });
 $$("[data-close-mobile-sheet]").forEach((button) => button.addEventListener("click", () => openMobileMoreSheet(false)));
 $$("[data-close-mobile-add]").forEach((button) => button.addEventListener("click", () => closeMobileAddSheet()));
@@ -8461,7 +9038,44 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
   submitMobileAddForm(event.currentTarget);
 });
+$("#mobileApp")?.addEventListener("submit", (event) => {
+  if (event.target.matches("[data-mobile-profile-form]")) {
+    event.preventDefault();
+    saveMobileProfile(event.target);
+    return;
+  }
+  const optionGroup = event.target.dataset.mobileOptionAdd;
+  if (optionGroup) {
+    event.preventDefault();
+    const value = String(event.target.elements.option?.value || "").trim();
+    if (value) addOption(optionGroup, value);
+  }
+});
 $("#mobileApp")?.addEventListener("change", (event) => {
+  if (event.target.matches("[data-mobile-profile-photo]")) {
+    prepareMobileProfilePhoto(event.target.files?.[0]);
+    return;
+  }
+  if (event.target.matches("[data-mobile-organization-inactive]")) {
+    mobileOrganizationIncludeInactive = event.target.checked;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.matches("[data-mobile-start-section]")) {
+    saveViewPrefs({ mobileStartSection: event.target.value });
+    showToast("앱 시작 화면이 저장되었습니다.");
+    return;
+  }
+  if (event.target.matches("[data-mobile-default-hide-done]")) {
+    mobileTaskHideDone = event.target.checked;
+    saveViewPrefs({ mobileTaskHideDone });
+    return;
+  }
+  const mobilePosition = event.target.closest("[data-mobile-user-position]");
+  if (mobilePosition) {
+    setUserPosition(mobilePosition.dataset.mobileUserPosition, mobilePosition.value);
+    return;
+  }
   if (event.target.matches("[data-mobile-calendar-month-picker]")) {
     const [year, month] = String(event.target.value || "").split("-").map(Number);
     if (year && month) {
@@ -8513,6 +9127,51 @@ $("#mobileApp")?.addEventListener("change", (event) => {
   renderAll();
 });
 $("#mobileApp")?.addEventListener("click", (event) => {
+  const moreRoute = event.target.closest("[data-mobile-more-route]")?.dataset.mobileMoreRoute;
+  if (moreRoute) {
+    navigateMobileMore(moreRoute);
+    return;
+  }
+  if (event.target.closest("[data-mobile-more-back]")) {
+    mobileMoreBack();
+    return;
+  }
+  const memberId = event.target.closest("[data-mobile-member-id]")?.dataset.mobileMemberId;
+  if (memberId) {
+    navigateMobileMore(`member:${memberId}`);
+    return;
+  }
+  if (event.target.closest("[data-mobile-profile-upload]")) {
+    uploadMobileProfilePhoto();
+    return;
+  }
+  if (event.target.closest("[data-mobile-profile-photo-delete]")) {
+    deleteMobileProfilePhoto();
+    return;
+  }
+  if (event.target.closest("[data-mobile-organization-retry]")) {
+    refreshOrganizationDirectory();
+    return;
+  }
+  const optionSave = event.target.closest("[data-mobile-option-save]");
+  if (optionSave) {
+    const manager = optionSave.closest("[data-mobile-option-group]");
+    const input = optionSave.parentElement?.querySelector("[data-mobile-option-value]");
+    if (manager && input) renameOption(manager.dataset.mobileOptionGroup, optionSave.dataset.mobileOptionSave, input.value);
+    return;
+  }
+  const optionDelete = event.target.closest("[data-mobile-option-delete]");
+  if (optionDelete) {
+    const manager = optionDelete.closest("[data-mobile-option-group]");
+    if (manager) confirmDelete(() => deleteOption(manager.dataset.mobileOptionGroup, optionDelete.dataset.mobileOptionDelete));
+    return;
+  }
+  const saveOwnerLinks = event.target.closest("[data-save-owner-links]");
+  if (saveOwnerLinks) {
+    saveOwnerLinks.disabled = true;
+    saveOwnerLinkSettings().finally(() => { saveOwnerLinks.disabled = false; });
+    return;
+  }
   if (event.target.closest("#mobileInlineLogoutBtn")) {
     $("#logoutBtn")?.click();
     return;
@@ -8531,6 +9190,11 @@ $("#mobileApp")?.addEventListener("click", (event) => {
   }
   if (mobileAdminUser && event.target.closest("[data-mobile-user-pending]")) {
     markUserPending(mobileAdminUser.dataset.mobileAdminUser);
+    renderMobileDashboard();
+    return;
+  }
+  if (mobileAdminUser && event.target.closest("[data-mobile-user-approve]")) {
+    approveUser(mobileAdminUser.dataset.mobileAdminUser);
     renderMobileDashboard();
     return;
   }
@@ -8790,15 +9454,62 @@ function closeMobileCalendarFilter() {
 }
 
 $("#mobileApp")?.addEventListener("input", (event) => {
-  if (!event.target.matches("[data-mobile-calendar-search-input]")) return;
-  mobileCalendarSearchQuery = event.target.value;
-  renderMobileDashboard();
-  const input = $("[data-mobile-calendar-search-input]");
-  if (input) {
-    input.focus();
-    input.setSelectionRange(input.value.length, input.value.length);
+  if (event.target.matches("[data-mobile-profile-form] input[name='phone']")) {
+    mobileProfileDirty = true;
+    return;
+  }
+  if (event.target.matches("[data-mobile-organization-search]")) {
+    mobileOrganizationSearch = event.target.value;
+    clearTimeout(mobileOrganizationSearchTimer);
+    mobileOrganizationSearchTimer = setTimeout(() => {
+      renderMobileDashboard();
+      const input = $("[data-mobile-organization-search]");
+      if (input) {
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+    }, 180);
+    return;
+  }
+  if (event.target.matches("[data-mobile-calendar-search-input]")) {
+    mobileCalendarSearchQuery = event.target.value;
+    renderMobileDashboard();
+    const input = $("[data-mobile-calendar-search-input]");
+    if (input) {
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
   }
 });
+
+$("#mobileApp")?.addEventListener("pointerdown", (event) => {
+  const handle = event.target.closest("[data-mobile-option-drag]");
+  const row = handle?.closest("[data-mobile-option-index]");
+  const group = handle?.closest("[data-mobile-option-group]")?.dataset.mobileOptionGroup;
+  if (!handle || !row || !group) return;
+  mobileOptionDrag = { pointerId: event.pointerId, group, from: Number(row.dataset.mobileOptionIndex), to: Number(row.dataset.mobileOptionIndex) };
+  handle.setPointerCapture?.(event.pointerId);
+  row.classList.add("is-dragging");
+  event.preventDefault();
+});
+
+$("#mobileApp")?.addEventListener("pointermove", (event) => {
+  if (!mobileOptionDrag || mobileOptionDrag.pointerId !== event.pointerId) return;
+  const row = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-mobile-option-index]");
+  const group = row?.closest("[data-mobile-option-group]")?.dataset.mobileOptionGroup;
+  if (row && group === mobileOptionDrag.group) mobileOptionDrag.to = Number(row.dataset.mobileOptionIndex);
+  event.preventDefault();
+}, { passive: false });
+
+const finishMobileOptionDrag = (event) => {
+  if (!mobileOptionDrag || mobileOptionDrag.pointerId !== event.pointerId) return;
+  const drag = mobileOptionDrag;
+  mobileOptionDrag = null;
+  if (drag.from !== drag.to) reorderOption(drag.group, drag.from, drag.to);
+  else $("[data-mobile-option-index].is-dragging")?.classList.remove("is-dragging");
+};
+$("#mobileApp")?.addEventListener("pointerup", finishMobileOptionDrag);
+$("#mobileApp")?.addEventListener("pointercancel", finishMobileOptionDrag);
 
 $("#mobileApp")?.addEventListener("touchstart", (event) => {
   if (mobileActiveSection !== "calendar" || event.touches.length !== 1 || !event.target.closest("[data-mobile-calendar-swipe]")) return;
@@ -8819,6 +9530,8 @@ $("#mobileApp")?.addEventListener("touchend", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && mobileCalendarFilterOpen) closeMobileCalendarFilter();
 });
+window.addEventListener("popstate", handleMobileMorePopState);
+bindMobileMoreEdgeSwipe();
 $("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
@@ -8855,6 +9568,19 @@ $("#projectsView").addEventListener("click", (event) => {
   }
   saveViewPrefs({ projectSort });
   renderProjectList();
+});
+$("#projectsView").addEventListener("change", (event) => {
+  const completeInput = event.target.closest("[data-project-complete]");
+  if (!completeInput) return;
+  const project = state.projects.find((item) => item.id === completeInput.dataset.projectComplete);
+  if (!project || !canEditProject(project)) return;
+  const completeIndex = state.options.statuses.indexOf("납품 완료");
+  const fallbackStatus = state.options.statuses[Math.max(0, completeIndex - 1)] || state.options.statuses.find((status) => status !== "납품 완료") || "";
+  project.status = completeInput.checked ? "납품 완료" : fallbackStatus;
+  if (completeInput.checked) project.progress = 100;
+  notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: ["status"] });
+  saveState();
+  renderAll();
 });
 $("#workSearchInput").addEventListener("input", (event) => {
   workSearchQuery = event.target.value;
@@ -8894,19 +9620,6 @@ $("#worksView").addEventListener("change", (event) => {
   renderAll();
 });
 $("#exportBtn").addEventListener("click", exportCsv);
-$("#seedBtn").addEventListener("click", () => {
-  if (!isAdminUser()) return;
-  const preservedOptions = structuredClone(state.options || sampleData.options);
-  const currentOwnerDefaultsVersion = state.ownerDefaultsVersion || 2;
-  state = migrateOwnerState({ ...structuredClone(sampleData), options: preservedOptions, ownerDefaultsVersion: currentOwnerDefaultsVersion });
-  taskDraft = { projectId: state.projects[0]?.id || "", owner: ownerOptions()[0] || "", dueDate: dateKey(new Date()) };
-  detailTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
-  scheduleDraft = { owners: ownerOptions()[0] ? [ownerOptions()[0]] : [], date: dateKey(new Date()), allDay: true, startTime: "09:00", endTime: "10:00" };
-  staffScheduleDraft = { title: "", room: "", type: "", owner: "", trainingType: "", date: dateKey(new Date()), allDay: false, startTime: "09:00", endTime: "10:00", repeatEnabled: false, repeatCount: 8, repeatDays: [], repeatEndMode: "none", repeatUntil: "", staffRows: [] };
-  recurringTrainingDraft = { room: studioRoomOptions()[0] || "", type: staffTypeOptions().includes("정기교육") ? "정기교육" : staffTypeOptions()[0] || "", owner: "", trainingType: trainingTypeOptions()[0] || "", startDate: dateKey(new Date()), repeat: "매주", count: 8, allDay: true, startTime: "09:00", endTime: "10:00" };
-  saveState();
-  renderAll();
-});
 
 $("#authForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -9448,8 +10161,10 @@ $("#workManagementRecords").addEventListener("click", (event) => {
   }
   const editButton = event.target.closest("[data-edit-work-record]");
   if (editButton) {
-    editingWorkRecordId = editButton.dataset.editWorkRecord;
     const work = state.works.find((item) => item.id === activeWorkId);
+    const record = work?.records?.find((item) => item.id === editButton.dataset.editWorkRecord);
+    if (!canManageRecord(record)) return showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
+    editingWorkRecordId = editButton.dataset.editWorkRecord;
     if (work) renderWorkManagementRecords(work);
     return;
   }
@@ -9490,8 +10205,10 @@ $("#managementRecords").addEventListener("click", (event) => {
   }
   const editButton = event.target.closest("[data-edit-record]");
   if (editButton) {
-    editingRecordId = editButton.dataset.editRecord;
     const project = state.projects.find((item) => item.id === activeProjectId);
+    const record = project?.records?.find((item) => item.id === editButton.dataset.editRecord);
+    if (!canManageRecord(record)) return showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
+    editingRecordId = editButton.dataset.editRecord;
     if (project) renderManagementRecords(project);
     return;
   }
@@ -9949,6 +10666,13 @@ $("#adminContent").addEventListener("submit", (event) => {
 });
 
 $("#adminContent").addEventListener("click", (event) => {
+  const sectionButton = event.target.closest("[data-admin-section]");
+  if (sectionButton) {
+    adminSection = sectionButton.dataset.adminSection;
+    saveViewPrefs({ adminSection });
+    renderAdmin();
+    return;
+  }
   const saveOwnerLinksButton = event.target.closest("[data-save-owner-links]");
   if (saveOwnerLinksButton) {
     saveOwnerLinksButton.disabled = true;
@@ -9991,6 +10715,11 @@ $("#adminContent").addEventListener("click", (event) => {
 });
 
 $("#adminContent").addEventListener("change", async (event) => {
+  const positionSelect = event.target.closest("[data-user-position]");
+  if (positionSelect) {
+    setUserPosition(positionSelect.dataset.userPosition, positionSelect.value);
+    return;
+  }
   const linkSelect = event.target.closest("[data-link-owner-id]");
   if (linkSelect) {
     linkSelect.closest(".owner-link-row")?.classList.add("is-dirty");
