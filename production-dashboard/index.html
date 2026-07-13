@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="영상 업무 대시보드" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./styles.css?v=60" />
+    <link rel="stylesheet" href="./styles.css?v=64" />
     <link rel="stylesheet" href="./work-task.css?v=36" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -326,6 +326,7 @@
                 <label><input type="checkbox" data-calendar-filter="video" checked /> 영상</label>
                 <label><input type="checkbox" data-calendar-filter="work" checked /> 업무</label>
                 <label><input type="checkbox" data-calendar-filter="staff" checked /> 방송실</label>
+                <label><input type="checkbox" data-calendar-filter="schedule" checked /> 간단 일정</label>
               </div>
               <div class="calendar-filter-group"><strong>담당자</strong><div id="calendarOwnerFilters" class="calendar-owner-filters"></div></div>
               <label class="calendar-recurring-filter"><input id="calendarHideRecurring" type="checkbox" /> 반복 일정 표시 제외</label>
@@ -901,6 +902,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=62"></script>
+    <script src="./app.js?v=64"></script>
   </body>
 </html>

@@ -348,7 +348,7 @@ let workSearchQuery = viewPref("workSearchQuery", "");
 let workSort = viewPref("workSort", { key: "finalDate", direction: "asc" });
 let isProjectFilterOpen = false;
 let activeCalendarMode = viewPref("activeCalendarMode", "all");
-let calendarFilters = viewPref("calendarFilters", { video: true, work: true, staff: true });
+let calendarFilters = { video: true, work: true, staff: true, schedule: true, ...viewPref("calendarFilters", {}) };
 let calendarOwnerFilters = viewPref("calendarOwnerFilters", {});
 let calendarHideRecurring = viewPref("calendarHideRecurring", false);
 let calendarSourceFilters = viewPref("calendarSourceFilters", { project: true, work: true, task: true, staff: true, schedule: true });
@@ -3936,11 +3936,10 @@ function projectEventsForDate(key) {
   const staffEvents = allEvents.filter((event) => event.source === "staff");
   const videoEvents = [...milestones, ...projectTaskEvents];
   const workEvents = [...workMilestones, ...workTaskEvents];
-  const showAllCalendarGroups = calendarFilters.video && calendarFilters.work && calendarFilters.staff;
   const projectEvents = [
     ...(calendarFilters.video ? videoEvents : []),
     ...(calendarFilters.work ? workEvents : []),
-    ...(showAllCalendarGroups ? schedules : [])
+    ...(calendarFilters.schedule ? schedules : [])
   ];
   return sortCalendarEvents([...projectEvents, ...(calendarFilters.staff ? staffEvents : [])]
     .filter((event) => eventMatchesOwnerFilter(event.owners, calendarOwnerFilters))
@@ -3956,7 +3955,7 @@ function renderCalendar() {
 
   $("#calendarTitle").textContent = `${year}년 ${month + 1}월 일정`;
   $("#calendarBoard")?.classList.remove("is-staff-mode");
-  const allChecked = calendarFilters.video && calendarFilters.work && calendarFilters.staff;
+  const allChecked = calendarFilters.video && calendarFilters.work && calendarFilters.staff && calendarFilters.schedule;
   $$("[data-calendar-filter]").forEach((input) => {
     const key = input.dataset.calendarFilter;
     input.checked = key === "all" ? allChecked : Boolean(calendarFilters[key]);
@@ -6162,15 +6161,10 @@ function trackBoardPostView(postId) {
   if (!post || !user?.id) return;
   post.viewUserIds = Array.isArray(post.viewUserIds) ? post.viewUserIds : [];
   post.viewLogs = Array.isArray(post.viewLogs) ? post.viewLogs : [];
-  if (!post.viewUserIds.includes(user.id)) post.viewUserIds.push(user.id);
   const log = post.viewLogs.find((item) => item.userId === user.id);
-  const viewedAt = new Date().toISOString();
-  if (log) {
-    log.name = user.name || user.username || "사용자";
-    log.viewedAt = viewedAt;
-  } else {
-    post.viewLogs.push({ userId: user.id, name: user.name || user.username || "사용자", viewedAt });
-  }
+  if (log) return;
+  if (!post.viewUserIds.includes(user.id)) post.viewUserIds.push(user.id);
+  post.viewLogs.push({ userId: user.id, name: user.name || user.username || "사용자", viewedAt: new Date().toISOString() });
   saveState();
 }
 
@@ -6478,7 +6472,7 @@ function renderBoardViewers(post) {
   return `
     <div class="modal-shell open board-viewer-modal" aria-hidden="false">
       <div class="modal-card">
-        <div class="section-head"><h3>확인한 사람</h3><button class="record-control" type="button" data-board-close-viewers>닫기</button></div>
+        <div class="section-head"><h3>최초 확인한 사람</h3><button class="record-control" type="button" data-board-close-viewers>닫기</button></div>
         <div class="board-viewer-list">${logs.length ? logs.map((log) => `<span>${esc(log.name || "사용자")} <small>${esc(boardDateText(log.viewedAt, true))}</small></span>`).join("") : '<div class="empty">아직 확인자가 없습니다.</div>'}</div>
       </div>
     </div>
@@ -6521,8 +6515,8 @@ function renderBoardDetail(postId) {
           </div>
         </div>
         <header>
-          <span>${esc(post.prefix || "일반")}</span>
-          <h2>${boardNoticeChip(post)}${esc(post.title || "제목 없음")}</h2>
+          <div class="board-detail-category">${post.isNotice ? boardNoticeChip(post) : `<span>${esc(post.prefix || "일반")}</span>`}</div>
+          <h2>${esc(post.title || "제목 없음")}</h2>
           <p>${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt))}${post.updatedAt ? " · 수정됨" : ""} · <button type="button" data-board-viewers="${esc(post.id)}">조회 ${post.viewUserIds?.length || 0}</button> · 댓글 ${comments.length}</p>
           ${post.isNotice ? `<small>공지 노출: ${esc(boardNoticePeriodLabel(post))}</small>` : ""}
         </header>
@@ -10650,7 +10644,7 @@ $("#calendarView").addEventListener("change", (event) => {
   if (!checkbox) return;
   const key = checkbox.dataset.calendarFilter;
   if (key === "all") {
-    calendarFilters = { video: checkbox.checked, work: checkbox.checked, staff: checkbox.checked };
+    calendarFilters = { video: checkbox.checked, work: checkbox.checked, staff: checkbox.checked, schedule: checkbox.checked };
   } else {
     calendarFilters[key] = checkbox.checked;
   }
@@ -11746,7 +11740,7 @@ initSupabaseSession();
 
 document.addEventListener("pointerdown", (event) => {
   const button = event.target.closest("button");
-  if (!button || button.disabled) return;
+  if (!button || button.disabled || button.matches(".mobile-board-row")) return;
   const rect = button.getBoundingClientRect();
   const ripple = document.createElement("span");
   const size = Math.max(rect.width, rect.height);

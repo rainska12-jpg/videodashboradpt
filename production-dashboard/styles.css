@@ -4937,6 +4937,12 @@ h3 {
   gap: 8px;
 }
 
+.board-detail-category {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+}
+
 .board-detail-card header p,
 .board-detail-card header small {
   color: var(--muted);
@@ -9482,6 +9488,17 @@ h3 {
     color: var(--text);
     padding: 10px 0;
     text-align: left;
+  }
+
+  .mobile-board-row:active {
+    transform: none;
+    background: transparent;
+  }
+
+  .mobile-board-row:focus,
+  .mobile-board-row:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 
   .mobile-board-row::after {
