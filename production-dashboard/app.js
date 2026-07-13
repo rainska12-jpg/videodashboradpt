@@ -7193,13 +7193,28 @@ let mobileOrganizationSearchTimer = null;
 let mobileOptionDrag = null;
 let mobilePreviousSection = "tasks";
 let mobileTouchActivation = null;
+let mobileStudioViewMode = viewPref("mobileStudioViewMode", "day");
+let mobileStudioDate = viewPref("mobileStudioDate", dateKey(new Date()));
+let mobileStudioFilterOpen = false;
+let mobileStudioFilterDraft = null;
+let mobileStudioUnassignedOnly = viewPref("mobileStudioUnassignedOnly", false);
+let mobileStudioOwnerQuery = "";
+let mobileStudioFormOpen = false;
+let mobileStudioFormMode = "create";
+let mobileStudioFormStep = 1;
+let mobileStudioFormErrors = {};
+let mobileStudioFormDraft = null;
+let mobileStudioDetailId = "";
+let mobileStudioDetailDraft = null;
+let mobileStudioDetailDirty = false;
+let mobileStudioDeleteConfirm = false;
 
 function isMobileViewport() {
   return window.matchMedia("(max-width: 768px)").matches;
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 예약", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -8027,6 +8042,341 @@ function renderMobileCalendar() {
   `;
 }
 
+function mobileStudioDateObject(value = mobileStudioDate) {
+  const date = new Date(`${value || dateKey(new Date())}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function mobileStudioDateText(value, { short = false } = {}) {
+  const date = mobileStudioDateObject(value);
+  return new Intl.DateTimeFormat("ko-KR", short
+    ? { month: "long", day: "numeric", weekday: "short" }
+    : { year: "numeric", month: "long", day: "numeric", weekday: "short" }).format(date);
+}
+
+function mobileStudioMoveDate(direction) {
+  const next = mobileStudioDateObject();
+  if (mobileStudioViewMode === "month") next.setMonth(next.getMonth() + direction, 1);
+  else next.setDate(next.getDate() + direction * (mobileStudioViewMode === "week" ? 7 : 1));
+  mobileStudioDate = dateKey(next);
+  saveViewPrefs({ mobileStudioDate });
+  renderMobileDashboard();
+}
+
+function mobileStudioFilterCount() {
+  let count = 0;
+  if (!trainingTypeOptions().every((type) => studioTrainingFilterEnabled(type))) count += 1;
+  if (!ownerFilterKeys().every((owner) => ownerFilterEnabled(studioOwnerFilters, owner))) count += 1;
+  if (studioHideRecurring) count += 1;
+  if (mobileStudioUnassignedOnly) count += 1;
+  return count;
+}
+
+function cloneMobileStudioFilters() {
+  return {
+    types: { ...studioTrainingTypeFilters },
+    owners: { ...studioOwnerFilters },
+    hideRecurring: studioHideRecurring,
+    unassignedOnly: mobileStudioUnassignedOnly
+  };
+}
+
+function mobileStudioFilteredEvents() {
+  return [...state.staffEvents]
+    .filter((event) => studioTrainingFilterEnabled(event.trainingType || event.type || "기타"))
+    .filter((event) => eventMatchesOwnerFilter(event.owners || [event.owner].filter(Boolean), studioOwnerFilters))
+    .filter((event) => !(studioHideRecurring && event.seriesId))
+    .filter((event) => !mobileStudioUnassignedOnly || needsStudioStaffAssignment(event))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")) || String(a.startTime || "").localeCompare(String(b.startTime || "")));
+}
+
+function mobileStudioEventsOn(value) {
+  return mobileStudioFilteredEvents().filter((event) => event.date === value);
+}
+
+function mobileStudioStaffSummary(event) {
+  const rows = Array.isArray(event.staffRows) ? event.staffRows : [];
+  const assigned = rows.filter((row) => row.type || row.owner);
+  if (!assigned.length || needsStudioStaffAssignment(event)) return "스탭 미배정";
+  return assigned.slice(0, 3).map((row) => `${row.type || "스탭"} ${ownerOptionLabel(row.owner) || "미배정"}`).join(" / ") + (assigned.length > 3 ? ` 외 ${assigned.length - 3}명` : "");
+}
+
+function renderMobileStudioEventCard(event) {
+  const time = event.allDay !== false ? "종일" : `${event.startTime || "09:00"} ~ ${event.endTime || "10:00"}`;
+  return `
+    <button class="mobile-studio-event-card" data-mobile-studio-event="${esc(event.id)}" type="button" ${studioTypeStyle(event.trainingType || event.type)}>
+      <i></i>
+      <span class="mobile-studio-event-time">${esc(time)}</span>
+      <span class="mobile-studio-event-copy">
+        <strong>${esc(staffReservationTitle(event))}</strong>
+        <small>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</small>
+        <em>${esc(mobileStudioStaffSummary(event))}</em>
+      </span>
+      <span class="mobile-studio-event-chips">${event.seriesId ? "<b>↻ 반복</b>" : ""}${needsStudioStaffAssignment(event) ? "<b class=\"warning\">미배정</b>" : ""}</span>
+      <span aria-hidden="true">›</span>
+    </button>
+  `;
+}
+
+function renderMobileStudioEmpty() {
+  return `<div class="mobile-studio-empty"><span>▣</span><strong>등록된 방송실 예약이 없습니다.</strong><small>선택한 날짜에 새 예약을 등록할 수 있습니다.</small><button data-mobile-studio-create type="button">＋ 예약 등록</button></div>`;
+}
+
+function renderMobileStudioDateStrip() {
+  const center = mobileStudioDateObject();
+  return `<div class="mobile-studio-date-strip" data-horizontal-scroll>${Array.from({ length: 9 }, (_, index) => {
+    const date = new Date(center);
+    date.setDate(center.getDate() + index - 4);
+    const key = dateKey(date);
+    return `<button class="${key === mobileStudioDate ? "selected" : ""} ${key === dateKey(new Date()) ? "today" : ""}" data-mobile-studio-date="${key}" type="button"><span>${["일", "월", "화", "수", "목", "금", "토"][date.getDay()]}</span><b>${date.getDate()}</b></button>`;
+  }).join("")}</div>`;
+}
+
+function renderMobileStudioDaily() {
+  const events = mobileStudioEventsOn(mobileStudioDate);
+  return `${renderMobileStudioDateStrip()}<section class="mobile-studio-day"><header><h3>${esc(mobileStudioDateText(mobileStudioDate, { short: true }))}</h3><span>예약 ${events.length}개</span></header><div>${events.length ? events.map(renderMobileStudioEventCard).join("") : renderMobileStudioEmpty()}</div></section>`;
+}
+
+function mobileStudioWeekStartDate() {
+  const selected = mobileStudioDateObject();
+  const start = new Date(selected);
+  start.setDate(selected.getDate() - ((selected.getDay() + 6) % 7));
+  return start;
+}
+
+function renderMobileStudioWeekly() {
+  const start = mobileStudioWeekStartDate();
+  return `<div class="mobile-studio-week-list">${Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = dateKey(date);
+    const events = mobileStudioEventsOn(key);
+    return `<section class="${key === mobileStudioDate ? "selected" : ""}"><button class="mobile-studio-week-date" data-mobile-studio-date-day="${key}" type="button"><span>${esc(mobileStudioDateText(key, { short: true }))}</span><b>${events.length}개</b><em>›</em></button><div>${events.length ? events.map(renderMobileStudioEventCard).join("") : "<p>등록된 일정 없음</p>"}</div></section>`;
+  }).join("")}</div>`;
+}
+
+function renderMobileStudioMonthly() {
+  const selected = mobileStudioDateObject();
+  const year = selected.getFullYear();
+  const month = selected.getMonth();
+  const first = new Date(year, month, 1);
+  const start = new Date(year, month, 1 - first.getDay());
+  return `<section class="mobile-studio-month"><div class="mobile-studio-month-weekdays">${["일", "월", "화", "수", "목", "금", "토"].map((day) => `<span>${day}</span>`).join("")}</div><div class="mobile-studio-month-grid">${Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const key = dateKey(date);
+    const events = mobileStudioEventsOn(key);
+    const dots = uniqueValues(events.map((event) => event.trainingType || event.type || "기타")).slice(0, 3);
+    return `<button class="${date.getMonth() !== month ? "muted" : ""} ${key === mobileStudioDate ? "selected" : ""} ${key === dateKey(new Date()) ? "today" : ""}" data-mobile-studio-date-day="${key}" type="button" aria-label="${esc(mobileStudioDateText(key))}, 예약 ${events.length}개"><b>${date.getDate()}</b><span>${dots.map((type) => `<i ${studioTypeStyle(type)}></i>`).join("")}${events.length ? `<em>${events.length}</em>` : ""}${events.some(needsStudioStaffAssignment) ? "<strong>!</strong>" : ""}</span></button>`;
+  }).join("")}</div></section>`;
+}
+
+function renderMobileStudioFilterSheet() {
+  if (!mobileStudioFilterOpen) return "";
+  const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+  const types = trainingTypeOptions();
+  const owners = ownerFilterKeys().filter((key) => !mobileStudioOwnerQuery || ownerFilterLabel(key).toLowerCase().includes(mobileStudioOwnerQuery.toLowerCase()));
+  return `<div class="mobile-studio-filter open" role="dialog" aria-modal="true" aria-label="방송실 예약 필터"><button class="mobile-studio-filter-backdrop" data-mobile-studio-filter-close type="button" aria-label="필터 닫기"></button><section><i></i><header><h2>필터</h2><button data-mobile-studio-filter-close type="button" aria-label="닫기">×</button></header><div class="mobile-studio-filter-scroll"><fieldset><legend>예약 유형</legend><div class="mobile-studio-filter-chips"><button class="${types.every((type) => mobileCalendarFilterEnabled(draft.types, type)) ? "selected" : ""}" data-mobile-studio-filter-type="all" type="button">전체</button>${types.map((type) => `<button class="${mobileCalendarFilterEnabled(draft.types, type) ? "selected" : ""}" data-mobile-studio-filter-type="${esc(type)}" type="button">${esc(type)}</button>`).join("")}</div></fieldset><fieldset><legend>담당자</legend><input data-mobile-studio-owner-search placeholder="담당자 검색" value="${esc(mobileStudioOwnerQuery)}" /><div class="mobile-studio-filter-chips" data-mobile-studio-owner-options><button class="${ownerFilterKeys().every((owner) => ownerFilterEnabled(draft.owners, owner)) ? "selected" : ""}" data-mobile-studio-filter-owner="all" type="button">전체</button>${owners.map((owner) => `<button class="${ownerFilterEnabled(draft.owners, owner) ? "selected" : ""}" data-mobile-studio-filter-owner="${esc(owner)}" data-owner-label="${esc(ownerFilterLabel(owner))}" type="button">${esc(ownerFilterLabel(owner))}</button>`).join("")}</div></fieldset><fieldset><legend>기타</legend><label class="mobile-studio-check"><input data-mobile-studio-filter-recurring type="checkbox" ${draft.hideRecurring ? "checked" : ""} /><span>반복 일정 표시 제외</span></label><label class="mobile-studio-check"><input data-mobile-studio-filter-unassigned type="checkbox" ${draft.unassignedOnly ? "checked" : ""} /><span>미배정 일정만 보기</span></label></fieldset></div><footer><button data-mobile-studio-filter-reset type="button">초기화</button><button data-mobile-studio-filter-apply type="button">적용하기</button></footer></section></div>`;
+}
+
+function mobileStudioSelectOptions(options, selected, placeholder) {
+  return `<option value="">${esc(placeholder)}</option>${options.map((option) => `<option value="${esc(option)}" ${option === selected ? "selected" : ""}>${esc(option)}</option>`).join("")}`;
+}
+
+function mobileStudioOwnerSelectOptions(selected) {
+  return `<option value="">담당자 선택</option>${ownerOptions().map((owner) => `<option value="${esc(owner)}" ${owner === selected ? "selected" : ""}>${esc(ownerOptionLabel(owner))}</option>`).join("")}`;
+}
+
+function defaultMobileStudioFormDraft(event = null) {
+  if (event) {
+    const series = event.seriesId ? state.staffEvents.filter((item) => item.seriesId === event.seriesId) : [];
+    return {
+      editingStaffEventId: event.id,
+      title: event.title || "",
+      room: event.room || "",
+      trainingType: event.trainingType || "",
+      date: event.date || mobileStudioDate,
+      allDay: event.allDay !== false,
+      startTime: event.startTime || "09:00",
+      endTime: event.endTime || "10:00",
+      memo: event.memo || "",
+      repeatEnabled: Boolean(event.seriesId),
+      repeatDays: uniqueValues(series.map((item) => mobileStudioDateObject(item.date).getDay())),
+      repeatCount: series.length || 1,
+      seriesId: event.seriesId || "",
+      staffRows: structuredClone(normalizeStaffEventRows(event))
+    };
+  }
+  return { title: "", room: "", trainingType: "", date: mobileStudioDate, allDay: false, startTime: "09:00", endTime: "10:00", memo: "", repeatEnabled: false, repeatDays: [mobileStudioDateObject().getDay()], repeatCount: 8, seriesId: "", staffRows: [makeDefaultStaffRow(0)] };
+}
+
+function openMobileStudioForm(mode = "create", eventId = "") {
+  const event = mode === "edit" ? state.staffEvents.find((item) => item.id === eventId) : null;
+  if (mode === "edit" && !event) return;
+  mobileStudioFormMode = mode;
+  mobileStudioFormDraft = defaultMobileStudioFormDraft(event);
+  mobileStudioFormStep = 1;
+  mobileStudioFormErrors = {};
+  mobileStudioFormOpen = true;
+  renderMobileDashboard();
+}
+
+function closeMobileStudioForm() {
+  mobileStudioFormOpen = false;
+  mobileStudioFormDraft = null;
+  mobileStudioFormErrors = {};
+  renderMobileDashboard();
+}
+
+function validateMobileStudioBasic() {
+  const draft = mobileStudioFormDraft || {};
+  const errors = {};
+  if (!String(draft.title || "").trim()) errors.title = "일정 제목을 입력하세요.";
+  if (!draft.room) errors.room = "장소를 선택하세요.";
+  if (!draft.trainingType) errors.trainingType = "예약 유형을 선택하세요.";
+  if (!draft.date) errors.date = "날짜를 선택하세요.";
+  if (draft.allDay === false && (!draft.startTime || !draft.endTime)) errors.time = "시작 시간과 종료 시간을 선택하세요.";
+  if (draft.allDay === false && minutesFromTime(draft.endTime) <= minutesFromTime(draft.startTime)) errors.time = "종료 시간은 시작 시간보다 늦어야 합니다.";
+  if (draft.repeatEnabled && (!draft.repeatDays?.length || Number(draft.repeatCount) < 1)) errors.repeat = "반복 요일과 횟수를 확인하세요.";
+  mobileStudioFormErrors = errors;
+  return Object.keys(errors).length === 0;
+}
+
+function renderMobileStudioBasicStep(draft) {
+  const error = (key) => mobileStudioFormErrors[key] ? `<small class="mobile-studio-error">${esc(mobileStudioFormErrors[key])}</small>` : "";
+  return `<section class="mobile-studio-form-step"><h2>기본 정보</h2><div class="mobile-studio-form-section"><label>일정 제목 <b>*</b><input data-mobile-studio-form-field="title" value="${esc(draft.title)}" maxlength="100" placeholder="일정 제목" />${error("title")}</label><label>장소 <b>*</b><select data-mobile-studio-form-field="room">${mobileStudioSelectOptions(studioRoomOptions(), draft.room, "장소 선택")}</select>${error("room")}</label><label>예약 유형 <b>*</b><select data-mobile-studio-form-field="trainingType">${mobileStudioSelectOptions(trainingTypeOptions(), draft.trainingType, "예약 유형 선택")}</select>${error("trainingType")}</label></div><div class="mobile-studio-form-section"><h3>일시</h3><label>날짜 <b>*</b><input data-mobile-studio-form-field="date" type="date" value="${esc(draft.date)}" />${error("date")}</label><div class="mobile-studio-time-fields ${draft.allDay ? "is-hidden" : ""}"><label>시작 시간 <b>*</b><input data-mobile-studio-form-field="startTime" type="time" step="600" value="${esc(draft.startTime)}" /></label><span>~</span><label>종료 시간 <b>*</b><input data-mobile-studio-form-field="endTime" type="time" step="600" value="${esc(draft.endTime)}" /></label></div>${error("time")}<label class="mobile-studio-check"><input data-mobile-studio-form-toggle="allDay" type="checkbox" ${draft.allDay ? "checked" : ""} /><span>종일 일정</span></label></div><div class="mobile-studio-form-section"><label>메모<textarea data-mobile-studio-form-field="memo" maxlength="200" placeholder="준비물, 교육 내용, 진행 메모를 입력하세요.">${esc(draft.memo)}</textarea><small class="mobile-studio-memo-count">${String(draft.memo || "").length} / 200</small></label></div><div class="mobile-studio-form-section"><h3>반복 설정</h3><label class="mobile-studio-check"><input data-mobile-studio-form-toggle="repeatEnabled" type="checkbox" ${draft.repeatEnabled ? "checked" : ""} ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /><span>${draft.repeatEnabled ? "매주 반복" : "반복 안 함"}</span></label>${draft.repeatEnabled ? `<div class="mobile-studio-repeat-days">${[[1,"월"],[2,"화"],[3,"수"],[4,"목"],[5,"금"],[6,"토"],[0,"일"]].map(([day,label]) => `<button class="${draft.repeatDays.includes(day) ? "selected" : ""}" data-mobile-studio-repeat-day="${day}" type="button" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""}>${label}</button>`).join("")}</div><label>반복 횟수<input data-mobile-studio-form-field="repeatCount" type="number" min="1" max="52" value="${Number(draft.repeatCount) || 1}" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /></label>${mobileStudioFormMode === "edit" && draft.seriesId ? "<small>기존 반복 일정은 현재 회차의 기본 정보만 수정됩니다.</small>" : ""}${error("repeat")}` : ""}</div></section>`;
+}
+
+function renderMobileStudioStaffEditor(rows, prefix = "form") {
+  return `<div class="mobile-studio-staff-cards">${rows.map((row, index) => `<article data-mobile-studio-${prefix}-row="${esc(row.id)}"><header><span class="mobile-studio-drag" data-drag-handle>⋮⋮</span><strong>스탭 ${index + 1}</strong><div><button data-mobile-studio-row-up="${esc(row.id)}" type="button" aria-label="위로 이동" ${index === 0 ? "disabled" : ""}>↑</button><button data-mobile-studio-row-down="${esc(row.id)}" type="button" aria-label="아래로 이동" ${index === rows.length - 1 ? "disabled" : ""}>↓</button><button class="danger" data-mobile-studio-row-delete="${esc(row.id)}" type="button" aria-label="스탭 삭제">×</button></div></header><label>스탭 종류<select data-mobile-studio-row-field="type" data-row-id="${esc(row.id)}">${mobileStudioSelectOptions(staffTypeOptions(), row.type, "스탭 종류 선택")}</select></label><label>담당자<select data-mobile-studio-row-field="owner" data-row-id="${esc(row.id)}">${mobileStudioOwnerSelectOptions(row.owner)}</select></label><label>역할 또는 메모<input data-mobile-studio-row-field="memo" data-row-id="${esc(row.id)}" value="${esc(row.memo || "")}" maxlength="100" placeholder="역할 또는 메모" /></label></article>`).join("")}</div>`;
+}
+
+function renderMobileStudioStaffStep(draft) {
+  return `<section class="mobile-studio-form-step"><h2>스탭 목록</h2><p>일정에 배정할 스탭을 선택하세요. 최대 6명</p>${renderMobileStudioStaffEditor(draft.staffRows, "form")}<button class="mobile-studio-add-staff" data-mobile-studio-row-add type="button" ${draft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가 <small>${draft.staffRows.length}/6</small></button></section>`;
+}
+
+function renderMobileStudioForm() {
+  if (!mobileStudioFormOpen || !mobileStudioFormDraft) return "";
+  const draft = mobileStudioFormDraft;
+  const title = mobileStudioFormMode === "edit" ? "방송실 예약 수정" : "방송실 예약 등록";
+  return `<div class="mobile-studio-fullscreen" role="dialog" aria-modal="true" aria-label="${title}"><header><button data-mobile-studio-form-close type="button" aria-label="닫기">×</button><strong>${title}</strong><span>${mobileStudioFormStep} / 2</span></header><div class="mobile-studio-step-indicator"><i class="active"></i><b></b><i class="${mobileStudioFormStep === 2 ? "active" : ""}"></i></div><main>${mobileStudioFormStep === 1 ? renderMobileStudioBasicStep(draft) : renderMobileStudioStaffStep(draft)}</main><footer>${mobileStudioFormStep === 1 ? `<button data-mobile-studio-form-close type="button">취소</button><button class="primary" data-mobile-studio-form-next type="button">다음</button>` : `<button data-mobile-studio-form-prev type="button">이전</button><button class="primary" data-mobile-studio-form-save type="button">${mobileStudioFormMode === "edit" ? "수정 완료" : "예약 등록"}</button>`}</footer></div>`;
+}
+
+function mobileStudioFormRows() {
+  return mobileStudioFormDraft?.staffRows || mobileStudioDetailDraft?.staffRows || [];
+}
+
+function moveMobileStudioRow(rowId, direction) {
+  const rows = mobileStudioFormRows();
+  const index = rows.findIndex((row) => row.id === rowId);
+  const target = index + direction;
+  if (index < 0 || target < 0 || target >= rows.length) return;
+  const [row] = rows.splice(index, 1);
+  rows.splice(target, 0, row);
+  if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+  renderMobileDashboard();
+}
+
+function saveMobileStudioReservation() {
+  const draft = mobileStudioFormDraft;
+  if (!draft || !validateMobileStudioBasic()) {
+    mobileStudioFormStep = 1;
+    renderMobileDashboard();
+    return;
+  }
+  const rows = draft.staffRows.slice(0, 6).map((row) => ({ type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
+  const owners = uniqueValues(rows.map((row) => row.owner).filter((owner) => !isUnassignedStudioOwner(owner)));
+  const eventData = { title: String(draft.title).trim(), room: draft.room, trainingType: draft.trainingType, type: rows[0]?.type || "", owner: owners[0] || "", owners, staffRows: rows, date: draft.date, allDay: draft.allDay !== false, startTime: draft.startTime || "09:00", endTime: draft.endTime || "10:00", memo: String(draft.memo || "").trim() };
+  if (mobileStudioFormMode === "edit" && draft.editingStaffEventId) {
+    const event = state.staffEvents.find((item) => item.id === draft.editingStaffEventId);
+    if (!event) return;
+    const previousOwners = event.owners || [event.owner].filter(Boolean);
+    Object.assign(event, eventData);
+    notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 예약을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 예약 수정", eventDate: event.date, targetView: "studio" });
+    mobileStudioDetailId = event.id;
+  } else {
+    const base = mobileStudioDateObject(draft.date);
+    const repeatDays = draft.repeatDays?.length ? draft.repeatDays : [base.getDay()];
+    const count = draft.repeatEnabled ? Math.max(1, Math.min(52, Number(draft.repeatCount) || 1)) : 1;
+    const seriesId = draft.repeatEnabled ? makeId() : "";
+    const dates = [];
+    const cursor = new Date(base);
+    while (dates.length < count) {
+      if (!draft.repeatEnabled || repeatDays.includes(cursor.getDay())) dates.push(new Date(cursor));
+      cursor.setDate(cursor.getDate() + 1);
+      if (cursor.getTime() - base.getTime() > 370 * 86400000) break;
+    }
+    let firstId = "";
+    dates.forEach((date) => {
+      const id = makeId();
+      if (!firstId) firstId = id;
+      state.staffEvents.push({ id, ...eventData, date: dateKey(date), seriesId });
+    });
+    notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 예약${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 예약 생성", eventDate: draft.date, targetView: "studio" });
+    mobileStudioDate = draft.date;
+  }
+  saveState();
+  mobileStudioFormOpen = false;
+  mobileStudioFormDraft = null;
+  showToast(mobileStudioFormMode === "edit" ? "방송실 예약이 수정되었습니다." : "방송실 예약이 등록되었습니다.");
+  renderAll();
+}
+
+function mobileStudioSeriesSummary(event) {
+  if (!event.seriesId) return "반복 안 함";
+  const series = state.staffEvents.filter((item) => item.seriesId === event.seriesId).sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  const days = uniqueValues(series.map((item) => ["일", "월", "화", "수", "목", "금", "토"][mobileStudioDateObject(item.date).getDay()]));
+  return `매주 ${days.join("·")}요일 · 총 ${series.length}회`;
+}
+
+function openMobileStudioDetail(eventId) {
+  const event = state.staffEvents.find((item) => item.id === eventId);
+  if (!event) return;
+  mobileStudioDetailId = eventId;
+  mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
+  mobileStudioDetailDirty = false;
+  mobileStudioDeleteConfirm = false;
+  renderMobileDashboard();
+}
+
+function closeMobileStudioDetail() {
+  if (mobileStudioDetailDirty && !window.confirm("저장하지 않은 스탭 변경사항을 버리고 닫을까요?")) return;
+  mobileStudioDetailId = "";
+  mobileStudioDetailDraft = null;
+  mobileStudioDetailDirty = false;
+  mobileStudioDeleteConfirm = false;
+  renderMobileDashboard();
+}
+
+function saveMobileStudioStaffOnly() {
+  const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
+  if (!event || !mobileStudioDetailDraft) return;
+  const previousOwners = event.owners || [event.owner].filter(Boolean);
+  event.staffRows = mobileStudioDetailDraft.staffRows.slice(0, 6).map((row) => ({ type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
+  syncStaffEventSummary(event);
+  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약의 스탭을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 스탭 변경", eventDate: event.date, targetView: "studio" });
+  saveState();
+  mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
+  mobileStudioDetailDirty = false;
+  showToast("스탭 변경사항이 저장되었습니다.");
+  renderAll();
+}
+
+function renderMobileStudioDetail() {
+  const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
+  if (!event || !mobileStudioDetailDraft) return "";
+  const time = event.allDay !== false ? "종일 일정" : `${event.startTime || "09:00"} ~ ${event.endTime || "10:00"}`;
+  return `<div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 상세"><header><button data-mobile-studio-detail-close type="button" aria-label="뒤로가기">‹</button><strong>방송실 상세</strong><button data-mobile-studio-edit="${esc(event.id)}" type="button">수정</button></header><main><section class="mobile-studio-summary" ${studioTypeStyle(event.trainingType || event.type)}><i></i><h2>${esc(staffReservationTitle(event))}</h2><p>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</p><p>${esc(formatDate(event.date))} · ${esc(time)}</p><p>${esc(mobileStudioSeriesSummary(event))}</p>${event.memo ? `<small>${esc(event.memo)}</small>` : ""}</section><section class="mobile-studio-detail-staff"><header><div><h2>스탭 목록</h2><p>상세 화면에서 바로 수정할 수 있습니다. 최대 6명</p></div><button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button></header>${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}<button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button></section><button class="mobile-studio-delete" data-mobile-studio-delete-open type="button">예약 삭제</button></main>${mobileStudioDeleteConfirm ? `<div class="mobile-studio-confirm"><section><h3>이 방송실 예약을 삭제하시겠습니까?</h3><p>삭제한 예약은 복구할 수 없습니다.</p><button data-mobile-studio-delete-cancel type="button">취소</button><button class="danger" data-mobile-studio-delete-one type="button">이 일정만 삭제</button>${event.seriesId ? `<button class="danger" data-mobile-studio-delete-series type="button">전체 반복 일정 삭제</button>` : ""}</section></div>` : ""}</div>`;
+}
+
+function renderMobileStudio() {
+  const filterCount = mobileStudioFilterCount();
+  const selected = mobileStudioDateObject();
+  const period = mobileStudioViewMode === "month" ? `${selected.getFullYear()}년 ${selected.getMonth() + 1}월` : mobileStudioViewMode === "week" ? (() => { const start = mobileStudioWeekStartDate(); const end = new Date(start); end.setDate(start.getDate() + 6); return `${start.getMonth() + 1}월 ${start.getDate()}일 ~ ${end.getMonth() + 1}월 ${end.getDate()}일`; })() : mobileStudioDateText(mobileStudioDate, { short: true });
+  const content = mobileStudioViewMode === "month" ? renderMobileStudioMonthly() : mobileStudioViewMode === "week" ? renderMobileStudioWeekly() : renderMobileStudioDaily();
+  return `<div class="mobile-studio-page"><header class="mobile-studio-toolbar"><div><button data-mobile-studio-prev type="button" aria-label="이전 날짜">‹</button><strong>${esc(period)}</strong><button data-mobile-studio-next type="button" aria-label="다음 날짜">›</button><button data-mobile-studio-today type="button">오늘</button></div><button class="mobile-studio-filter-button ${filterCount ? "active" : ""}" data-mobile-studio-filter-open type="button">필터${filterCount ? ` ${filterCount}` : ""}</button></header><div class="mobile-studio-view-switch">${[["day","일간"],["week","주간"],["month","월간"]].map(([key,label]) => `<button class="${mobileStudioViewMode === key ? "active" : ""}" data-mobile-studio-view="${key}" type="button">${label}</button>`).join("")}</div>${content}<button class="mobile-studio-fab" data-mobile-studio-create type="button">＋ 예약</button>${renderMobileStudioFilterSheet()}${renderMobileStudioDetail()}${renderMobileStudioForm()}</div>`;
+}
+
 function mobileAvatarMarkup(user, className = "") {
   const label = String(user?.name || user?.username || "사용자").trim().slice(0, 1) || "사";
   const url = user?.avatarUrl || "";
@@ -8163,7 +8513,7 @@ function renderMobilePreferences() {
     <section class="mobile-settings-section"><h3>알림 설정</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
     <section class="mobile-settings-section"><h3>화면 설정</h3><div><div class="mobile-info-row"><span>테마</span><b>다크 모드</b></div></div></section>
     <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
-    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v52</b></div></div></section>
+    <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v56</b></div></div></section>
     <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
   `);
 }
@@ -8426,6 +8776,133 @@ function bindMobileCoreActions(app) {
     saveViewPrefs({ calendarSourceFilters });
     renderMobileDashboard();
   });
+  bind("[data-mobile-studio-prev]", () => mobileStudioMoveDate(-1));
+  bind("[data-mobile-studio-next]", () => mobileStudioMoveDate(1));
+  bind("[data-mobile-studio-today]", () => {
+    mobileStudioDate = dateKey(new Date());
+    saveViewPrefs({ mobileStudioDate });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-view]", (button) => {
+    mobileStudioViewMode = button.dataset.mobileStudioView;
+    saveViewPrefs({ mobileStudioViewMode });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-date]", (button) => {
+    mobileStudioDate = button.dataset.mobileStudioDate;
+    saveViewPrefs({ mobileStudioDate });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-date-day]", (button) => {
+    mobileStudioDate = button.dataset.mobileStudioDateDay;
+    mobileStudioViewMode = "day";
+    saveViewPrefs({ mobileStudioDate, mobileStudioViewMode });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-event]", (button) => openMobileStudioDetail(button.dataset.mobileStudioEvent));
+  bind("[data-mobile-studio-create]", () => openMobileStudioForm("create"));
+  bind("[data-mobile-studio-filter-open]", () => {
+    mobileStudioFilterDraft = cloneMobileStudioFilters();
+    mobileStudioFilterOpen = true;
+    mobileStudioOwnerQuery = "";
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-filter-close]", () => {
+    mobileStudioFilterOpen = false;
+    mobileStudioFilterDraft = null;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-filter-reset]", () => {
+    mobileStudioFilterDraft = { types: {}, owners: {}, hideRecurring: false, unassignedOnly: false };
+    mobileStudioOwnerQuery = "";
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-filter-type]", (button) => {
+    const type = button.dataset.mobileStudioFilterType;
+    const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+    const types = trainingTypeOptions();
+    if (type === "all") draft.types = {};
+    else if (types.every((item) => mobileCalendarFilterEnabled(draft.types, item))) draft.types = Object.fromEntries(types.map((item) => [item, item === type]));
+    else draft.types[type] = !mobileCalendarFilterEnabled(draft.types, type);
+    mobileStudioFilterDraft = draft;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-filter-owner]", (button) => {
+    const owner = button.dataset.mobileStudioFilterOwner;
+    const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+    const owners = ownerFilterKeys();
+    if (owner === "all") draft.owners = {};
+    else if (owners.every((item) => ownerFilterEnabled(draft.owners, item))) draft.owners = Object.fromEntries(owners.map((item) => [item, item === owner]));
+    else draft.owners[owner] = !ownerFilterEnabled(draft.owners, owner);
+    mobileStudioFilterDraft = draft;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-filter-apply]", () => {
+    const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+    studioTrainingTypeFilters = { ...draft.types };
+    studioOwnerFilters = { ...draft.owners };
+    studioHideRecurring = Boolean(draft.hideRecurring);
+    mobileStudioUnassignedOnly = Boolean(draft.unassignedOnly);
+    mobileStudioFilterOpen = false;
+    mobileStudioFilterDraft = null;
+    saveViewPrefs({ studioTrainingTypeFilters, studioOwnerFilters, studioHideRecurring, mobileStudioUnassignedOnly });
+    if (!isMobileViewport()) renderStudioManage({ preserveScroll: true });
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-form-close]", () => closeMobileStudioForm());
+  bind("[data-mobile-studio-form-next]", () => {
+    if (!validateMobileStudioBasic()) return renderMobileDashboard();
+    mobileStudioFormStep = 2;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-form-prev]", () => {
+    mobileStudioFormStep = 1;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-form-save]", () => saveMobileStudioReservation());
+  bind("[data-mobile-studio-repeat-day]", (button) => {
+    const day = Number(button.dataset.mobileStudioRepeatDay);
+    const days = new Set(mobileStudioFormDraft?.repeatDays || []);
+    if (days.has(day)) days.delete(day); else days.add(day);
+    mobileStudioFormDraft.repeatDays = [...days].sort((a, b) => a - b);
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-row-add]", () => {
+    const rows = mobileStudioFormRows();
+    if (rows.length >= 6) return;
+    rows.push(makeDefaultStaffRow(rows.length));
+    if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-row-delete]", (button) => {
+    const rows = mobileStudioFormRows();
+    if (rows.length <= 1) return showToast("스탭 행은 최소 1개가 필요합니다.");
+    const index = rows.findIndex((row) => row.id === button.dataset.mobileStudioRowDelete);
+    if (index >= 0) rows.splice(index, 1);
+    if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+    renderMobileDashboard();
+  });
+  bind("[data-mobile-studio-row-up]", (button) => moveMobileStudioRow(button.dataset.mobileStudioRowUp, -1));
+  bind("[data-mobile-studio-row-down]", (button) => moveMobileStudioRow(button.dataset.mobileStudioRowDown, 1));
+  bind("[data-mobile-studio-detail-close]", () => closeMobileStudioDetail());
+  bind("[data-mobile-studio-edit]", (button) => openMobileStudioForm("edit", button.dataset.mobileStudioEdit));
+  bind("[data-mobile-studio-staff-save]", () => saveMobileStudioStaffOnly());
+  bind("[data-mobile-studio-delete-open]", () => { mobileStudioDeleteConfirm = true; renderMobileDashboard(); });
+  bind("[data-mobile-studio-delete-cancel]", () => { mobileStudioDeleteConfirm = false; renderMobileDashboard(); });
+  bind("[data-mobile-studio-delete-one]", () => {
+    const id = mobileStudioDetailId;
+    mobileStudioDetailDirty = false;
+    mobileStudioDetailId = "";
+    mobileStudioDetailDraft = null;
+    deleteStaffEvent(id);
+  });
+  bind("[data-mobile-studio-delete-series]", () => {
+    const id = mobileStudioDetailId;
+    mobileStudioDetailDirty = false;
+    mobileStudioDetailId = "";
+    mobileStudioDetailDraft = null;
+    deleteStaffEventSeries(id);
+  });
 
   app.querySelectorAll("[data-mobile-calendar-month-picker]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -8443,16 +8920,59 @@ function bindMobileCoreActions(app) {
       mobileCalendarFilterDraft.showCompleted = input.checked;
     });
   });
+  app.querySelectorAll("[data-mobile-studio-filter-recurring]").forEach((input) => input.addEventListener("change", () => {
+    mobileStudioFilterDraft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+    mobileStudioFilterDraft.hideRecurring = input.checked;
+  }));
+  app.querySelectorAll("[data-mobile-studio-filter-unassigned]").forEach((input) => input.addEventListener("change", () => {
+    mobileStudioFilterDraft = mobileStudioFilterDraft || cloneMobileStudioFilters();
+    mobileStudioFilterDraft.unassignedOnly = input.checked;
+  }));
+  app.querySelectorAll("[data-mobile-studio-form-field]").forEach((input) => {
+    const update = () => {
+      if (!mobileStudioFormDraft) return;
+      const key = input.dataset.mobileStudioFormField;
+      mobileStudioFormDraft[key] = key === "repeatCount" ? Math.max(1, Math.min(52, Number(input.value) || 1)) : input.value;
+      if (key === "memo") input.closest("label")?.querySelector(".mobile-studio-memo-count") && (input.closest("label").querySelector(".mobile-studio-memo-count").textContent = `${input.value.length} / 200`);
+    };
+    input.addEventListener("input", update);
+    input.addEventListener("change", update);
+  });
+  app.querySelectorAll("[data-mobile-studio-form-toggle]").forEach((input) => input.addEventListener("change", () => {
+    if (!mobileStudioFormDraft) return;
+    mobileStudioFormDraft[input.dataset.mobileStudioFormToggle] = input.checked;
+    renderMobileDashboard();
+  }));
+  app.querySelectorAll("[data-mobile-studio-row-field]").forEach((input) => {
+    const update = () => {
+      const rows = mobileStudioFormRows();
+      const row = rows.find((item) => item.id === input.dataset.rowId);
+      if (!row) return;
+      row[input.dataset.mobileStudioRowField] = input.value;
+      if (!mobileStudioFormOpen) {
+        mobileStudioDetailDirty = true;
+        const saveButton = app.querySelector("[data-mobile-studio-staff-save]");
+        if (saveButton) saveButton.disabled = false;
+      }
+    };
+    input.addEventListener("input", update);
+    input.addEventListener("change", update);
+  });
+  app.querySelectorAll("[data-mobile-studio-owner-search]").forEach((input) => input.addEventListener("input", () => {
+    mobileStudioOwnerQuery = input.value;
+    app.querySelectorAll("[data-owner-label]").forEach((button) => { button.hidden = !button.dataset.ownerLabel.toLowerCase().includes(input.value.toLowerCase()); });
+  }));
 }
 
 function renderMobileDashboard() {
   const app = $("#mobileApp");
   if (!app) return;
   const current = mobileActiveSection || "projects";
+  app.dataset.mobileSection = current;
   app.dataset.mobileMoreRoute = mobileMoreRoute;
   $("#mobileViewTitle") && ($("#mobileViewTitle").textContent = mobileTitleForView(current));
   $("#mobileFabWrap")?.classList.toggle("calendar-mode", current === "calendar");
-  $("#mobileFabWrap")?.classList.toggle("is-hidden", ["settings", "notifications", "board"].includes(current));
+  $("#mobileFabWrap")?.classList.toggle("is-hidden", ["settings", "notifications", "board", "studio"].includes(current));
   $$(".mobile-tab").forEach((button) => {
     const section = button.dataset.mobileSection;
     button.classList.toggle("active", section === current);
@@ -8477,7 +8997,7 @@ function renderMobileDashboard() {
     works: renderMobileWorkCards,
     tasks: renderMobileTasks,
     calendar: renderMobileCalendar,
-    studio: renderMobileCalendar,
+    studio: renderMobileStudio,
     board: renderMobileBoard,
     admin: renderMobileAdminInline,
     notifications: renderMobileNotifications,
