@@ -136,33 +136,6 @@
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
   }
 
-  .mobile-calendar-quick-filters {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .mobile-calendar-quick-filters::-webkit-scrollbar {
-    display: none;
-  }
-
-  .mobile-calendar-quick-filters button {
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding: 0 13px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    color: #bbc1c4;
-    font-size: 12px;
-    font-weight: 900;
-  }
-
-  .mobile-calendar-quick-filters button.active {
-    color: #07130a;
-    background: var(--accent);
-  }
-
   .mobile-month-calendar {
     min-width: 0;
     padding: 4px 0 7px;

@@ -11,7 +11,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="영상 업무 대시보드" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <link rel="stylesheet" href="./styles.css?v=56" />
+    <link rel="stylesheet" href="./styles.css?v=60" />
     <link rel="stylesheet" href="./work-task.css?v=36" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -94,7 +94,13 @@
             <strong id="currentUserBadge"></strong>
             <span id="currentUserMeta"></span>
           </div>
-          <button id="logoutBtn" class="sidebar-account-toggle" type="button" aria-label="로그아웃">⌄</button>
+          <button id="accountMenuBtn" class="sidebar-account-toggle" type="button" aria-label="계정 메뉴 열기" aria-expanded="false">⌄</button>
+        </div>
+        <div id="sidebarAccountMenu" class="sidebar-account-menu" aria-hidden="true">
+          <button data-desktop-account-action="organization" type="button">조직도</button>
+          <button data-desktop-account-action="profile" type="button">프로필 관리</button>
+          <button data-desktop-account-action="settings" type="button">설정</button>
+          <button id="logoutBtn" class="danger" type="button">로그아웃</button>
         </div>
       </aside>
 
@@ -203,7 +209,7 @@
               <div class="section-head-actions">
                 <label class="calendar-toggle overview-hide-done">
                   <input id="hideCompletedProjects" type="checkbox" checked />
-                  <span>완료된 항목 숨기기</span>
+                  <span>방영완료 항목 숨기기</span>
                 </label>
                 <button id="addProjectBtn" class="pill primary">영상 프로젝트 추가</button>
               </div>
@@ -222,7 +228,8 @@
               <span>담당자</span>
               <button data-project-sort="type" type="button">분류</button>
               <button data-project-sort="client" type="button">발주부서</button>
-              <button data-project-sort="status" type="button">진행상태 · 완료</button>
+              <button data-project-sort="status" type="button">진행상태</button>
+              <span class="project-complete-head">방영완료</span>
               <button data-project-sort="firstEditDate" type="button">1차 완성일</button>
               <button data-project-sort="finalDate" type="button">최종 출고일</button>
             </div>
@@ -866,6 +873,25 @@
         <div id="notificationCenterList" class="notification-center-list"></div>
       </div>
     </div>
+    <div id="desktopOrganizationModal" class="modal-shell desktop-organization-modal" aria-hidden="true">
+      <section class="desktop-organization-card" role="dialog" aria-modal="true" aria-labelledby="desktopOrganizationTitle">
+        <header>
+          <h2 id="desktopOrganizationTitle">조직도</h2>
+          <button id="closeDesktopOrganizationBtn" type="button" aria-label="조직도 닫기">×</button>
+        </header>
+        <label class="desktop-organization-search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m16 16 5 5"/></svg>
+          <input id="desktopOrganizationSearch" type="search" placeholder="이름, 직책, 부서 검색" />
+        </label>
+        <div id="desktopOrganizationContent" class="desktop-organization-content"></div>
+      </section>
+    </div>
+    <div id="desktopProfileModal" class="modal-shell desktop-profile-modal" aria-hidden="true">
+      <form id="desktopProfileForm" class="desktop-profile-card" role="dialog" aria-modal="true" aria-labelledby="desktopProfileTitle">
+        <header><h2 id="desktopProfileTitle">프로필 관리</h2><button id="closeDesktopProfileBtn" type="button" aria-label="프로필 관리 닫기">×</button></header>
+        <div id="desktopProfileContent"></div>
+      </form>
+    </div>
     <div id="notificationClearModal" class="modal-shell confirm-modal notification-clear-modal" aria-hidden="true">
       <div class="modal-card confirm-card" role="dialog" aria-modal="true" aria-labelledby="notificationClearTitle">
         <div class="confirm-icon">!</div>
@@ -875,6 +901,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=56"></script>
+    <script src="./app.js?v=62"></script>
   </body>
 </html>
