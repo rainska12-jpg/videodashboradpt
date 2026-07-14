@@ -4252,10 +4252,14 @@ function renderProjectDetail() {
     ${propertyRow("☷", "업무분류", '<div id="detailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="detailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="detailClient"></div>')}
-    ${propertyRow("▾", "진행", '<div id="detailStatus"></div>')}
+    ${propertyRow("▾", "진행", `<div class="project-status-with-broadcast"><div id="detailStatus"></div><label class="project-broadcast-toggle project-broadcast-desktop"><input type="checkbox" data-project-broadcast-complete /><span>방영완료</span></label></div>`)}
     <div class="property-break"></div>
     ${propertyRow("↦", "시작일", dateFieldControl("kickoffDate"))}
     ${propertyRow("✓", "완료일", dateFieldControl("finalDate"))}
+    <div class="property-row project-broadcast-mobile-row">
+      <div class="property-label"><span>✓</span>방영완료</div>
+      <div class="property-value"><label class="project-broadcast-toggle icon-only"><input type="checkbox" data-project-broadcast-complete /><span>방영완료</span></label></div>
+    </div>
   `;
   setRichMemoContent("detailMemo", basicDraft.memo, editable);
 
@@ -4300,6 +4304,16 @@ function renderProjectDetail() {
       project.calendarFields[field] = checkbox.checked;
       saveState();
       renderCalendar();
+    });
+  });
+
+  $("#detailProperties").querySelectorAll("[data-project-broadcast-complete]").forEach((checkbox) => {
+    checkbox.checked = Boolean(project.broadcastCompleted);
+    checkbox.disabled = !editable;
+    checkbox.addEventListener("change", () => {
+      setProjectBroadcastCompleted(project, checkbox.checked);
+      renderAll();
+      if ($("#projectDetail")?.classList.contains("open")) renderProjectDetail();
     });
   });
 
@@ -7631,12 +7645,7 @@ function sortedMobileProjects() {
 }
 
 function mobileProjectStatusClass(status) {
-  const value = String(status || "");
-  if (value.includes("완료") || value.includes("납품")) return "done";
-  if (value.includes("대기")) return "waiting";
-  if (value.includes("수정")) return "revision";
-  if (value.includes("컨펌")) return "confirm";
-  return "progress";
+  return statusClass(status);
 }
 
 function mobileProjectDueInfo(project) {
@@ -9294,31 +9303,127 @@ function handleMobileMorePopState(event) {
 
 function isMobileEdgeSwipeBlocked(target) {
   if (!(target instanceof Element)) return true;
-  if (target.closest("input, textarea, select, [contenteditable='true'], [data-drag-handle], [data-mobile-option-drag], .drag-handle, .mobile-sheet, .modal-shell, .image-crop, .horizontal-scroll")) return true;
-  const scrollArea = target.closest("[data-horizontal-scroll], .mobile-board-filter-panel > div");
-  return Boolean(scrollArea && scrollArea.scrollWidth > scrollArea.clientWidth);
+  if (target.closest("input, textarea, select, [contenteditable='true'], [data-drag-handle], [data-mobile-option-drag], [data-mobile-calendar-swipe], .drag-handle, .image-crop, .horizontal-scroll")) return true;
+  for (let element = target; element && element !== document.body; element = element.parentElement) {
+    if (element.scrollWidth <= element.clientWidth + 2) continue;
+    const overflowX = getComputedStyle(element).overflowX;
+    if (overflowX === "auto" || overflowX === "scroll") return true;
+  }
+  return false;
 }
 
-function bindMobileMoreEdgeSwipe() {
-  document.addEventListener("pointerdown", (event) => {
-    if (!isMobileViewport() || mobileActiveSection !== "settings" || mobileMoreRoute === "more") return;
-    if (event.pointerType === "mouse" || event.clientX > 28 || isMobileEdgeSwipeBlocked(event.target)) return;
-    mobileEdgeSwipe = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: 0, dy: 0 };
-  }, { passive: true });
-  document.addEventListener("pointermove", (event) => {
-    if (!mobileEdgeSwipe || mobileEdgeSwipe.pointerId !== event.pointerId) return;
-    mobileEdgeSwipe.dx = event.clientX - mobileEdgeSwipe.x;
-    mobileEdgeSwipe.dy = event.clientY - mobileEdgeSwipe.y;
-    if (mobileEdgeSwipe.dx > 10 && Math.abs(mobileEdgeSwipe.dx) > Math.abs(mobileEdgeSwipe.dy) * 1.2) event.preventDefault();
-  }, { passive: false });
-  const finish = (event) => {
-    if (!mobileEdgeSwipe || mobileEdgeSwipe.pointerId !== event.pointerId) return;
-    const { dx, dy } = mobileEdgeSwipe;
-    mobileEdgeSwipe = null;
-    if (dx >= 80 && Math.abs(dx) > Math.abs(dy) * 1.35) mobileMoreBack();
+function mobileLayerIsOpen(selector) {
+  return Boolean($(selector)?.classList.contains("open"));
+}
+
+function closeTopMobileLayer() {
+  if (mobileLayerIsOpen("#dropdownLayer")) { closeDropdown(); return true; }
+  if (mobileLayerIsOpen("#datePickerLayer")) { closeDatePicker(); return true; }
+  if (mobileLayerIsOpen("#timePickerLayer")) { closeTimePicker(); return true; }
+  if (mobileLayerIsOpen("#deleteConfirmModal")) { closeDeleteConfirm(); return true; }
+  if (mobileLayerIsOpen("#unsavedBasicModal")) { closeUnsavedBasicModal(); return true; }
+  if (mobileLayerIsOpen("#notificationClearModal")) { closeNotificationClearConfirm(); return true; }
+  if (mobileLayerIsOpen("#repeatDeleteModal")) { closeRepeatDeleteModal(); return true; }
+  if (mobileLayerIsOpen("#taskOverviewFilterModal")) { closeTaskOverviewFilter(); return true; }
+  if (mobileLayerIsOpen("#scheduleModal")) { closeScheduleModal(); return true; }
+  if (mobileLayerIsOpen("#staffScheduleModal")) { closeStaffScheduleModal(); return true; }
+  if (mobileLayerIsOpen("#staffEventDetailModal")) { closeStaffEventDetail(); return true; }
+  if (mobileLayerIsOpen("#recurringTrainingModal")) { closeRecurringTrainingModal(); return true; }
+  if (mobileLayerIsOpen("#recurringTrainingManageModal")) { closeRecurringTrainingManageModal(); return true; }
+  if (mobileLayerIsOpen("#notificationCenterModal")) { openNotificationCenter(false); return true; }
+  if (mobileLayerIsOpen("#mobileAddSheet")) { closeMobileAddSheet(); return true; }
+  if (mobileLayerIsOpen("#mobileMoreSheet")) { openMobileMoreSheet(false); return true; }
+  if (mobileLayerIsOpen("#mobileFabMenu")) { toggleMobileFab(false); return true; }
+  if (mobileStudioDeleteConfirm) { mobileStudioDeleteConfirm = false; renderMobileDashboard(); return true; }
+  if (mobileStudioFilterOpen) { mobileStudioFilterOpen = false; mobileStudioFilterDraft = null; renderMobileDashboard(); return true; }
+  if (mobileCalendarFilterOpen) { closeMobileCalendarFilter(); return true; }
+  if (mobileProjectSortOpen) { mobileProjectSortOpen = false; renderMobileDashboard(); return true; }
+  if (mobileTaskSortOpen || mobileTaskOwnerFilterOpen) {
+    mobileTaskSortOpen = false;
+    mobileTaskOwnerFilterOpen = false;
+    renderMobileDashboard();
+    return true;
+  }
+  if (mobileBoardFilterOpen) { mobileBoardFilterOpen = false; rerenderBoardSurfaces(); return true; }
+  if (mobileCalendarSearchOpen) {
+    mobileCalendarSearchOpen = false;
+    mobileCalendarSearchQuery = "";
+    renderMobileDashboard();
+    return true;
+  }
+  if (boardViewerPostId) { boardViewerPostId = null; rerenderBoardSurfaces(); return true; }
+  if (notificationSettingsOpen) {
+    notificationSettingsOpen = false;
+    renderNotificationSurfaces();
+    if (mobileActiveSection === "notifications") renderMobileDashboard();
+    return true;
+  }
+  return false;
+}
+
+function navigateMobileBack() {
+  if (!isMobileViewport()) return false;
+  if (closeTopMobileLayer()) return true;
+  if (mobileStudioFormOpen) {
+    if (mobileStudioFormStep > 1) {
+      mobileStudioFormStep -= 1;
+      renderMobileDashboard();
+    } else closeMobileStudioForm();
+    return true;
+  }
+  if (mobileStudioDetailId) { closeMobileStudioDetail(); return true; }
+  if (boardEditorPostId !== null) { closeBoardEditor(); return true; }
+  if (activeBoardPostId) { closeBoardDetail(); return true; }
+  if ($("#projectDetail")?.classList.contains("open")) { closeProjectDetail(); return true; }
+  if ($("#workDetail")?.classList.contains("open")) { closeWorkDetail(); return true; }
+  if (mobileActiveSection === "settings" && mobileMoreRoute !== "more") { mobileMoreBack(); return true; }
+  if (mobileActiveSection === "notifications" && mobilePreviousSection !== "notifications") {
+    openMobileSection(mobilePreviousSection || "tasks");
+    return true;
+  }
+  return false;
+}
+
+function createMobileEdgeSwipeBack({ edgeWidth = 30, minimumDistance = 80, onBack = navigateMobileBack } = {}) {
+  const start = (event) => {
+    if (!isMobileViewport() || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    if (touch.clientX > edgeWidth || isMobileEdgeSwipeBlocked(event.target)) return;
+    mobileEdgeSwipe = { x: touch.clientX, y: touch.clientY, dx: 0, dy: 0, horizontal: false, cancelled: false };
   };
-  document.addEventListener("pointerup", finish, { passive: true });
-  document.addEventListener("pointercancel", () => { mobileEdgeSwipe = null; }, { passive: true });
+  const move = (event) => {
+    if (!mobileEdgeSwipe || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    mobileEdgeSwipe.dx = touch.clientX - mobileEdgeSwipe.x;
+    mobileEdgeSwipe.dy = touch.clientY - mobileEdgeSwipe.y;
+    const absX = Math.abs(mobileEdgeSwipe.dx);
+    const absY = Math.abs(mobileEdgeSwipe.dy);
+    if (!mobileEdgeSwipe.horizontal && (mobileEdgeSwipe.dx < -8 || (absY > 12 && absY > absX))) {
+      mobileEdgeSwipe.cancelled = true;
+      return;
+    }
+    if (!mobileEdgeSwipe.cancelled && mobileEdgeSwipe.dx > 10 && mobileEdgeSwipe.dx > absY * 1.25) {
+      mobileEdgeSwipe.horizontal = true;
+      event.preventDefault();
+    }
+  };
+  const finish = (event) => {
+    if (!mobileEdgeSwipe) return;
+    const gesture = mobileEdgeSwipe;
+    mobileEdgeSwipe = null;
+    if (event.type === "touchcancel" || gesture.cancelled) return;
+    if (gesture.dx >= minimumDistance && gesture.dx > Math.abs(gesture.dy) * 1.35) onBack();
+  };
+  document.addEventListener("touchstart", start, { passive: true });
+  document.addEventListener("touchmove", move, { passive: false });
+  document.addEventListener("touchend", finish, { passive: true });
+  document.addEventListener("touchcancel", finish, { passive: true });
+  return () => {
+    document.removeEventListener("touchstart", start);
+    document.removeEventListener("touchmove", move);
+    document.removeEventListener("touchend", finish);
+    document.removeEventListener("touchcancel", finish);
+  };
 }
 
 async function prepareMobileProfilePhoto(file) {
@@ -9463,32 +9568,6 @@ async function saveMobileProfile(form) {
     showToast("프로필을 저장하지 못했습니다. 관리자에게 문의해주세요.");
   }
 }
-
-let mobileDetailSwipeStart = null;
-
-function bindMobileDetailSwipe(target, onBack) {
-  if (!target) return;
-  target.addEventListener("touchstart", (event) => {
-    if (!isMobileViewport() || event.touches.length !== 1) return;
-    if (event.target.closest("input, textarea, select, button, .dropdown-layer, .date-picker-layer, .time-picker-layer")) return;
-    const touch = event.touches[0];
-    mobileDetailSwipeStart = { x: touch.clientX, y: touch.clientY };
-  }, { passive: true });
-  target.addEventListener("touchend", (event) => {
-    if (!mobileDetailSwipeStart || !isMobileViewport()) return;
-    const touch = event.changedTouches[0];
-    const dx = touch.clientX - mobileDetailSwipeStart.x;
-    const dy = touch.clientY - mobileDetailSwipeStart.y;
-    const startedAtLeftEdge = mobileDetailSwipeStart.x <= 32;
-    mobileDetailSwipeStart = null;
-    if (Math.abs(dy) > 55) return;
-    if (dx <= -85 || (startedAtLeftEdge && dx >= 75)) onBack();
-  }, { passive: true });
-  target.addEventListener("touchcancel", () => { mobileDetailSwipeStart = null; }, { passive: true });
-}
-
-bindMobileDetailSwipe($("#projectDetail"), closeProjectDetail);
-bindMobileDetailSwipe($("#workDetail"), closeWorkDetail);
 
 document.addEventListener("gesturestart", (event) => event.preventDefault(), { passive: false });
 document.addEventListener("touchmove", (event) => {
@@ -10436,7 +10515,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && mobileCalendarFilterOpen) closeMobileCalendarFilter();
 });
 window.addEventListener("popstate", handleMobileMorePopState);
-bindMobileMoreEdgeSwipe();
+createMobileEdgeSwipeBack();
 $("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
@@ -10474,14 +10553,22 @@ $("#projectsView").addEventListener("click", (event) => {
   saveViewPrefs({ projectSort });
   renderProjectList();
 });
+
+function setProjectBroadcastCompleted(project, completed) {
+  const nextValue = Boolean(completed);
+  if (!project || project.broadcastCompleted === nextValue) return false;
+  project.broadcastCompleted = nextValue;
+  notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: ["broadcastCompleted"] });
+  saveState();
+  return true;
+}
+
 $("#projectsView").addEventListener("change", (event) => {
   const completeInput = event.target.closest("[data-project-complete]");
   if (!completeInput) return;
   const project = state.projects.find((item) => item.id === completeInput.dataset.projectComplete);
   if (!project || !canEditProject(project)) return;
-  project.broadcastCompleted = completeInput.checked;
-  notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: ["broadcastCompleted"] });
-  saveState();
+  setProjectBroadcastCompleted(project, completeInput.checked);
   renderAll();
 });
 $("#workSearchInput").addEventListener("input", (event) => {
