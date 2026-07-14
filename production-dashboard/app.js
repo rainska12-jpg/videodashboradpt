@@ -2990,7 +2990,7 @@ function renderWorkTasks(work) {
         tasks.length
           ? tasks
               .map((task) => `
-                <article class="task-row ${highlightedWorkTaskId === task.id ? "is-highlighted" : ""}">
+                <article class="task-row ${highlightedWorkTaskId === task.id ? "is-highlighted" : ""}" data-notification-work-task="${esc(task.id)}">
                   <label class="task-main">
                     <input type="checkbox" data-work-task-check="${esc(task.id)}" ${task.done ? "checked" : ""} ${canManageWorkTask(work, task) ? "" : "disabled"} />
                     <span>
@@ -3119,7 +3119,7 @@ function renderWorkManagementRecords(work) {
         records.length
           ? records
               .map((record) => `
-                <article class="record-card">
+                <article class="record-card" data-notification-work-record="${esc(record.id)}">
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
@@ -3291,8 +3291,11 @@ function performOpenWorkDetail(workId, initialTab = "basic") {
   $("#workDetail").setAttribute("aria-hidden", "false");
 }
 
-function openWorkDetail(workId, initialTab = "basic") {
-  const open = () => performOpenWorkDetail(workId, initialTab);
+function openWorkDetail(workId, initialTab = "basic", afterOpen) {
+  const open = () => {
+    performOpenWorkDetail(workId, initialTab);
+    afterOpen?.();
+  };
   if ($("#projectDetail")?.classList.contains("open") && projectBasicIsDirty()) return requestBasicLeave("project", open);
   if ($("#workDetail")?.classList.contains("open") && activeWorkId !== workId && workBasicIsDirty()) return requestBasicLeave("work", open);
   open();
@@ -4369,7 +4372,7 @@ function renderManagementRecords(project) {
         records.length
           ? records
               .map((record) => `
-                <article class="record-card">
+                <article class="record-card" data-notification-project-record="${esc(record.id)}">
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
@@ -4523,7 +4526,7 @@ function renderProjectTasks(project) {
         tasks.length
           ? tasks
               .map((task) => `
-                <article class="task-row ${highlightedProjectTaskId === task.id ? "is-highlighted" : ""}">
+                <article class="task-row ${highlightedProjectTaskId === task.id ? "is-highlighted" : ""}" data-notification-project-task="${esc(task.id)}">
                   <label class="task-main">
                     <input type="checkbox" data-project-task-check="${esc(task.id)}" ${task.done ? "checked" : ""} ${canManageTask(task) ? "" : "disabled"} />
                     <span>
@@ -4771,8 +4774,11 @@ function performOpenProjectDetail(projectId, initialTab = "basic") {
   $("#projectDetail").setAttribute("aria-hidden", "false");
 }
 
-function openProjectDetail(projectId, initialTab = "basic") {
-  const open = () => performOpenProjectDetail(projectId, initialTab);
+function openProjectDetail(projectId, initialTab = "basic", afterOpen) {
+  const open = () => {
+    performOpenProjectDetail(projectId, initialTab);
+    afterOpen?.();
+  };
   if ($("#workDetail")?.classList.contains("open") && workBasicIsDirty()) return requestBasicLeave("work", open);
   if ($("#projectDetail")?.classList.contains("open") && activeProjectId !== projectId && projectBasicIsDirty()) return requestBasicLeave("project", open);
   open();
@@ -7527,6 +7533,39 @@ function markNotificationRead(item) {
   renderNotificationSurfaces();
 }
 
+let notificationTargetHighlightTimer = null;
+
+function highlightNotificationElement(element, { scroll = true } = {}) {
+  if (!element) return false;
+  $$(".notification-target-highlight").forEach((target) => target.classList.remove("notification-target-highlight"));
+  clearTimeout(notificationTargetHighlightTimer);
+  element.classList.remove("notification-target-highlight");
+  void element.offsetWidth;
+  element.classList.add("notification-target-highlight");
+  if (scroll) element.scrollIntoView({ block: "center", behavior: "smooth" });
+  notificationTargetHighlightTimer = setTimeout(() => element.classList.remove("notification-target-highlight"), 2800);
+  return true;
+}
+
+function highlightProjectOrWorkNotification({ scope, tab = "basic", targetId = "" }) {
+  requestAnimationFrame(() => {
+    const isWork = scope === "work";
+    const detail = isWork ? $("#workDetail .detail-page") : $("#projectDetail .detail-page");
+    const panelIds = isWork
+      ? { basic: "#workDetailBasicTab", tasks: "#workDetailTasksTab", records: "#workDetailRecordsTab", studio: "#workDetailStudioTab" }
+      : { basic: "#detailBasicTab", tasks: "#detailTasksTab", records: "#detailRecordsTab" };
+    const targetSelector = targetId
+      ? tab === "tasks"
+        ? `[data-notification-${isWork ? "work-" : "project-"}task="${CSS.escape(targetId)}"]`
+        : tab === "records"
+          ? `[data-notification-${isWork ? "work-" : "project-"}record="${CSS.escape(targetId)}"]`
+          : ""
+      : "";
+    const target = targetSelector ? $(targetSelector) : null;
+    highlightNotificationElement(target || $(panelIds[tab] || panelIds.basic) || detail, { scroll: Boolean(target || tab !== "basic") });
+  });
+}
+
 function openNotificationTarget(item) {
   if (!item) return;
   markNotificationRead(item);
@@ -7537,13 +7576,21 @@ function openNotificationTarget(item) {
   const projectId = item.parentType === "project" ? item.parentId : item.source?.projectId || (sourceType === "project" ? item.sourceId : "");
   const workId = item.parentType === "work" ? item.parentId : item.source?.workId || (sourceType === "work" ? item.sourceId : "");
   const targetId = item.subTargetId || item.source?.taskId || "";
+  const targetTab = item.targetTab || "basic";
   if (projectId) {
     const project = state.projects.find((entry) => entry.id === projectId);
     if (!project) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
     mobileActiveSection = "projects";
     setView("projects");
-    if (item.targetTab === "tasks" && targetId) highlightedProjectTaskId = targetId;
-    openProjectDetail(projectId, item.targetTab || "basic");
+    if (targetTab === "tasks" && targetId) highlightedProjectTaskId = targetId;
+    if (targetTab === "records" && targetId) {
+      recordFilterMode = "all";
+      recordSearchQuery = "";
+    }
+    openProjectDetail(projectId, targetTab, () => {
+      highlightProjectOrWorkNotification({ scope: "project", tab: targetTab, targetId });
+      if (targetTab === "tasks" && targetId) clearTaskHighlight("project");
+    });
     return;
   }
   if (workId) {
@@ -7551,8 +7598,18 @@ function openNotificationTarget(item) {
     if (!work) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
     mobileActiveSection = "works";
     setView("works");
-    if (item.targetTab === "tasks" && targetId) highlightedWorkTaskId = targetId;
-    openWorkDetail(workId, item.targetTab || "basic");
+    if (targetTab === "tasks" && targetId) {
+      highlightedWorkTaskId = targetId;
+      workTaskHideDone = false;
+    }
+    if (targetTab === "records" && targetId) {
+      workRecordFilterMode = "all";
+      workRecordSearchQuery = "";
+    }
+    openWorkDetail(workId, targetTab, () => {
+      highlightProjectOrWorkNotification({ scope: "work", tab: targetTab, targetId });
+      if (targetTab === "tasks" && targetId) clearTaskHighlight("work");
+    });
     return;
   }
   if (sourceType === "schedule") {
@@ -7566,11 +7623,22 @@ function openNotificationTarget(item) {
     openScheduleEventDetail(schedule.id);
     return;
   }
-  if (sourceType === "staff") {
-    const staffEvent = state.staffEvents.find((entry) => entry.id === (item.sourceId || item.source?.id));
+  if (sourceType === "staff" || sourceType.includes("studio")) {
+    const staffEventId = item.staffEventId || item.sourceId || item.source?.staffEventId || item.source?.id;
+    const staffEvent = state.staffEvents.find((entry) => entry.id === staffEventId);
     if (!staffEvent) return showToast("해당 항목이 삭제되었거나 더 이상 존재하지 않습니다.");
+    if (isMobileViewport()) {
+      mobileActiveSection = "studio";
+      mobileStudioDate = staffEvent.date || mobileStudioDate;
+      saveViewPrefs({ mobileStudioDate });
+      setView("studio");
+      openMobileStudioDetail(staffEvent.id);
+      requestAnimationFrame(() => highlightNotificationElement($(".mobile-studio-detail .mobile-studio-summary") || $(".mobile-studio-detail")));
+      return;
+    }
     setView("studio");
     openStaffEventDetail(staffEvent.id);
+    requestAnimationFrame(() => highlightNotificationElement($("#staffEventDetailContent") || $("#staffEventDetailModal .modal-card")));
     return;
   }
   if (sourceType === "board") {
@@ -8849,6 +8917,36 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-more-route]", (button) => navigateMobileMore(button.dataset.mobileMoreRoute));
   bind("[data-mobile-more-back]", () => mobileMoreBack());
   bind("[data-mobile-more-target]", (button) => openMobileSection(button.dataset.mobileMoreTarget));
+  bind("[data-mobile-admin-user-open]", (button) => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
+  bind("[data-mobile-user-role]", (button) => {
+    const userRow = button.closest("[data-mobile-admin-user]");
+    if (userRow) setUserRole(userRow.dataset.mobileAdminUser, button.dataset.mobileUserRole);
+  });
+  bind("[data-mobile-user-pending]", (button) => {
+    const userRow = button.closest("[data-mobile-admin-user]");
+    if (userRow) markUserPending(userRow.dataset.mobileAdminUser);
+  });
+  bind("[data-mobile-user-approve]", (button) => {
+    const userRow = button.closest("[data-mobile-admin-user]");
+    if (userRow) approveUser(userRow.dataset.mobileAdminUser);
+  });
+  bind("[data-mobile-user-delete]", (button) => {
+    const userRow = button.closest("[data-mobile-admin-user]");
+    if (userRow) confirmDelete(() => deleteUser(userRow.dataset.mobileAdminUser));
+  });
+  bind("[data-mobile-option-save]", (button) => {
+    const manager = button.closest("[data-mobile-option-group]");
+    const input = button.parentElement?.querySelector("[data-mobile-option-value]");
+    if (manager && input) renameOption(manager.dataset.mobileOptionGroup, button.dataset.mobileOptionSave, input.value);
+  });
+  bind("[data-mobile-option-delete]", (button) => {
+    const manager = button.closest("[data-mobile-option-group]");
+    if (manager) confirmDelete(() => deleteOption(manager.dataset.mobileOptionGroup, button.dataset.mobileOptionDelete));
+  });
+  bind("[data-save-owner-links]", (button) => {
+    button.disabled = true;
+    saveOwnerLinkSettings().finally(() => { if (button.isConnected) button.disabled = false; });
+  });
   bind("[data-mobile-notifications-close]", () => openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection));
   bind("[data-mobile-open-task-id]", (button) => {
     const item = taskOverviewItems().find((entry) => entry.id === button.dataset.mobileOpenTaskId && entry.source === button.dataset.mobileOpenTaskSource);
@@ -9173,9 +9271,6 @@ function renderMobileDashboard() {
   };
   app.innerHTML = (renderers[current] || renderMobileProjectCards)();
   bindMobileCoreActions(app);
-  app.querySelectorAll("[data-mobile-admin-user-open]").forEach((button) => {
-    button.addEventListener("click", () => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
-  });
   renderNotificationSurfaces();
 }
 

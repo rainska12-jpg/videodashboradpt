@@ -23,6 +23,18 @@
 .notification-item.type-danger::before { background: #ff5c6f; }
 .notification-item:hover { background: rgba(255,255,255,.035); }
 .notification-item.is-read { opacity: .58; }
+
+.notification-target-highlight {
+  position: relative;
+  z-index: 1;
+  animation: notification-target-pulse 2.8s ease-out;
+}
+
+@keyframes notification-target-pulse {
+  0%, 24% { outline: 3px solid var(--accent); box-shadow: 0 0 0 7px rgba(30, 215, 96, .24), 0 0 28px rgba(30, 215, 96, .34); }
+  70% { outline: 2px solid rgba(30, 215, 96, .5); box-shadow: 0 0 0 3px rgba(30, 215, 96, .1); }
+  100% { outline: 0 solid transparent; box-shadow: none; }
+}
 .notification-avatar { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 13px; background: linear-gradient(145deg,#31383d,#202529); color: white; font-size: 16px; font-weight: 950; }
 .notification-avatar i { position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 6px; background: #2a3338; color: var(--accent); font-size: 10px; font-style: normal; }
 .notification-copy { min-width: 0; display: grid; gap: 3px; }
