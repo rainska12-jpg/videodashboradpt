@@ -317,9 +317,10 @@ let highlightedProjectTaskId = null;
 let highlightedWorkTaskId = null;
 let pendingDeleteAction = null;
 let pendingRepeatDeleteEventId = null;
-let detailTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
+let detailTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, ...defaultWorkTaskRecurrenceDraft(dateKey(new Date())), editingTaskId: null };
 let detailTaskComposerOpen = false;
 let detailTaskDetailOpen = false;
+let detailTaskRecurrenceOpen = false;
 let editingRecordId = null;
 let recordSearchQuery = "";
 let recordFilterMode = viewPref("recordFilterMode", "all");
@@ -327,11 +328,13 @@ let activeDetailTab = "basic";
 let projectBasicDraft = null;
 let projectChangeBuffer = new Set();
 let detailTaskSort = viewPref("detailTaskSort", "created");
-let workTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, editingTaskId: null };
+let detailTaskHideDone = viewPref("detailTaskHideDone", true);
+let workTaskDraft = { title: "", detail: "", type: "", owners: [], dueDate: dateKey(new Date()), noDueDate: false, allDay: true, startTime: "09:00", endTime: "10:00", calendar: false, recurrenceType: "none", recurrenceCustomFrequency: "weekly", recurrenceWeekdays: [new Date().getDay()], recurrenceMonthlyMode: "day", recurrenceMonthlyDay: new Date().getDate(), recurrenceMonthlyOrdinal: 1, recurrenceMonthlyWeekday: new Date().getDay(), recurrenceEndType: "none", recurrenceEndDate: "", recurrenceCount: 10, editingTaskId: null, editingScope: "single" };
 let workTaskComposerOpen = false;
 let workTaskSort = viewPref("workTaskSort", "created");
 let workTaskHideDone = viewPref("workTaskHideDone", true);
 let workTaskDetailOpen = false;
+let workTaskRecurrenceOpen = false;
 let workStudioMemoOpen = false;
 let editingWorkRecordId = null;
 let workRecordSearchQuery = "";
@@ -341,6 +344,7 @@ let workBasicDraft = null;
 let workChangeBuffer = new Set();
 let pendingBasicLeaveAction = null;
 let pendingBasicLeaveScope = "";
+let pendingWorkTaskScopeAction = null;
 let projectSearchQuery = viewPref("projectSearchQuery", "");
 let projectFilters = viewPref("projectFilters", { type: "", client: "", status: "" });
 let projectSort = viewPref("projectSort", { key: "finalDate", direction: "asc" });
@@ -358,6 +362,7 @@ let selectedCalendarDate = viewPref("selectedCalendarDate", dateKey(new Date()))
 let mobileCalendarViewMode = viewPref("mobileCalendarViewMode", "month");
 let mobileCalendarFilterOpen = false;
 let mobileCalendarFilterDraft = null;
+let mobileWorkSortOpen = false;
 let mobileCalendarSearchOpen = false;
 let mobileCalendarSearchQuery = "";
 let mobileCalendarSwipeStart = null;
@@ -615,6 +620,7 @@ function canUserManageOwner(ownerId, user = currentUser()) {
 }
 
 const defaultNotificationSettings = {
+  darkMode: false,
   all: true,
   projectStatus: true,
   projectContent: true,
@@ -630,6 +636,16 @@ const defaultNotificationSettings = {
 function notificationSettingsForUser(userId) {
   state.notificationSettingsByUser = state.notificationSettingsByUser || {};
   return { ...defaultNotificationSettings, ...(state.notificationSettingsByUser[userId] || {}) };
+}
+
+function applyUserTheme() {
+  const user = currentUser();
+  const darkMode = Boolean(user && notificationSettingsForUser(user.id).darkMode);
+  const mode = darkMode ? "dark" : "light";
+  document.documentElement.dataset.theme = mode;
+  document.documentElement.style.colorScheme = mode;
+  document.body.dataset.theme = mode;
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", darkMode ? "#0b0e0c" : "#00ed64");
 }
 
 function notificationSettingKey(actionType = "") {
@@ -779,7 +795,7 @@ function notifyEntityFieldChanges({ entityType, entity, ownerIds, fields }) {
   const actor = notificationActor();
   const labels = changedFields.map((field) => notificationFieldLabels[field] || field);
   const isProject = entityType === "project";
-  const label = isProject ? "영상 프로젝트" : "업무 프로젝트";
+  const label = isProject ? "프로젝트" : "업무 프로젝트";
   const actionType = changedFields.length === 1 && changedFields[0] === "status"
     ? `${entityType}_status_changed`
     : `${entityType}_content_changed`;
@@ -906,6 +922,42 @@ function normalizeOptions(source = {}) {
   return normalized;
 }
 
+const WORK_TASK_RECURRENCE_TYPES = new Set(["daily", "weekly", "biweekly", "monthly", "custom"]);
+const WORK_TASK_RECURRENCE_END_TYPES = new Set(["none", "date", "count"]);
+
+function stripWorkTaskOccurrenceTitle(value) {
+  return String(value || "").replace(/\s+\d+회차$/, "").trim();
+}
+
+function normalizeWorkTaskRecurrence(task = {}) {
+  const recurrenceType = WORK_TASK_RECURRENCE_TYPES.has(task.recurrenceType) ? task.recurrenceType : "none";
+  const isRecurring = Boolean(task.isRecurring || task.recurrenceGroupId || recurrenceType !== "none");
+  const weekdays = [...new Set((Array.isArray(task.recurrenceWeekdays) ? task.recurrenceWeekdays : []).map(Number).filter((day) => day >= 0 && day <= 6))].sort((a, b) => a - b);
+  const occurrenceNumber = Math.max(1, Number(task.recurrenceOccurrenceNumber) || 1);
+  return {
+    isRecurring,
+    recurrenceGroupId: isRecurring ? String(task.recurrenceGroupId || "") : "",
+    recurrenceType: isRecurring ? recurrenceType : "none",
+    recurrenceInterval: Math.max(1, Number(task.recurrenceInterval) || (recurrenceType === "biweekly" ? 2 : 1)),
+    recurrenceStartDate: isRecurring ? String(task.recurrenceStartDate || task.dueDate || "") : "",
+    recurrenceEndType: isRecurring && WORK_TASK_RECURRENCE_END_TYPES.has(task.recurrenceEndType) ? task.recurrenceEndType : "none",
+    recurrenceEndDate: isRecurring ? String(task.recurrenceEndDate || "") : "",
+    recurrenceCount: isRecurring && task.recurrenceEndType === "count" ? Math.max(1, Number(task.recurrenceCount) || occurrenceNumber) : 0,
+    recurrenceCustomFrequency: task.recurrenceCustomFrequency === "monthly" ? "monthly" : "weekly",
+    recurrenceWeekdays: weekdays,
+    recurrenceMonthlyMode: task.recurrenceMonthlyMode === "ordinal" ? "ordinal" : "day",
+    recurrenceMonthlyDay: Math.max(1, Math.min(31, Number(task.recurrenceMonthlyDay) || new Date(`${task.dueDate || dateKey(new Date())}T00:00:00`).getDate() || 1)),
+    recurrenceMonthlyOrdinal: [-1, 1, 2, 3, 4].includes(Number(task.recurrenceMonthlyOrdinal)) ? Number(task.recurrenceMonthlyOrdinal) : 1,
+    recurrenceMonthlyWeekday: Math.max(0, Math.min(6, Number(task.recurrenceMonthlyWeekday) || 0)),
+    recurrenceOccurrenceNumber: occurrenceNumber,
+    recurrenceOriginId: isRecurring ? String(task.recurrenceOriginId || task.id || "") : "",
+    recurrenceBaseTitle: isRecurring ? String(task.recurrenceBaseTitle || stripWorkTaskOccurrenceTitle(task.text)) : "",
+    recurrenceDate: isRecurring ? String(task.recurrenceDate || task.dueDate || "") : "",
+    recurrenceDetached: Boolean(task.recurrenceDetached),
+    recurrenceExcludedDates: isRecurring ? [...new Set((Array.isArray(task.recurrenceExcludedDates) ? task.recurrenceExcludedDates : []).filter(Boolean))].sort() : []
+  };
+}
+
 function normalizeState(data) {
   const options = normalizeOptions(data.options || {});
   const projects = Array.isArray(data.projects) ? data.projects : [];
@@ -950,7 +1002,8 @@ function normalizeState(data) {
       studioReservationId: work.studioReservationId || "",
       studioReservation: work.studioReservation || null,
       tasks: Array.isArray(work.tasks)
-        ? work.tasks.map((task) => ({
+        ? work.tasks.map((task) => {
+          const normalizedTask = {
             detail: "",
             type: "",
             owners: Array.isArray(task.owners) ? task.owners : [task.owner].filter(Boolean),
@@ -962,7 +1015,9 @@ function normalizeState(data) {
             createdAt: task.createdAt || new Date().toISOString(),
             calendar: Boolean(task.calendar),
             ...task
-          }))
+          };
+          return { ...normalizedTask, ...normalizeWorkTaskRecurrence(normalizedTask) };
+        })
         : [],
       records: Array.isArray(work.records) ? work.records.map((record) => ({ authorUserId: "", ...record })) : []
     };
@@ -974,7 +1029,8 @@ function normalizeState(data) {
     projects: normalizedProjects,
     works: normalizedWorks,
     tasks: Array.isArray(data.tasks)
-      ? data.tasks.map((task) => ({
+      ? data.tasks.map((task) => {
+        const normalizedTask = {
           detail: "",
           type: "",
           owners: Array.isArray(task.owners) ? task.owners : [task.owner].filter(Boolean),
@@ -985,7 +1041,9 @@ function normalizeState(data) {
           endTime: task.endTime || "10:00",
           createdAt: task.createdAt || new Date().toISOString(),
           ...task
-        }))
+        };
+        return { ...normalizedTask, ...normalizeWorkTaskRecurrence(normalizedTask) };
+      })
       : [],
     schedules: Array.isArray(data.schedules) ? data.schedules.map((schedule) => ({ allDay: true, startTime: "09:00", endTime: "10:00", ...schedule })) : [],
     staffEvents: Array.isArray(data.staffEvents) ? data.staffEvents.map((event) => {
@@ -1005,7 +1063,7 @@ function normalizeState(data) {
         owner,
         owners: [owner].filter(Boolean),
         trainingType,
-        title: event.title || trainingType
+        title: displayStudioTerminology(event.title || trainingType)
       };
     }) : [],
     recurringTrainings: Array.isArray(data.recurringTrainings) ? data.recurringTrainings.map((series) => {
@@ -1024,7 +1082,7 @@ function normalizeState(data) {
         owner,
         owners: [owner].filter(Boolean),
         trainingType,
-        title: series.title || trainingType
+        title: displayStudioTerminology(series.title || trainingType)
       };
     }) : [],
     boardPosts: Array.isArray(data.boardPosts) ? data.boardPosts.map((post, index) => ({
@@ -1057,7 +1115,12 @@ function normalizeState(data) {
       deletedAt: comment.deletedAt || null
     })) : [],
     owners: Array.isArray(data.owners) ? data.owners : [],
-    notifications: Array.isArray(data.notifications) ? data.notifications : [],
+    notifications: Array.isArray(data.notifications) ? data.notifications.map((item) => ({
+      ...item,
+      title: displayStudioTerminology(item.title),
+      body: displayStudioTerminology(item.body),
+      message: displayStudioTerminology(item.message)
+    })) : [],
     ownerDefaultsVersion: data.ownerDefaultsVersion || 2
   };
 }
@@ -1089,7 +1152,11 @@ function staffEventTitle(event) {
 }
 
 function staffReservationTitle(event) {
-  return event?.title || event?.trainingType || "방송실 예약";
+  return displayStudioTerminology(event?.title || event?.trainingType || "방송실 스탭");
+}
+
+function displayStudioTerminology(value) {
+  return typeof value === "string" ? value.replaceAll(["방송실", "예약"].join(" "), "방송실 스탭") : value;
 }
 
 function staffEventTypeColor(type) {
@@ -1199,9 +1266,9 @@ function canManageTask(task) {
   const user = currentUser();
   if (!user || !task) return false;
   if (isAdminUser()) return true;
-  if (taskOwners(task).some((ownerId) => canUserManageOwner(ownerId, user))) return true;
   const project = state.projects.find((item) => item.id === task.projectId);
-  return Boolean(project && projectOwners(project).some((ownerId) => canUserManageOwner(ownerId, user)));
+  if (canEditProject(project)) return true;
+  return taskOwners(task).some((ownerId) => canUserManageOwner(ownerId, user));
 }
 
 function workOwners(work) {
@@ -1241,6 +1308,30 @@ function setAuthMessage(message) {
   $("#authMessage").textContent = message;
 }
 
+function setAuthPositionMenu(open) {
+  const button = $("#signupPositionButton");
+  const menu = $("#signupPositionMenu");
+  if (!button || !menu) return;
+  button.classList.toggle("open", open);
+  button.setAttribute("aria-expanded", String(open));
+  menu.classList.toggle("open", open);
+  menu.setAttribute("aria-hidden", String(!open));
+}
+
+function selectAuthPosition(position) {
+  const input = $("#signupPosition");
+  const button = $("#signupPositionButton");
+  if (!input || !button) return;
+  input.value = position;
+  button.querySelector("span").textContent = position || "직책 선택";
+  $$("[data-auth-position]").forEach((option) => {
+    const selected = option.dataset.authPosition === position;
+    option.classList.toggle("selected", selected);
+    option.setAttribute("aria-selected", String(selected));
+  });
+  setAuthPositionMenu(false);
+}
+
 function renderAuth() {
   const overlay = $("#authOverlay");
   if (isAuthInitializing) {
@@ -1265,6 +1356,7 @@ function showAuthMode(mode) {
   const signupMode = mode === "signup";
   $("#authForm").classList.toggle("signup-mode", signupMode);
   $("#authMessage").textContent = "";
+  setAuthPositionMenu(false);
 }
 
 async function login(username, password) {
@@ -1484,18 +1576,21 @@ function projectName(projectId) {
 }
 
 function setView(view) {
-  const titles = { overview: "개요", projects: "영상 프로젝트", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 예약", board: "게시판", admin: "관리자 모드" };
+  const titles = { overview: "개요", projects: "영상", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 스탭", board: "게시판", admin: "관리자 모드" };
+  const eyebrows = { projects: "VIDEO", works: "WORK", tasks: "TASK", calendar: "CALENDAR", studio: "STUDIO", board: "BOARD", admin: "ADMIN" };
   $$(".view").forEach((section) => section.classList.remove("active"));
   const targetView = $(`#${view}View`) ? view : "overview";
   $(`#${targetView}View`).classList.add("active");
   activeView = targetView;
   $(".main")?.classList.toggle("studio-mode", targetView === "studio");
   $$(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === targetView));
+  $("#viewEyebrow").textContent = eyebrows[targetView] || "VIDEO WORK DASHBOARD";
   $("#viewTitle").textContent = titles[targetView];
   location.hash = targetView;
 }
 
 function renderDropdown({ target, value, options, placeholder, onSelect, compact = false, disabled = false, className = "", formatOptionLabel = (option) => option }) {
+  if (!target) return;
   target.innerHTML = `
     <button type="button" class="custom-select ${compact ? "compact" : ""} ${className}" ${disabled ? "disabled" : ""}>
       <span>${esc(value ? formatOptionLabel(value) : placeholder)}</span>
@@ -1510,6 +1605,7 @@ function renderDropdown({ target, value, options, placeholder, onSelect, compact
 }
 
 function renderMultiDropdown({ target, values, options, placeholder, onChange, compact = false, disabled = false, className = "", formatOptionLabel = (option) => option }) {
+  if (!target) return;
   const selected = new Set(values || []);
   const label = selected.size ? Array.from(selected).map(formatOptionLabel).join(", ") : placeholder;
   target.innerHTML = `
@@ -1601,6 +1697,7 @@ function openMultiDropdown(anchor, options, selected, onChange, formatOptionLabe
 }
 
 function renderDateButton({ target, value, onSelect, compact = false, disabled = false }) {
+  if (!target) return;
   target.innerHTML = `
     <button type="button" class="date-button ${compact ? "compact" : ""}" ${disabled ? "disabled" : ""}>
       <span>${formatDate(value)}</span>
@@ -2030,7 +2127,7 @@ function renderUpcoming() {
           </article>
         `)
         .join("")
-    : `<div class="empty">예정된 영상 프로젝트 일정이 없습니다.</div>`;
+    : `<div class="empty">예정된 프로젝트 일정이 없습니다.</div>`;
 }
 
 function renderProjectList() {
@@ -2118,7 +2215,7 @@ function renderProjectList() {
           </article>
         `)
         .join("")
-    : `<div class="empty">${projectHideDone && state.projects.some((project) => project.broadcastCompleted) ? "표시할 영상 프로젝트가 없습니다. 방영완료 항목 표시를 켜면 확인할 수 있습니다." : "조건에 맞는 영상 프로젝트가 없습니다."}</div>`;
+    : `<div class="empty">${projectHideDone && state.projects.some((project) => project.broadcastCompleted) ? "표시할 프로젝트가 없습니다. 방영완료 항목 표시를 켜면 확인할 수 있습니다." : "조건에 맞는 프로젝트가 없습니다."}</div>`;
 
   document.querySelectorAll("[data-project-owner-cell]").forEach((target) => {
     const project = state.projects.find((item) => item.id === target.dataset.projectOwnerCell);
@@ -2445,7 +2542,7 @@ function saveProjectBasicChanges({ showMessage = true } = {}) {
   projectBasicDraft = createProjectBasicDraft(project);
   renderAll();
   if (activeProjectId === project.id) renderProjectDetail();
-  if (showMessage) showToast("영상 프로젝트 상태와 메모가 저장되었습니다.");
+  if (showMessage) showToast("프로젝트 상태와 메모가 저장되었습니다.");
   return true;
 }
 
@@ -2496,7 +2593,7 @@ function requestBasicLeave(scope, action, focusTarget = document.activeElement) 
   }
   pendingBasicLeaveScope = scope;
   pendingBasicLeaveAction = { run: action, focusTarget };
-  $("#unsavedBasicTitle").textContent = `${scope === "project" ? "영상 프로젝트" : "업무 프로젝트"} 변경사항을 저장할까요?`;
+  $("#unsavedBasicTitle").textContent = `${scope === "project" ? "프로젝트" : "업무 프로젝트"} 변경사항을 저장할까요?`;
   const modal = $("#unsavedBasicModal");
   modal.classList.add("open");
   modal.setAttribute("aria-hidden", "false");
@@ -2584,7 +2681,7 @@ function renderWorkDetail() {
     const field = checkbox.dataset.workCalendarField;
     work.calendarFields = { ...defaultWorkCalendarFields, ...(work.calendarFields || {}) };
     checkbox.checked = Boolean(work.calendarFields[field]);
-    checkbox.disabled = work.noSchedule || work.studioReservationEnabled || !editable;
+    checkbox.disabled = work.noSchedule || !editable;
     checkbox.addEventListener("change", () => {
       work.calendarFields[field] = checkbox.checked;
       saveState();
@@ -2645,12 +2742,12 @@ function ensureWorkStudioReservation(work) {
 function removeWorkStudioReservation(work) {
   const event = state.staffEvents.find((item) => item.id === work.studioReservationId);
   const recipientOwners = uniqueValues([...workOwners(work), ...(event?.owners || [])]);
-  notifyOwners(recipientOwners, `${notificationActor().name}님이 ‘${work.title}’의 방송실 예약을 삭제했습니다.`, {
+  notifyOwners(recipientOwners, `${notificationActor().name}님이 ‘${work.title}’의 방송실 스탭을 삭제했습니다.`, {
     type: "work-studio",
     workId: work.id,
     staffEventId: work.studioReservationId,
     actionType: "studio_reservation_deleted",
-    title: "방송실 예약 삭제",
+    title: "방송실 스탭 삭제",
     targetTab: "studio"
   });
   if (work.studioReservationId) {
@@ -2673,7 +2770,7 @@ function syncWorkStudioReservation(work) {
   }));
   const owners = [...new Set(staffRows.map((row) => row.owner).filter((owner) => !isUnassignedStudioOwner(owner)))];
   const eventData = {
-    title: reservation.title || work.title || "방송실 예약",
+    title: reservation.title || work.title || "방송실 스탭",
     source: "work",
     workId: work.id,
     room: reservation.room || "",
@@ -2698,19 +2795,19 @@ function syncWorkStudioReservation(work) {
     work.studioReservationId = id;
     state.staffEvents.push({ id, ...eventData });
   }
-  notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${work.title}’의 방송실 예약을 ${wasExisting ? "수정" : "생성"}했습니다.`, {
+  notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${work.title}’의 방송실 스탭을 ${wasExisting ? "수정" : "생성"}했습니다.`, {
     type: "work-studio",
     workId: work.id,
     staffEventId: work.studioReservationId,
     actionType: wasExisting ? "studio_reservation_updated" : "studio_reservation_created",
-    title: wasExisting ? "방송실 예약 수정" : "방송실 예약 생성",
+    title: wasExisting ? "방송실 스탭 수정" : "방송실 스탭 생성",
     targetTab: "studio"
   });
   saveState();
   queueRemoteSave();
   renderAll();
   renderWorkDetail();
-  showToast("방송실 예약이 저장되었습니다.");
+  showToast("방송실 스탭이 저장되었습니다.");
 }
 
 function renderWorkStudioRows(work) {
@@ -2813,7 +2910,7 @@ function renderWorkStudioReservation(work) {
   target.innerHTML = `
     <div class="work-studio-panel">
       <label class="work-studio-toggle studio-compact-toggle">
-        <strong>방송실 예약</strong>
+        <strong>방송실 스탭</strong>
         <span>${work.studioReservationEnabled ? "사용" : "사용 안함"}</span>
         <input id="workStudioEnabled" type="checkbox" ${work.studioReservationEnabled ? "checked" : ""} ${editable ? "" : "disabled"} />
         <b></b>
@@ -2858,6 +2955,308 @@ function renderWorkStudioReservation(work) {
   if (work.studioReservationEnabled) renderWorkStudioControls(work);
 }
 
+const WORK_TASK_RECURRENCE_OPTIONS = [
+  ["none", "반복 안 함"],
+  ["daily", "매일"],
+  ["weekly", "매주"],
+  ["biweekly", "격주"],
+  ["monthly", "매월"],
+  ["custom", "사용자화"]
+];
+const WORK_TASK_WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
+const WORK_TASK_ORDINAL_OPTIONS = [["1", "첫 번째"], ["2", "두 번째"], ["3", "세 번째"], ["4", "네 번째"], ["-1", "마지막"]];
+
+function workTaskDateObject(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function workTaskAddDays(date, amount) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + amount);
+  return next;
+}
+
+function workTaskAddMonths(date, amount) {
+  const target = new Date(date.getFullYear(), date.getMonth() + amount, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  target.setDate(Math.min(date.getDate(), lastDay));
+  return target;
+}
+
+function workTaskMonthDay(year, month, day) {
+  const candidate = new Date(year, month, day);
+  return candidate.getFullYear() === year && candidate.getMonth() === month && candidate.getDate() === day ? candidate : null;
+}
+
+function workTaskOrdinalWeekday(year, month, ordinal, weekday) {
+  if (ordinal === -1) {
+    const last = new Date(year, month + 1, 0);
+    const offset = (last.getDay() - weekday + 7) % 7;
+    return new Date(year, month, last.getDate() - offset);
+  }
+  const first = new Date(year, month, 1);
+  const offset = (weekday - first.getDay() + 7) % 7;
+  const day = 1 + offset + (ordinal - 1) * 7;
+  return workTaskMonthDay(year, month, day);
+}
+
+function workTaskRecurrenceRule(source = {}) {
+  const startDate = source.dueDate || source.recurrenceStartDate || dateKey(new Date());
+  const start = workTaskDateObject(startDate) || dateOnly(new Date());
+  const type = WORK_TASK_RECURRENCE_TYPES.has(source.recurrenceType) ? source.recurrenceType : "none";
+  const weekdays = [...new Set((source.recurrenceWeekdays || []).map(Number).filter((day) => day >= 0 && day <= 6))].sort((a, b) => a - b);
+  return {
+    type,
+    interval: type === "biweekly" ? 2 : Math.max(1, Number(source.recurrenceInterval) || 1),
+    startDate: dateKey(start),
+    endType: WORK_TASK_RECURRENCE_END_TYPES.has(source.recurrenceEndType) ? source.recurrenceEndType : "none",
+    endDate: source.recurrenceEndDate || "",
+    count: Math.max(1, Math.min(10, Number(source.recurrenceCount) || 10)),
+    customFrequency: source.recurrenceCustomFrequency === "monthly" ? "monthly" : "weekly",
+    weekdays: weekdays.length ? weekdays : [start.getDay()],
+    monthlyMode: source.recurrenceMonthlyMode === "ordinal" ? "ordinal" : "day",
+    monthlyDay: Math.max(1, Math.min(31, Number(source.recurrenceMonthlyDay) || start.getDate())),
+    monthlyOrdinal: [-1, 1, 2, 3, 4].includes(Number(source.recurrenceMonthlyOrdinal)) ? Number(source.recurrenceMonthlyOrdinal) : 1,
+    monthlyWeekday: Math.max(0, Math.min(6, Number(source.recurrenceMonthlyWeekday) || 0)),
+    excludedDates: [...new Set((source.recurrenceExcludedDates || []).filter(Boolean))]
+  };
+}
+
+function generateWorkTaskRecurrenceDates(source, { horizonDate = "" } = {}) {
+  const rule = workTaskRecurrenceRule(source);
+  const start = workTaskDateObject(rule.startDate);
+  if (!start || rule.type === "none") return start ? [rule.startDate] : [];
+  const endLimit = rule.endType === "date"
+    ? workTaskDateObject(rule.endDate)
+    : rule.endType === "none"
+      ? (workTaskDateObject(horizonDate) || workTaskAddMonths(start, 12))
+      : null;
+  if (rule.endType === "date" && (!endLimit || endLimit < start)) return [];
+  const targetCount = rule.endType === "count" ? rule.count : Infinity;
+  const excluded = new Set(rule.excludedDates);
+  const results = [];
+  const seen = new Set();
+  const addCandidate = (candidate) => {
+    if (!candidate || candidate < start || (endLimit && candidate > endLimit)) return;
+    const key = dateKey(candidate);
+    if (excluded.has(key) || seen.has(key)) return;
+    seen.add(key);
+    results.push(key);
+  };
+  let iterations = 0;
+  const canContinue = () => results.length < targetCount && iterations < 40000;
+
+  if (rule.type === "daily" || rule.type === "weekly" || rule.type === "biweekly") {
+    const step = rule.type === "daily" ? rule.interval : rule.interval * 7;
+    let cursor = new Date(start);
+    while (canContinue() && (!endLimit || cursor <= endLimit)) {
+      addCandidate(cursor);
+      cursor = workTaskAddDays(cursor, step);
+      iterations += 1;
+    }
+  } else if (rule.type === "monthly") {
+    let monthOffset = 0;
+    while (canContinue()) {
+      const anchor = new Date(start.getFullYear(), start.getMonth() + monthOffset, 1);
+      const candidate = workTaskMonthDay(anchor.getFullYear(), anchor.getMonth(), start.getDate());
+      if (endLimit && anchor > endLimit) break;
+      addCandidate(candidate);
+      monthOffset += rule.interval;
+      iterations += 1;
+    }
+  } else if (rule.customFrequency === "weekly") {
+    let cursor = new Date(start);
+    while (canContinue() && (!endLimit || cursor <= endLimit)) {
+      if (rule.weekdays.includes(cursor.getDay())) addCandidate(cursor);
+      cursor = workTaskAddDays(cursor, 1);
+      iterations += 1;
+    }
+  } else {
+    let monthOffset = 0;
+    while (canContinue()) {
+      const anchor = new Date(start.getFullYear(), start.getMonth() + monthOffset, 1);
+      if (endLimit && anchor > endLimit) break;
+      const candidate = rule.monthlyMode === "ordinal"
+        ? workTaskOrdinalWeekday(anchor.getFullYear(), anchor.getMonth(), rule.monthlyOrdinal, rule.monthlyWeekday)
+        : workTaskMonthDay(anchor.getFullYear(), anchor.getMonth(), rule.monthlyDay);
+      addCandidate(candidate);
+      monthOffset += 1;
+      iterations += 1;
+    }
+  }
+  return results.slice(0, targetCount);
+}
+
+function workTaskRecurrenceFields(ruleSource, { groupId, originId, baseTitle, occurrenceNumber, occurrenceDate, excludedDates = [] } = {}) {
+  const rule = workTaskRecurrenceRule(ruleSource);
+  return {
+    isRecurring: true,
+    recurrenceGroupId: groupId,
+    recurrenceType: rule.type,
+    recurrenceInterval: rule.interval,
+    recurrenceStartDate: rule.startDate,
+    recurrenceEndType: rule.endType,
+    recurrenceEndDate: rule.endType === "date" ? rule.endDate : "",
+    recurrenceCount: rule.endType === "count" ? rule.count : 0,
+    recurrenceCustomFrequency: rule.customFrequency,
+    recurrenceWeekdays: [...rule.weekdays].sort((a, b) => a - b),
+    recurrenceMonthlyMode: rule.monthlyMode,
+    recurrenceMonthlyDay: rule.monthlyDay,
+    recurrenceMonthlyOrdinal: rule.monthlyOrdinal,
+    recurrenceMonthlyWeekday: rule.monthlyWeekday,
+    recurrenceOccurrenceNumber: occurrenceNumber,
+    recurrenceOriginId: originId,
+    recurrenceBaseTitle: baseTitle,
+    recurrenceDate: occurrenceDate,
+    recurrenceDetached: false,
+    recurrenceExcludedDates: [...new Set(excludedDates)].sort()
+  };
+}
+
+function workTaskOccurrenceTitle(baseTitle, occurrenceNumber) {
+  return `${stripWorkTaskOccurrenceTitle(baseTitle)} ${occurrenceNumber}회차`;
+}
+
+function buildWorkTaskRecurrenceTasks(taskPayload, draft, { groupId = makeId(), originId = "", startNumber = 1, reusableTasks = [] } = {}) {
+  const dates = generateWorkTaskRecurrenceDates(draft);
+  if (!dates.length) return [];
+  const actualOriginId = originId || reusableTasks[0]?.recurrenceOriginId || reusableTasks[0]?.id || makeId();
+  const baseTitle = stripWorkTaskOccurrenceTitle(taskPayload.text);
+  const createdBase = Date.now();
+  return dates.map((dueDate, index) => {
+    const occurrenceNumber = startNumber + index;
+    const previous = reusableTasks[index];
+    const id = previous?.id || (index === 0 && !originId ? actualOriginId : makeId());
+    return {
+      ...previous,
+      id,
+      createdAt: previous?.createdAt || new Date(createdBase + index).toISOString(),
+      done: Boolean(previous?.done),
+      ...taskPayload,
+      text: workTaskOccurrenceTitle(baseTitle, occurrenceNumber),
+      dueDate,
+      noDueDate: false,
+      ...workTaskRecurrenceFields({ ...draft, dueDate: draft.dueDate }, {
+        groupId,
+        originId: actualOriginId,
+        baseTitle,
+        occurrenceNumber,
+        occurrenceDate: dueDate,
+        excludedDates: draft.recurrenceExcludedDates || []
+      })
+    };
+  });
+}
+
+function ensureWorkRecurringTaskHorizon(work) {
+  if (!work || !Array.isArray(work.tasks)) return false;
+  const groups = new Map();
+  work.tasks.filter((task) => task.isRecurring && task.recurrenceGroupId && task.recurrenceEndType === "none").forEach((task) => {
+    if (!groups.has(task.recurrenceGroupId)) groups.set(task.recurrenceGroupId, []);
+    groups.get(task.recurrenceGroupId).push(task);
+  });
+  let changed = false;
+  const horizon = dateKey(workTaskAddMonths(dateOnly(new Date()), 12));
+  groups.forEach((tasks) => {
+    tasks.sort((a, b) => Number(a.recurrenceOccurrenceNumber || 0) - Number(b.recurrenceOccurrenceNumber || 0));
+    const reference = tasks[0];
+    const existingDates = new Set(tasks.map((task) => task.recurrenceDate || task.dueDate));
+    const maxDate = [...existingDates].sort().at(-1) || "";
+    const dates = generateWorkTaskRecurrenceDates({ ...reference, dueDate: reference.recurrenceStartDate || reference.dueDate }, { horizonDate: horizon });
+    const additions = dates.filter((dueDate) => dueDate > maxDate && !existingDates.has(dueDate));
+    if (!additions.length) return;
+    const baseTitle = reference.recurrenceBaseTitle || stripWorkTaskOccurrenceTitle(reference.text);
+    let nextNumber = Math.max(...tasks.map((task) => Number(task.recurrenceOccurrenceNumber) || 0)) + 1;
+    additions.forEach((dueDate, index) => {
+      work.tasks.push({
+        ...reference,
+        id: makeId(),
+        createdAt: new Date(Date.now() + index).toISOString(),
+        done: false,
+        text: workTaskOccurrenceTitle(baseTitle, nextNumber),
+        dueDate,
+        recurrenceDate: dueDate,
+        recurrenceOccurrenceNumber: nextNumber,
+        recurrenceDetached: false
+      });
+      nextNumber += 1;
+      changed = true;
+    });
+  });
+  return changed;
+}
+
+function defaultWorkTaskRecurrenceDraft(value = dateKey(new Date())) {
+  const date = workTaskDateObject(value) || dateOnly(new Date());
+  return {
+    recurrenceType: "none",
+    recurrenceInterval: 1,
+    recurrenceCustomFrequency: "weekly",
+    recurrenceWeekdays: [date.getDay()],
+    recurrenceMonthlyMode: "day",
+    recurrenceMonthlyDay: date.getDate(),
+    recurrenceMonthlyOrdinal: 1,
+    recurrenceMonthlyWeekday: date.getDay(),
+    recurrenceEndType: "count",
+    recurrenceEndDate: dateKey(workTaskAddMonths(date, 1)),
+    recurrenceCount: 10,
+    recurrenceExcludedDates: [],
+    editingScope: "single"
+  };
+}
+
+function workTaskWeekdayText(days) {
+  const labels = [...new Set(days)].sort((a, b) => a - b).map((day) => `${WORK_TASK_WEEKDAY_LABELS[day]}요일`);
+  if (labels.length <= 1) return labels[0] || "요일 미선택";
+  if (labels.length === 2) return `${labels[0]}과 ${labels[1]}`;
+  return `${labels.slice(0, -1).join(", ")}과 ${labels.at(-1)}`;
+}
+
+function workTaskRecurrenceSummary(source = {}) {
+  const rule = workTaskRecurrenceRule(source);
+  if (rule.type === "none") return "반복 안 함";
+  const start = workTaskDateObject(rule.startDate) || dateOnly(new Date());
+  let summary = "";
+  if (rule.type === "daily") summary = "매일 반복";
+  if (rule.type === "weekly") summary = `매주 ${WORK_TASK_WEEKDAY_LABELS[start.getDay()]}요일 반복`;
+  if (rule.type === "biweekly") summary = `2주마다 ${WORK_TASK_WEEKDAY_LABELS[start.getDay()]}요일 반복`;
+  if (rule.type === "monthly") summary = `매월 ${start.getDate()}일 반복`;
+  if (rule.type === "custom" && rule.customFrequency === "weekly") summary = `매주 ${workTaskWeekdayText(rule.weekdays)} 반복`;
+  if (rule.type === "custom" && rule.customFrequency === "monthly" && rule.monthlyMode === "day") summary = `매월 ${rule.monthlyDay}일 반복`;
+  if (rule.type === "custom" && rule.customFrequency === "monthly" && rule.monthlyMode === "ordinal") {
+    const ordinal = new Map(WORK_TASK_ORDINAL_OPTIONS).get(String(rule.monthlyOrdinal)) || "첫 번째";
+    summary = `매월 ${ordinal} ${WORK_TASK_WEEKDAY_LABELS[rule.monthlyWeekday]}요일 반복`;
+  }
+  if (rule.endType === "count") summary += `, 총 ${rule.count}회 반복`;
+  if (rule.endType === "date" && rule.endDate) summary += `, ${formatDate(rule.endDate)}까지`;
+  return summary;
+}
+
+function validateWorkTaskRecurrenceDraft(draft) {
+  if (draft.recurrenceType === "none") return true;
+  if (draft.noDueDate || !draft.dueDate) return showToast("반복 할 일에는 시작 날짜가 필요합니다."), false;
+  if (draft.recurrenceType === "custom" && draft.recurrenceCustomFrequency === "weekly" && !(draft.recurrenceWeekdays || []).length) {
+    showToast("반복 요일을 1개 이상 선택하세요.");
+    return false;
+  }
+  if (draft.recurrenceEndType === "date" && (!draft.recurrenceEndDate || draft.recurrenceEndDate < draft.dueDate)) {
+    showToast("반복 종료일은 시작일 이후로 선택하세요.");
+    return false;
+  }
+  if (draft.recurrenceEndType === "count" && (Number(draft.recurrenceCount) < 1 || Number(draft.recurrenceCount) > 10)) {
+    showToast("반복 횟수는 1회부터 10회까지 입력하세요.");
+    return false;
+  }
+  if (!generateWorkTaskRecurrenceDates(draft).length) {
+    showToast("선택한 조건으로 생성할 반복 날짜가 없습니다.");
+    return false;
+  }
+  return true;
+}
+
 function syncWorkTaskDraftInputs() {
   const titleInput = $("#workTaskTitle");
   const detailInput = $("#workTaskDetail");
@@ -2867,6 +3266,7 @@ function syncWorkTaskDraftInputs() {
   const startInput = $("#workTaskStartTimeValue");
   const endInput = $("#workTaskEndTimeValue");
   const calendarInput = $("#workTaskCalendar");
+  const recurrenceCountInput = $("#workTaskRecurrenceCount");
   if (titleInput) workTaskDraft.title = titleInput.value;
   if (detailInput) workTaskDraft.detail = detailInput.value;
   if (typeInput) workTaskDraft.type = typeInput.value;
@@ -2875,23 +3275,99 @@ function syncWorkTaskDraftInputs() {
   if (startInput) workTaskDraft.startTime = startInput.value || "09:00";
   if (endInput) workTaskDraft.endTime = endInput.value || "10:00";
   if (calendarInput) workTaskDraft.calendar = calendarInput.checked;
+  if (recurrenceCountInput) workTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(recurrenceCountInput.value) || 1));
 }
 
 function resetWorkTaskDraft(work) {
+  const today = dateKey(new Date());
   workTaskDraft = {
     title: "",
     detail: "",
     type: "",
     owners: [],
-    dueDate: dateKey(new Date()),
+    dueDate: today,
     noDueDate: false,
     allDay: true,
     startTime: "09:00",
     endTime: "10:00",
     calendar: false,
+    ...defaultWorkTaskRecurrenceDraft(today),
     editingTaskId: null
   };
   workTaskDetailOpen = false;
+  workTaskRecurrenceOpen = false;
+}
+
+function renderWorkTaskRecurrenceForm(draft, editable, editing, scope = "work") {
+  const recurring = draft.recurrenceType !== "none";
+  const singleOccurrenceEdit = Boolean(editing?.isRecurring && draft.editingScope === "single");
+  const recurrenceEditable = editable && !singleOccurrenceEdit;
+  const customWeekly = recurring && draft.recurrenceType === "custom" && draft.recurrenceCustomFrequency === "weekly";
+  const customMonthly = recurring && draft.recurrenceType === "custom" && draft.recurrenceCustomFrequency === "monthly";
+  const recurrenceOptions = WORK_TASK_RECURRENCE_OPTIONS.filter(([value]) => value !== "none");
+  const projectScope = scope === "project";
+  const countId = projectScope ? "projectTaskRecurrenceCount" : "workTaskRecurrenceCount";
+  const ordinalId = projectScope ? "projectTaskRecurrenceOrdinalDropdown" : "workTaskRecurrenceOrdinalDropdown";
+  const monthlyWeekdayId = projectScope ? "projectTaskRecurrenceMonthlyWeekdayDropdown" : "workTaskRecurrenceMonthlyWeekdayDropdown";
+  const typeAttribute = projectScope ? "data-project-task-recurrence-type-chip" : "data-work-task-recurrence-type-chip";
+  const customFrequencyAttribute = projectScope ? "data-project-task-custom-frequency" : "data-work-task-custom-frequency";
+  const weekdayAttribute = projectScope ? "data-project-task-weekday" : "data-work-task-weekday";
+  const monthModeAttribute = projectScope ? "data-project-task-month-mode" : "data-work-task-month-mode";
+  const monthDayAttribute = projectScope ? "data-project-task-month-day" : "data-work-task-month-day";
+  return `
+    <section class="work-task-recurrence ${recurring ? "is-active" : ""}">
+      <span class="work-task-recurrence-label">반복</span>
+      <div class="work-task-recurrence-quick-row">
+        <div class="work-task-recurrence-type-options" role="group" aria-label="반복 방식">
+          ${recurrenceOptions.map(([value, label]) => `<button class="${draft.recurrenceType === value ? "is-selected" : ""}" ${typeAttribute}="${value}" type="button" aria-pressed="${draft.recurrenceType === value}" ${recurrenceEditable ? "" : "disabled"}>${label}</button>`).join("")}
+        </div>
+        ${recurring ? `
+          <label class="work-task-count-inline">
+            <strong>반복 횟수</strong>
+            <input id="${countId}" type="number" min="1" max="10" value="${Math.max(1, Math.min(10, Number(draft.recurrenceCount) || 10))}" aria-label="반복 횟수" ${recurrenceEditable ? "" : "disabled"} />
+            <b>회</b>
+          </label>
+        ` : ""}
+      </div>
+      ${singleOccurrenceEdit ? `<p class="work-task-recurrence-note">이 회차만 수정합니다. 반복 규칙은 유지됩니다.</p>` : ""}
+      ${recurring && !singleOccurrenceEdit && draft.recurrenceType === "custom" ? `
+        <div class="work-task-custom-panel">
+          <strong>사용자화 반복</strong>
+          <div class="work-task-custom-frequency" role="group" aria-label="사용자화 반복 주기">
+            <button class="${customWeekly ? "is-selected" : ""}" ${customFrequencyAttribute}="weekly" type="button" aria-pressed="${customWeekly}">매주</button>
+            <button class="${customMonthly ? "is-selected" : ""}" ${customFrequencyAttribute}="monthly" type="button" aria-pressed="${customMonthly}">매월</button>
+          </div>
+          ${customWeekly ? `
+            <div class="work-task-weekdays" role="group" aria-label="반복 요일">
+              <span>요일 선택 <b>*</b></span>
+              <div>${WORK_TASK_WEEKDAY_LABELS.map((label, day) => `<button class="${draft.recurrenceWeekdays?.includes(day) ? "is-selected" : ""}" ${weekdayAttribute}="${day}" type="button" ${recurrenceEditable ? "" : "disabled"}>${label}</button>`).join("")}</div>
+            </div>
+          ` : ""}
+          ${customMonthly ? `
+            <div class="work-task-month-mode" role="group" aria-label="월간 반복 방식">
+              <button class="${draft.recurrenceMonthlyMode === "day" ? "is-selected" : ""}" ${monthModeAttribute}="day" type="button">날짜 지정</button>
+              <button class="${draft.recurrenceMonthlyMode === "ordinal" ? "is-selected" : ""}" ${monthModeAttribute}="ordinal" type="button">조건 지정</button>
+            </div>
+          ` : ""}
+          ${customMonthly && draft.recurrenceMonthlyMode === "day" ? `
+            <div class="work-task-month-days" role="group" aria-label="반복 날짜">
+              <span>반복 날짜</span>
+              <div>${Array.from({ length: 31 }, (_, index) => index + 1).map((day) => `<button class="${Number(draft.recurrenceMonthlyDay) === day ? "is-selected" : ""}" ${monthDayAttribute}="${day}" type="button" ${recurrenceEditable ? "" : "disabled"}>${day}</button>`).join("")}</div>
+            </div>
+          ` : ""}
+          ${customMonthly && draft.recurrenceMonthlyMode === "ordinal" ? `
+            <div class="work-task-recurrence-row">
+              <label class="task-field"><span>순서</span><div id="${ordinalId}"></div></label>
+              <label class="task-field"><span>요일</span><div id="${monthlyWeekdayId}"></div></label>
+            </div>
+          ` : ""}
+        </div>
+      ` : ""}
+      ${recurring ? `
+        <p class="work-task-recurrence-summary"><span>현재 설정</span><strong>${esc(workTaskRecurrenceSummary(draft))}</strong></p>
+      ` : ""}
+    </section>
+  `;
 }
 
 function renderWorkTasks(work) {
@@ -2900,7 +3376,12 @@ function renderWorkTasks(work) {
   if (!workTaskDraft.noDueDate && !workTaskDraft.dueDate) workTaskDraft.dueDate = dateKey(new Date());
   if (!workTaskDraft.startTime) workTaskDraft.startTime = "09:00";
   if (!workTaskDraft.endTime) workTaskDraft.endTime = "10:00";
+  if (workTaskDraft.recurrenceType !== "none" && workTaskDraft.recurrenceEndType !== "count") {
+    workTaskDraft.recurrenceEndType = "count";
+    workTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(workTaskDraft.recurrenceCount) || 10));
+  }
   work.tasks = Array.isArray(work.tasks) ? work.tasks : [];
+  if (ensureWorkRecurringTaskHorizon(work)) saveState();
   const tasks = work.tasks.filter((task) => !(workTaskHideDone && task.done)).sort((a, b) => {
     if (workTaskSort === "due") return String(a.dueDate || "").localeCompare(String(b.dueDate || ""));
     return String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || ""));
@@ -2908,6 +3389,7 @@ function renderWorkTasks(work) {
   const editing = work.tasks.find((task) => task.id === workTaskDraft.editingTaskId);
   const composerOpen = workTaskComposerOpen || Boolean(editing);
   if (editing?.detail) workTaskDetailOpen = true;
+  if (editing?.isRecurring || workTaskDraft.recurrenceType !== "none") workTaskRecurrenceOpen = true;
 
   $("#workTaskPanel").innerHTML = `
     <div class="record-composer task-add-card ${composerOpen ? "is-expanded" : "is-collapsed"}">
@@ -2922,54 +3404,58 @@ function renderWorkTasks(work) {
         <span class="task-add-chevron" aria-hidden="true">${composerOpen ? "⌃" : "⌄"}</span>
       </div>
       <div class="project-task-composer task-composer-expanded">
-        <label class="task-field task-title-field">
-          <span>할 일 제목 <b>*</b></span>
-          <input id="workTaskTitle" class="task-title-input" value="${esc(workTaskDraft.title || "")}" placeholder="할 일 제목을 입력하세요" ${editable ? "" : "disabled"} />
-        </label>
-        <div class="task-form-grid">
-          <div class="task-form-column">
-            <label class="task-field">
-              <span>담당자 <b>*</b></span>
-              <div id="workTaskOwnerDropdown"></div>
-            </label>
-            <label class="task-field ${workTaskDraft.noDueDate ? "is-conditionally-hidden" : ""}">
+        <div class="work-task-primary-grid">
+          <label class="task-field task-title-field">
+            <span>할 일 제목 <b>*</b></span>
+            <input id="workTaskTitle" class="task-title-input" value="${esc(workTaskDraft.title || "")}" placeholder="할 일 제목을 입력하세요" ${editable ? "" : "disabled"} />
+          </label>
+          <label class="task-field task-owner-field">
+            <span>담당자 <b>*</b></span>
+            <div id="workTaskOwnerDropdown"></div>
+          </label>
+        </div>
+        <div class="work-task-schedule-grid">
+          <label class="task-field task-type-field">
+            <span>업무 분류 <b>*</b></span>
+            <div id="workTaskTypeDropdown"></div>
+          </label>
+          <div class="work-task-date-stack">
+            <label class="task-field task-due-field ${workTaskDraft.noDueDate ? "is-disabled" : ""}">
               <span>날짜 <b>*</b></span>
               <div id="workTaskDueDatePicker"></div>
             </label>
-          </div>
-          <div class="task-form-column">
-            <label class="task-field task-type-field">
-              <span>업무 분류 <b>*</b></span>
-              <div id="workTaskTypeDropdown"></div>
-            </label>
-            <div class="task-field ${workTaskDraft.noDueDate || workTaskDraft.allDay !== false ? "is-conditionally-hidden" : ""}">
-              <span>시간</span>
-              <div class="task-time-range">
-                <div id="workTaskStartTime"></div>
-                <span>~</span>
-                <div id="workTaskEndTime"></div>
-              </div>
+            <div class="task-option-row">
+              <label class="calendar-toggle task-calendar-toggle">
+                <input id="workTaskCalendar" type="checkbox" ${workTaskDraft.calendar ? "checked" : ""} ${workTaskDraft.noDueDate || !editable ? "disabled" : ""} />
+                <span>캘린더 등록</span>
+              </label>
+              <label class="calendar-toggle task-all-day">
+                <input id="workTaskAllDay" type="checkbox" ${workTaskDraft.allDay !== false ? "checked" : ""} ${editable ? "" : "disabled"} />
+                <span>종일</span>
+              </label>
+              <label class="calendar-toggle task-no-due">
+                <input id="workTaskNoDueDate" type="checkbox" ${workTaskDraft.noDueDate ? "checked" : ""} ${editable ? "" : "disabled"} />
+                <span>마감일 없음</span>
+              </label>
             </div>
           </div>
-        </div>
-        <div class="task-option-row">
-          <label class="calendar-toggle task-all-day">
-            <input id="workTaskAllDay" type="checkbox" ${workTaskDraft.allDay !== false ? "checked" : ""} ${editable ? "" : "disabled"} />
-            <span>종일</span>
-          </label>
-          <label class="calendar-toggle task-no-due">
-            <input id="workTaskNoDueDate" type="checkbox" ${workTaskDraft.noDueDate ? "checked" : ""} ${editable ? "" : "disabled"} />
-            <span>마감일 없음</span>
-          </label>
-          <label class="calendar-toggle task-calendar-toggle">
-            <input id="workTaskCalendar" type="checkbox" ${workTaskDraft.calendar ? "checked" : ""} ${workTaskDraft.noDueDate || !editable ? "disabled" : ""} />
-            <span>캘린더 등록</span>
-          </label>
+          <div class="task-field task-time-field ${workTaskDraft.noDueDate || workTaskDraft.allDay !== false ? "is-disabled" : ""}">
+            <span>시간</span>
+            <div class="task-time-range">
+              <div id="workTaskStartTime"></div>
+              <span>~</span>
+              <div id="workTaskEndTime"></div>
+            </div>
+          </div>
         </div>
         <button class="task-detail-toggle" data-work-task-detail-toggle type="button">${workTaskDetailOpen ? "− 세부내용 접기" : "+ 세부내용 추가"}</button>
         <label class="task-field task-detail-field ${workTaskDetailOpen ? "is-open" : ""}">
           <textarea id="workTaskDetail" placeholder="세부내용을 입력하세요" ${editable ? "" : "disabled"}>${esc(workTaskDraft.detail || "")}</textarea>
         </label>
+        <button class="work-task-recurrence-toggle" data-work-task-recurrence-toggle type="button">
+          ${workTaskRecurrenceOpen ? "− 반복 설정 접기" : "+ 반복 설정 추가"}
+        </button>
+        ${workTaskRecurrenceOpen ? renderWorkTaskRecurrenceForm(workTaskDraft, editable, editing) : ""}
         <div class="task-form-footer">
           <button id="cancelWorkTaskBtn" class="pill ghost" type="button">취소</button>
           <button id="addWorkTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 완료" : "등록"}</button>
@@ -3044,6 +3530,12 @@ function renderWorkTasks(work) {
     onSelect: (date) => {
       syncWorkTaskDraftInputs();
       workTaskDraft.dueDate = date || dateKey(new Date());
+      const selectedDate = workTaskDateObject(workTaskDraft.dueDate) || dateOnly(new Date());
+      if (["weekly", "biweekly"].includes(workTaskDraft.recurrenceType)) workTaskDraft.recurrenceWeekdays = [selectedDate.getDay()];
+      if (workTaskDraft.recurrenceType === "monthly") workTaskDraft.recurrenceMonthlyDay = selectedDate.getDate();
+      if (!workTaskDraft.recurrenceEndDate || workTaskDraft.recurrenceEndDate < workTaskDraft.dueDate) {
+        workTaskDraft.recurrenceEndDate = dateKey(workTaskAddMonths(selectedDate, 1));
+      }
       renderWorkTasks(work);
     }
   });
@@ -3057,6 +3549,91 @@ function renderWorkTasks(work) {
       normalizeTaskTimeRange(workTaskDraft);
       renderWorkTasks(work);
     }
+  });
+
+  const singleOccurrenceEdit = Boolean(editing?.isRecurring && workTaskDraft.editingScope === "single");
+  const recurrenceEditable = editable && !singleOccurrenceEdit;
+  $$('[data-work-task-recurrence-type-chip]', $("#workTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncWorkTaskDraftInputs();
+      const recurrenceType = button.dataset.workTaskRecurrenceTypeChip;
+      workTaskDraft.recurrenceType = workTaskDraft.recurrenceType === recurrenceType ? "none" : recurrenceType;
+      if (workTaskDraft.recurrenceType !== "none") {
+        workTaskDraft.noDueDate = false;
+        workTaskDraft.recurrenceEndType = "count";
+        workTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(workTaskDraft.recurrenceCount) || 10));
+        const start = workTaskDateObject(workTaskDraft.dueDate) || dateOnly(new Date());
+        workTaskDraft.recurrenceWeekdays = [start.getDay()];
+        workTaskDraft.recurrenceMonthlyDay = start.getDate();
+        workTaskDraft.recurrenceMonthlyWeekday = start.getDay();
+      }
+      renderWorkTasks(work);
+    });
+  });
+  $$('[data-work-task-custom-frequency]', $("#workTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.recurrenceCustomFrequency = button.dataset.workTaskCustomFrequency;
+      renderWorkTasks(work);
+    });
+  });
+  $$('[data-work-task-month-mode]', $("#workTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.recurrenceMonthlyMode = button.dataset.workTaskMonthMode;
+      renderWorkTasks(work);
+    });
+  });
+  renderDropdown({
+    target: $("#workTaskRecurrenceOrdinalDropdown"),
+    value: String(workTaskDraft.recurrenceMonthlyOrdinal || 1),
+    options: WORK_TASK_ORDINAL_OPTIONS.map(([value]) => value),
+    formatOptionLabel: (value) => new Map(WORK_TASK_ORDINAL_OPTIONS).get(String(value)) || value,
+    disabled: !recurrenceEditable,
+    onSelect: (recurrenceMonthlyOrdinal) => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.recurrenceMonthlyOrdinal = Number(recurrenceMonthlyOrdinal);
+      renderWorkTasks(work);
+    }
+  });
+  renderDropdown({
+    target: $("#workTaskRecurrenceMonthlyWeekdayDropdown"),
+    value: String(workTaskDraft.recurrenceMonthlyWeekday ?? 0),
+    options: WORK_TASK_WEEKDAY_LABELS.map((label, day) => String(day)),
+    formatOptionLabel: (value) => `${WORK_TASK_WEEKDAY_LABELS[Number(value)]}요일`,
+    disabled: !recurrenceEditable,
+    onSelect: (recurrenceMonthlyWeekday) => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.recurrenceMonthlyWeekday = Number(recurrenceMonthlyWeekday);
+      renderWorkTasks(work);
+    }
+  });
+  $$("[data-work-task-weekday]", $("#workTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncWorkTaskDraftInputs();
+      const day = Number(button.dataset.workTaskWeekday);
+      const selected = new Set(workTaskDraft.recurrenceWeekdays || []);
+      if (selected.has(day) && selected.size === 1) {
+        showToast("반복 요일을 1개 이상 선택하세요.");
+        return;
+      }
+      if (selected.has(day)) selected.delete(day); else selected.add(day);
+      workTaskDraft.recurrenceWeekdays = [...selected].sort((a, b) => a - b);
+      renderWorkTasks(work);
+    });
+  });
+  $$("[data-work-task-month-day]", $("#workTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncWorkTaskDraftInputs();
+      workTaskDraft.recurrenceMonthlyDay = Number(button.dataset.workTaskMonthDay);
+      renderWorkTasks(work);
+    });
+  });
+  $("#workTaskRecurrenceCount")?.addEventListener("input", (event) => {
+    workTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(event.target.value) || 1));
+    event.target.value = String(workTaskDraft.recurrenceCount);
+    const summary = $("#workTaskPanel .work-task-recurrence-summary strong");
+    if (summary) summary.textContent = workTaskRecurrenceSummary(workTaskDraft);
   });
   renderTimeButton({
     target: $("#workTaskEndTime"),
@@ -3075,6 +3652,7 @@ function renderWorkTasks(work) {
     if (workTaskDraft.noDueDate) {
       workTaskDraft.allDay = true;
       workTaskDraft.calendar = false;
+      workTaskDraft.recurrenceType = "none";
     } else if (!workTaskDraft.dueDate) {
       workTaskDraft.dueDate = dateKey(new Date());
     }
@@ -3136,6 +3714,36 @@ function renderWorkManagementRecords(work) {
   `;
 }
 
+function nonRecurringWorkTaskFields() {
+  return {
+    isRecurring: false,
+    recurrenceGroupId: "",
+    recurrenceType: "none",
+    recurrenceInterval: 1,
+    recurrenceStartDate: "",
+    recurrenceEndType: "none",
+    recurrenceEndDate: "",
+    recurrenceCount: 0,
+    recurrenceCustomFrequency: "weekly",
+    recurrenceWeekdays: [],
+    recurrenceMonthlyMode: "day",
+    recurrenceMonthlyDay: 1,
+    recurrenceMonthlyOrdinal: 1,
+    recurrenceMonthlyWeekday: 0,
+    recurrenceOccurrenceNumber: 1,
+    recurrenceOriginId: "",
+    recurrenceBaseTitle: "",
+    recurrenceDate: "",
+    recurrenceDetached: false,
+    recurrenceExcludedDates: []
+  };
+}
+
+function previousWorkTaskDate(value) {
+  const date = workTaskDateObject(value);
+  return date ? dateKey(workTaskAddDays(date, -1)) : "";
+}
+
 function addWorkTask() {
   const work = state.works.find((item) => item.id === activeWorkId);
   if (!work || !canEditWork(work)) return;
@@ -3144,6 +3752,8 @@ function addWorkTask() {
   const text = String(workTaskDraft.title || "").trim();
   if (!text) return;
   work.tasks = Array.isArray(work.tasks) ? work.tasks : [];
+  const editingTarget = work.tasks.find((item) => item.id === workTaskDraft.editingTaskId);
+  if (!(editingTarget?.isRecurring && workTaskDraft.editingScope === "single") && !validateWorkTaskRecurrenceDraft(workTaskDraft)) return;
   const taskPayload = {
     text,
     detail: String(workTaskDraft.detail || "").trim(),
@@ -3162,8 +3772,60 @@ function addWorkTask() {
     if (!task || !canManageWorkTask(work, task)) return;
     const previous = JSON.stringify(task);
     const previousOwners = taskOwners(task);
-    Object.assign(task, taskPayload);
-    if (previous !== JSON.stringify(task)) {
+    if (!task.isRecurring) {
+      Object.assign(task, taskPayload, nonRecurringWorkTaskFields());
+    } else if (workTaskDraft.editingScope === "single") {
+      const duplicate = work.tasks.some((item) => item.id !== task.id && item.recurrenceGroupId === task.recurrenceGroupId && (item.recurrenceDate || item.dueDate) === taskPayload.dueDate);
+      if (duplicate) {
+        showToast("같은 반복 그룹에 해당 날짜의 할 일이 이미 있습니다.");
+        return;
+      }
+      const baseTitle = stripWorkTaskOccurrenceTitle(text);
+      Object.assign(task, taskPayload, {
+        text: workTaskOccurrenceTitle(baseTitle, task.recurrenceOccurrenceNumber || 1),
+        recurrenceBaseTitle: baseTitle,
+        recurrenceDate: taskPayload.dueDate,
+        recurrenceDetached: true
+      });
+    } else {
+      const groupId = task.recurrenceGroupId;
+      const groupTasks = work.tasks
+        .filter((item) => item.recurrenceGroupId === groupId)
+        .sort((a, b) => String(a.recurrenceDate || a.dueDate).localeCompare(String(b.recurrenceDate || b.dueDate)));
+      const selectedDate = task.recurrenceDate || task.dueDate;
+      const replacing = workTaskDraft.editingScope === "all"
+        ? groupTasks
+        : groupTasks.filter((item) => String(item.recurrenceDate || item.dueDate) >= selectedDate);
+      const kept = workTaskDraft.editingScope === "all"
+        ? work.tasks.filter((item) => item.recurrenceGroupId !== groupId)
+        : work.tasks.filter((item) => item.recurrenceGroupId !== groupId || String(item.recurrenceDate || item.dueDate) < selectedDate);
+      if (workTaskDraft.editingScope === "future") {
+        kept.filter((item) => item.recurrenceGroupId === groupId).forEach((item) => {
+          item.recurrenceEndType = "date";
+          item.recurrenceEndDate = previousWorkTaskDate(selectedDate);
+          item.recurrenceCount = 0;
+        });
+      }
+      if (workTaskDraft.recurrenceType === "none") {
+        work.tasks = [...kept, {
+          ...task,
+          ...taskPayload,
+          text,
+          ...nonRecurringWorkTaskFields()
+        }];
+      } else {
+        const nextGroupId = workTaskDraft.editingScope === "all" ? groupId : makeId();
+        const startNumber = workTaskDraft.editingScope === "all" ? 1 : Math.max(1, Number(task.recurrenceOccurrenceNumber) || 1);
+        const generated = buildWorkTaskRecurrenceTasks(taskPayload, workTaskDraft, {
+          groupId: nextGroupId,
+          originId: workTaskDraft.editingScope === "all" ? (task.recurrenceOriginId || groupTasks[0]?.id) : task.id,
+          startNumber,
+          reusableTasks: replacing
+        });
+        work.tasks = [...kept, ...generated];
+      }
+    }
+    if (previous !== JSON.stringify(task) || task.isRecurring) {
       notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...taskPayload.owners]), `${notificationActor().name}님이 ‘${work.title}’의 할 일 ‘${text}’을 수정했습니다.`, { type: "work-task", workId: work.id, taskId: task.id, actionType: "work_task_updated", title: "할 일 수정", targetTab: "tasks" });
     }
     showToast("할 일이 수정되었습니다.");
@@ -3172,11 +3834,21 @@ function addWorkTask() {
       id: makeId(),
       createdAt: new Date().toISOString(),
       done: false,
-      ...taskPayload
+      ...taskPayload,
+      ...nonRecurringWorkTaskFields()
     };
-    work.tasks.push(newTask);
+    if (workTaskDraft.recurrenceType === "none") {
+      work.tasks.push(newTask);
+    } else {
+      const generated = buildWorkTaskRecurrenceTasks(taskPayload, workTaskDraft, {
+        groupId: makeId(),
+        originId: newTask.id,
+        reusableTasks: [newTask]
+      });
+      work.tasks.push(...generated);
+    }
     notifyOwners(uniqueValues([...workOwners(work), ...taskPayload.owners]), `${notificationActor().name}님이 ‘${work.title}’에 할 일 ‘${text}’을 추가했습니다.`, { type: "work-task", workId: work.id, taskId: newTask.id, actionType: "work_task_added", title: "할 일 추가", targetTab: "tasks" });
-    showToast("할 일이 등록되었습니다.");
+    showToast(workTaskDraft.recurrenceType === "none" ? "할 일이 등록되었습니다." : "반복 할 일이 등록되었습니다.");
   }
   resetWorkTaskDraft(work);
   workTaskComposerOpen = false;
@@ -3186,7 +3858,7 @@ function addWorkTask() {
   renderWorkDetail();
 }
 
-function editWorkTask(taskId) {
+function editWorkTask(taskId, scope = "single") {
   const work = state.works.find((item) => item.id === activeWorkId);
   const task = work?.tasks?.find((item) => item.id === taskId);
   if (!work || !task || !canManageWorkTask(work, task)) {
@@ -3194,21 +3866,141 @@ function editWorkTask(taskId) {
     return;
   }
   workTaskDraft = {
-    title: task.text || "",
+    title: task.isRecurring ? (task.recurrenceBaseTitle || stripWorkTaskOccurrenceTitle(task.text)) : (task.text || ""),
     detail: task.detail || "",
     type: task.type || "",
     owners: taskOwners(task),
-    dueDate: task.noDueDate ? "" : (task.dueDate || dateKey(new Date())),
+    dueDate: task.noDueDate ? "" : (scope === "all" && task.isRecurring ? (task.recurrenceStartDate || task.dueDate) : (task.dueDate || dateKey(new Date()))),
     noDueDate: Boolean(task.noDueDate || !task.dueDate),
     allDay: task.allDay !== false,
     startTime: task.startTime || "09:00",
     endTime: task.endTime || "10:00",
     calendar: Boolean(task.calendar),
-    editingTaskId: task.id
+    recurrenceType: task.isRecurring ? task.recurrenceType : "none",
+    recurrenceInterval: task.recurrenceInterval || 1,
+    recurrenceCustomFrequency: task.recurrenceCustomFrequency || "weekly",
+    recurrenceWeekdays: [...(task.recurrenceWeekdays || [])],
+    recurrenceMonthlyMode: task.recurrenceMonthlyMode || "day",
+    recurrenceMonthlyDay: task.recurrenceMonthlyDay || workTaskDateObject(task.dueDate)?.getDate() || 1,
+    recurrenceMonthlyOrdinal: task.recurrenceMonthlyOrdinal || 1,
+    recurrenceMonthlyWeekday: task.recurrenceMonthlyWeekday ?? workTaskDateObject(task.dueDate)?.getDay() ?? 0,
+    recurrenceEndType: task.isRecurring ? task.recurrenceEndType : "none",
+    recurrenceEndDate: task.recurrenceEndDate || dateKey(workTaskAddMonths(workTaskDateObject(task.dueDate) || dateOnly(new Date()), 1)),
+    recurrenceCount: scope === "future" && task.recurrenceEndType === "count"
+      ? Math.max(1, Number(task.recurrenceCount || 1) - Number(task.recurrenceOccurrenceNumber || 1) + 1)
+      : (task.recurrenceCount || 10),
+    recurrenceExcludedDates: [...(task.recurrenceExcludedDates || [])],
+    editingTaskId: task.id,
+    editingScope: scope
   };
   workTaskDetailOpen = Boolean(task.detail);
+  workTaskRecurrenceOpen = Boolean(task.isRecurring);
   workTaskComposerOpen = true;
   renderWorkTasks(work);
+}
+
+function openTaskScopeModal(entity, action, taskId) {
+  const work = entity === "work" ? state.works.find((item) => item.id === activeWorkId) : null;
+  const task = entity === "work" ? work?.tasks?.find((item) => item.id === taskId) : state.tasks.find((item) => item.id === taskId);
+  if (!task?.isRecurring) {
+    if (action === "edit") entity === "work" ? editWorkTask(taskId) : editProjectTask(taskId);
+    return;
+  }
+  pendingWorkTaskScopeAction = { entity, action, taskId };
+  const label = action === "delete" ? "삭제" : "수정";
+  $("#workTaskScopeTitle").textContent = `반복 할 일 ${label}`;
+  $("#workTaskScopeDescription").textContent = `${label}할 반복 범위를 선택하세요.`;
+  $$("[data-work-task-scope]").forEach((button) => {
+    const scope = button.dataset.workTaskScope;
+    button.textContent = scope === "single" ? `이 할 일만 ${label}` : scope === "future" ? `이 할 일 및 이후 할 일 ${label}` : `전체 반복 할 일 ${label}`;
+    button.classList.toggle("danger-pill", action === "delete" && scope === "all");
+    button.classList.toggle("primary", action !== "delete" && scope === "all");
+  });
+  const modal = $("#workTaskScopeModal");
+  modal.classList.add("open");
+  modal.setAttribute("aria-hidden", "false");
+  $("#workTaskScopeCancelBtn")?.focus();
+}
+
+function openWorkTaskScopeModal(action, taskId) {
+  openTaskScopeModal("work", action, taskId);
+}
+
+function openProjectTaskScopeModal(action, taskId) {
+  openTaskScopeModal("project", action, taskId);
+}
+
+function closeWorkTaskScopeModal() {
+  pendingWorkTaskScopeAction = null;
+  const modal = $("#workTaskScopeModal");
+  modal?.classList.remove("open");
+  modal?.setAttribute("aria-hidden", "true");
+}
+
+function deleteWorkTaskByScope(taskId, scope) {
+  const work = state.works.find((item) => item.id === activeWorkId);
+  const task = work?.tasks?.find((item) => item.id === taskId);
+  if (!work || !task || !canManageWorkTask(work, task)) return;
+  if (!task.isRecurring || !task.recurrenceGroupId) {
+    notifyTaskDeletion("work", task);
+    work.tasks = work.tasks.filter((item) => item.id !== taskId);
+  } else {
+    const groupId = task.recurrenceGroupId;
+    const selectedDate = task.recurrenceDate || task.dueDate;
+    if (scope === "all") {
+      work.tasks = work.tasks.filter((item) => item.recurrenceGroupId !== groupId);
+    } else if (scope === "future") {
+      work.tasks = work.tasks.filter((item) => item.recurrenceGroupId !== groupId || String(item.recurrenceDate || item.dueDate) < selectedDate);
+      work.tasks.filter((item) => item.recurrenceGroupId === groupId).forEach((item) => {
+        item.recurrenceEndType = "date";
+        item.recurrenceEndDate = previousWorkTaskDate(selectedDate);
+        item.recurrenceCount = 0;
+      });
+    } else {
+      work.tasks = work.tasks.filter((item) => item.id !== taskId);
+      work.tasks.filter((item) => item.recurrenceGroupId === groupId).forEach((item) => {
+        item.recurrenceExcludedDates = [...new Set([...(item.recurrenceExcludedDates || []), selectedDate])].sort();
+      });
+    }
+    notifyTaskDeletion("work", task);
+  }
+  saveState();
+  renderAll();
+  renderWorkDetail();
+  showToast(scope === "all" ? "전체 반복 할 일을 삭제했습니다." : scope === "future" ? "선택한 할 일과 이후 할 일을 삭제했습니다." : "할 일을 삭제했습니다.");
+}
+
+function deleteProjectTaskByScope(taskId, scope) {
+  const project = state.projects.find((item) => item.id === activeProjectId);
+  const task = state.tasks.find((item) => item.id === taskId && item.projectId === project?.id);
+  if (!project || !task || !canManageTask(task)) return;
+  if (!task.isRecurring || !task.recurrenceGroupId) {
+    notifyTaskDeletion("project", task);
+    state.tasks = state.tasks.filter((item) => item.id !== taskId);
+  } else {
+    const groupId = task.recurrenceGroupId;
+    const selectedDate = task.recurrenceDate || task.dueDate;
+    if (scope === "all") {
+      state.tasks = state.tasks.filter((item) => item.projectId !== project.id || item.recurrenceGroupId !== groupId);
+    } else if (scope === "future") {
+      state.tasks = state.tasks.filter((item) => item.projectId !== project.id || item.recurrenceGroupId !== groupId || String(item.recurrenceDate || item.dueDate) < selectedDate);
+      state.tasks.filter((item) => item.projectId === project.id && item.recurrenceGroupId === groupId).forEach((item) => {
+        item.recurrenceEndType = "date";
+        item.recurrenceEndDate = previousWorkTaskDate(selectedDate);
+        item.recurrenceCount = 0;
+      });
+    } else {
+      state.tasks = state.tasks.filter((item) => item.id !== taskId);
+      state.tasks.filter((item) => item.projectId === project.id && item.recurrenceGroupId === groupId).forEach((item) => {
+        item.recurrenceExcludedDates = [...new Set([...(item.recurrenceExcludedDates || []), selectedDate])].sort();
+      });
+    }
+    notifyTaskDeletion("project", task);
+  }
+  saveState();
+  renderAll();
+  renderProjectDetail();
+  showToast(scope === "all" ? "전체 반복 할 일을 삭제했습니다." : scope === "future" ? "선택한 할 일과 이후 할 일을 삭제했습니다." : "할 일을 삭제했습니다.");
 }
 
 function addWorkManagementRecord() {
@@ -3378,9 +4170,9 @@ function taskOverviewItems() {
     return {
       id: task.id,
       source: "project",
-      sourceLabel: "영상 프로젝트",
+      sourceLabel: "영상",
       sourceId: task.projectId,
-      sourceTitle: project?.title || "삭제된 영상 프로젝트",
+      sourceTitle: project?.title || "삭제된 프로젝트",
       task,
       canManage: canManageTask(task)
     };
@@ -3408,7 +4200,7 @@ function notifyTaskCompletion(source, task, done) {
   if (!parent) return;
   const parentOwners = isWork ? workOwners(parent) : projectOwners(parent);
   const ownerIds = uniqueValues([...parentOwners, ...taskOwners(task)]);
-  const parentLabel = isWork ? "업무" : "영상 프로젝트";
+  const parentLabel = isWork ? "업무" : "프로젝트";
   const taskLabel = task.title || task.text || "할 일";
   notifyOwners(ownerIds, `${notificationActor().name}님이 ‘${parent.title}’ ${parentLabel}의 할 일 ‘${taskLabel}’을 ${done ? "완료" : "완료 취소"} 처리했습니다.`, {
     type: isWork ? "work-task" : "project-task",
@@ -3664,8 +4456,18 @@ function renderTaskOverviewControls(items) {
   const sortSelect = $("#taskOverviewSort");
   if (sortSelect) {
     taskOverviewSort = normalizeTaskSort(taskOverviewSort);
-    sortSelect.innerHTML = taskSortOptions.map(([value, label]) => `<option value="${esc(value)}">정렬: ${esc(label)}</option>`).join("");
-    sortSelect.value = taskOverviewSort;
+    renderDropdown({
+      target: sortSelect,
+      value: taskOverviewSort,
+      options: taskSortOptions.map(([value]) => value),
+      placeholder: "정렬 기준 선택",
+      formatOptionLabel: (value) => `정렬: ${taskSortOptions.find(([option]) => option === value)?.[1] || value}`,
+      onSelect: (value) => {
+        taskOverviewSort = normalizeTaskSort(value);
+        saveViewPrefs({ taskOverviewSort });
+        renderTasks();
+      },
+    });
   }
   const searchInput = $("#taskOverviewSearch");
   if (searchInput && searchInput.value !== taskOverviewSearch) searchInput.value = taskOverviewSearch;
@@ -4251,7 +5053,7 @@ function renderProjectDetail() {
   $("#detailTitle").value = project.title;
   $("#detailTitle").disabled = !editable;
   $("#detailProperties").innerHTML = `
-    ${!editable ? '<div class="readonly-notice">이 영상 프로젝트의 담당자 또는 관리자만 수정할 수 있습니다.</div>' : ""}
+    ${!editable ? '<div class="readonly-notice">이 프로젝트의 담당자 또는 관리자만 수정할 수 있습니다.</div>' : ""}
     ${propertyRow("☷", "업무분류", '<div id="detailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="detailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="detailClient"></div>')}
@@ -4356,7 +5158,7 @@ function renderManagementRecords(project) {
     <div class="record-composer">
       <textarea id="recordBody" class="record-input" placeholder="새로운 관리 기록을 입력하세요&#10;Enter로 줄바꿈, 버튼으로 등록" ${editable ? "" : "disabled"}>${esc(editingRecord?.body || "")}</textarea>
       <div class="record-actions">
-        <span>${editable ? (editingRecord ? "기록 수정 중" : "영상 프로젝트별 관리 메모") : "담당자 또는 관리자만 기록을 추가할 수 있습니다."}</span>
+        <span>${editable ? (editingRecord ? "기록 수정 중" : "프로젝트별 관리 메모") : "담당자 또는 관리자만 기록을 추가할 수 있습니다."}</span>
         <div>
           ${editingRecord ? '<button id="cancelRecordEditBtn" class="pill ghost" type="button">취소</button>' : ""}
           <button id="addRecordBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editingRecord ? "수정 저장" : "+ 등록"}</button>
@@ -4405,6 +5207,7 @@ function syncProjectTaskDraftInputs() {
   const startInput = $("#projectTaskStartTimeValue");
   const endInput = $("#projectTaskEndTimeValue");
   const calendarInput = $("#projectTaskCalendar");
+  const recurrenceCountInput = $("#projectTaskRecurrenceCount");
   if (titleInput) detailTaskDraft.title = titleInput.value;
   if (detailInput) detailTaskDraft.detail = detailInput.value;
   if (typeInput) detailTaskDraft.type = typeInput.value;
@@ -4413,23 +5216,27 @@ function syncProjectTaskDraftInputs() {
   if (startInput) detailTaskDraft.startTime = startInput.value || "09:00";
   if (endInput) detailTaskDraft.endTime = endInput.value || "10:00";
   if (calendarInput) detailTaskDraft.calendar = calendarInput.checked;
+  if (recurrenceCountInput) detailTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(recurrenceCountInput.value) || 1));
 }
 
 function resetProjectTaskDraft(project) {
+  const today = dateKey(new Date());
   detailTaskDraft = {
     title: "",
     detail: "",
     type: "",
     owners: [],
-    dueDate: dateKey(new Date()),
+    dueDate: today,
     noDueDate: false,
     allDay: true,
     startTime: "09:00",
     endTime: "10:00",
     calendar: false,
+    ...defaultWorkTaskRecurrenceDraft(today),
     editingTaskId: null
   };
   detailTaskDetailOpen = false;
+  detailTaskRecurrenceOpen = false;
 }
 
 function renderProjectTasks(project) {
@@ -4438,9 +5245,14 @@ function renderProjectTasks(project) {
   if (!detailTaskDraft.noDueDate && !detailTaskDraft.dueDate) detailTaskDraft.dueDate = dateKey(new Date());
   if (!detailTaskDraft.startTime) detailTaskDraft.startTime = "09:00";
   if (!detailTaskDraft.endTime) detailTaskDraft.endTime = "10:00";
+  if (detailTaskDraft.recurrenceType !== "none" && detailTaskDraft.recurrenceEndType !== "count") {
+    detailTaskDraft.recurrenceEndType = "count";
+    detailTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(detailTaskDraft.recurrenceCount) || 10));
+  }
 
-  const tasks = state.tasks
-    .filter((task) => task.projectId === project.id)
+  const projectTasks = state.tasks.filter((task) => task.projectId === project.id);
+  const tasks = projectTasks
+    .filter((task) => !(detailTaskHideDone && task.done))
     .sort((a, b) => {
       if (detailTaskSort === "due") return String(a.dueDate || "").localeCompare(String(b.dueDate || ""));
       return String(a.createdAt || a.id || "").localeCompare(String(b.createdAt || b.id || ""));
@@ -4448,6 +5260,7 @@ function renderProjectTasks(project) {
   const editing = state.tasks.find((task) => task.id === detailTaskDraft.editingTaskId);
   const composerOpen = detailTaskComposerOpen || Boolean(editing);
   if (editing?.detail) detailTaskDetailOpen = true;
+  if (editing?.isRecurring || detailTaskDraft.recurrenceType !== "none") detailTaskRecurrenceOpen = true;
 
   $("#projectTaskPanel").innerHTML = `
     <div class="record-composer task-add-card ${composerOpen ? "is-expanded" : "is-collapsed"}">
@@ -4462,54 +5275,58 @@ function renderProjectTasks(project) {
         <span class="task-add-chevron" aria-hidden="true">${composerOpen ? "⌃" : "⌄"}</span>
       </div>
       <div class="project-task-composer task-composer-expanded">
-        <label class="task-field task-title-field">
-          <span>할 일 제목 <b>*</b></span>
-          <input id="projectTaskTitle" class="task-title-input" value="${esc(detailTaskDraft.title || "")}" placeholder="할 일 제목을 입력하세요" ${editable ? "" : "disabled"} />
-        </label>
-        <div class="task-form-grid">
-          <div class="task-form-column">
-            <label class="task-field ${detailTaskDraft.noDueDate ? "is-conditionally-hidden" : ""}">
-              <span>담당자 <b>*</b></span>
-              <div id="projectTaskOwnerDropdown"></div>
-            </label>
-            <label class="task-field">
+        <div class="project-task-primary-grid">
+          <label class="task-field task-title-field">
+            <span>할 일 제목 <b>*</b></span>
+            <input id="projectTaskTitle" class="task-title-input" value="${esc(detailTaskDraft.title || "")}" placeholder="할 일 제목을 입력하세요" ${editable ? "" : "disabled"} />
+          </label>
+          <label class="task-field task-owner-field">
+            <span>담당자 <b>*</b></span>
+            <div id="projectTaskOwnerDropdown"></div>
+          </label>
+        </div>
+        <div class="project-task-schedule-grid">
+          <label class="task-field task-type-field">
+            <span>업무 분류 <b>*</b></span>
+            <div id="projectTaskTypeDropdown"></div>
+          </label>
+          <div class="project-task-date-stack">
+            <label class="task-field task-due-field ${detailTaskDraft.noDueDate ? "is-disabled" : ""}">
               <span>날짜 <b>*</b></span>
               <div id="projectTaskDueDatePicker"></div>
             </label>
-          </div>
-          <div class="task-form-column">
-            <label class="task-field task-type-field">
-              <span>업무 분류 <b>*</b></span>
-              <div id="projectTaskTypeDropdown"></div>
-            </label>
-            <div class="task-field ${detailTaskDraft.noDueDate || detailTaskDraft.allDay !== false ? "is-conditionally-hidden" : ""}">
-              <span>시간</span>
-              <div class="task-time-range">
-                <div id="projectTaskStartTime"></div>
-                <span>~</span>
-                <div id="projectTaskEndTime"></div>
-              </div>
+            <div class="task-option-row">
+              <label class="calendar-toggle task-calendar-toggle">
+                <input id="projectTaskCalendar" type="checkbox" ${detailTaskDraft.calendar ? "checked" : ""} ${detailTaskDraft.noDueDate || !editable ? "disabled" : ""} />
+                <span>캘린더 등록</span>
+              </label>
+              <label class="calendar-toggle task-all-day">
+                <input id="projectTaskAllDay" type="checkbox" ${detailTaskDraft.allDay !== false ? "checked" : ""} ${editable ? "" : "disabled"} />
+                <span>종일</span>
+              </label>
+              <label class="calendar-toggle task-no-due">
+                <input id="projectTaskNoDueDate" type="checkbox" ${detailTaskDraft.noDueDate ? "checked" : ""} ${editable ? "" : "disabled"} />
+                <span>마감일 없음</span>
+              </label>
             </div>
           </div>
-        </div>
-        <div class="task-option-row">
-          <label class="calendar-toggle task-all-day">
-            <input id="projectTaskAllDay" type="checkbox" ${detailTaskDraft.allDay !== false ? "checked" : ""} ${editable ? "" : "disabled"} />
-            <span>종일</span>
-          </label>
-          <label class="calendar-toggle task-no-due">
-            <input id="projectTaskNoDueDate" type="checkbox" ${detailTaskDraft.noDueDate ? "checked" : ""} ${editable ? "" : "disabled"} />
-            <span>마감일 없음</span>
-          </label>
-          <label class="calendar-toggle task-calendar-toggle">
-            <input id="projectTaskCalendar" type="checkbox" ${detailTaskDraft.calendar ? "checked" : ""} ${detailTaskDraft.noDueDate || !editable ? "disabled" : ""} />
-            <span>캘린더 등록</span>
-          </label>
+          <div class="task-field task-time-field ${detailTaskDraft.noDueDate || detailTaskDraft.allDay !== false ? "is-disabled" : ""}">
+            <span>시간</span>
+            <div class="task-time-range">
+              <div id="projectTaskStartTime"></div>
+              <span>~</span>
+              <div id="projectTaskEndTime"></div>
+            </div>
+          </div>
         </div>
         <button class="task-detail-toggle" data-project-task-detail-toggle type="button">${detailTaskDetailOpen ? "− 세부내용 접기" : "+ 세부내용 추가"}</button>
         <label class="task-field task-detail-field ${detailTaskDetailOpen ? "is-open" : ""}">
           <textarea id="projectTaskDetail" placeholder="세부내용을 입력하세요" ${editable ? "" : "disabled"}>${esc(detailTaskDraft.detail || "")}</textarea>
         </label>
+        <button class="work-task-recurrence-toggle" data-project-task-recurrence-toggle type="button">
+          ${detailTaskRecurrenceOpen ? "− 반복 설정 접기" : "+ 반복 설정 추가"}
+        </button>
+        ${detailTaskRecurrenceOpen ? renderWorkTaskRecurrenceForm(detailTaskDraft, editable, editing, "project") : ""}
         <div class="task-form-footer">
           <button id="cancelProjectTaskBtn" class="pill ghost" type="button">취소</button>
           <button id="addProjectTaskBtn" class="pill primary" type="button" ${editable ? "" : "disabled"}>${editing ? "수정 완료" : "등록"}</button>
@@ -4520,6 +5337,10 @@ function renderProjectTasks(project) {
       <span>정렬</span>
       <button class="record-control ${detailTaskSort === "created" ? "active" : ""}" data-project-task-sort="created" type="button">등록순</button>
       <button class="record-control ${detailTaskSort === "due" ? "active" : ""}" data-project-task-sort="due" type="button">완료일 순</button>
+      <label class="calendar-toggle overview-hide-done project-task-hide-done">
+        <input id="projectTaskHideDone" type="checkbox" ${detailTaskHideDone ? "checked" : ""} />
+        <span>완료된 항목 숨기기</span>
+      </label>
     </div>
     <div class="task-list">
       ${
@@ -4543,7 +5364,7 @@ function renderProjectTasks(project) {
                 </article>
               `)
               .join("")
-          : '<div class="empty">이 영상 프로젝트에 등록된 할 일이 없습니다.</div>'
+          : `<div class="empty">${detailTaskHideDone && projectTasks.some((task) => task.done) ? "완료된 항목 숨기기를 해제하면 완료된 할 일을 볼 수 있습니다." : "이 프로젝트에 등록된 할 일이 없습니다."}</div>`
       }
     </div>
   `;
@@ -4580,6 +5401,9 @@ function renderProjectTasks(project) {
     onSelect: (date) => {
       syncProjectTaskDraftInputs();
       detailTaskDraft.dueDate = date || dateKey(new Date());
+      const selectedDate = workTaskDateObject(detailTaskDraft.dueDate) || dateOnly(new Date());
+      if (["weekly", "biweekly"].includes(detailTaskDraft.recurrenceType)) detailTaskDraft.recurrenceWeekdays = [selectedDate.getDay()];
+      if (detailTaskDraft.recurrenceType === "monthly") detailTaskDraft.recurrenceMonthlyDay = selectedDate.getDate();
       renderProjectTasks(project);
     }
   });
@@ -4606,11 +5430,97 @@ function renderProjectTasks(project) {
     }
   });
 
+  const singleOccurrenceEdit = Boolean(editing?.isRecurring && detailTaskDraft.editingScope === "single");
+  const recurrenceEditable = editable && !singleOccurrenceEdit;
+  $$('[data-project-task-recurrence-type-chip]', $("#projectTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectTaskDraftInputs();
+      const recurrenceType = button.dataset.projectTaskRecurrenceTypeChip;
+      detailTaskDraft.recurrenceType = detailTaskDraft.recurrenceType === recurrenceType ? "none" : recurrenceType;
+      if (detailTaskDraft.recurrenceType !== "none") {
+        detailTaskDraft.noDueDate = false;
+        detailTaskDraft.recurrenceEndType = "count";
+        detailTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(detailTaskDraft.recurrenceCount) || 10));
+        const start = workTaskDateObject(detailTaskDraft.dueDate) || dateOnly(new Date());
+        detailTaskDraft.recurrenceWeekdays = [start.getDay()];
+        detailTaskDraft.recurrenceMonthlyDay = start.getDate();
+        detailTaskDraft.recurrenceMonthlyWeekday = start.getDay();
+      }
+      renderProjectTasks(project);
+    });
+  });
+  $$('[data-project-task-custom-frequency]', $("#projectTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.recurrenceCustomFrequency = button.dataset.projectTaskCustomFrequency;
+      renderProjectTasks(project);
+    });
+  });
+  $$('[data-project-task-month-mode]', $("#projectTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.recurrenceMonthlyMode = button.dataset.projectTaskMonthMode;
+      renderProjectTasks(project);
+    });
+  });
+  $$('[data-project-task-weekday]', $("#projectTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectTaskDraftInputs();
+      const day = Number(button.dataset.projectTaskWeekday);
+      const selected = new Set(detailTaskDraft.recurrenceWeekdays || []);
+      if (selected.has(day) && selected.size === 1) {
+        showToast("반복 요일을 1개 이상 선택하세요.");
+        return;
+      }
+      if (selected.has(day)) selected.delete(day); else selected.add(day);
+      detailTaskDraft.recurrenceWeekdays = [...selected].sort((a, b) => a - b);
+      renderProjectTasks(project);
+    });
+  });
+  $$('[data-project-task-month-day]', $("#projectTaskPanel")).forEach((button) => {
+    button.addEventListener("click", () => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.recurrenceMonthlyDay = Number(button.dataset.projectTaskMonthDay);
+      renderProjectTasks(project);
+    });
+  });
+  $("#projectTaskRecurrenceCount")?.addEventListener("input", (event) => {
+    detailTaskDraft.recurrenceCount = Math.max(1, Math.min(10, Number(event.target.value) || 1));
+    event.target.value = String(detailTaskDraft.recurrenceCount);
+    const summary = $("#projectTaskPanel .work-task-recurrence-summary strong");
+    if (summary) summary.textContent = workTaskRecurrenceSummary(detailTaskDraft);
+  });
+  renderDropdown({
+    target: $("#projectTaskRecurrenceOrdinalDropdown"),
+    value: String(detailTaskDraft.recurrenceMonthlyOrdinal || 1),
+    options: WORK_TASK_ORDINAL_OPTIONS.map(([value]) => value),
+    formatOptionLabel: (value) => new Map(WORK_TASK_ORDINAL_OPTIONS).get(String(value)) || value,
+    disabled: !recurrenceEditable,
+    onSelect: (value) => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.recurrenceMonthlyOrdinal = Number(value);
+      renderProjectTasks(project);
+    }
+  });
+  renderDropdown({
+    target: $("#projectTaskRecurrenceMonthlyWeekdayDropdown"),
+    value: String(detailTaskDraft.recurrenceMonthlyWeekday ?? 0),
+    options: WORK_TASK_WEEKDAY_LABELS.map((label, day) => String(day)),
+    formatOptionLabel: (value) => `${WORK_TASK_WEEKDAY_LABELS[Number(value)]}요일`,
+    disabled: !recurrenceEditable,
+    onSelect: (value) => {
+      syncProjectTaskDraftInputs();
+      detailTaskDraft.recurrenceMonthlyWeekday = Number(value);
+      renderProjectTasks(project);
+    }
+  });
+
   $("#projectTaskNoDueDate")?.addEventListener("change", () => {
     syncProjectTaskDraftInputs();
     if (detailTaskDraft.noDueDate) {
       detailTaskDraft.allDay = true;
       detailTaskDraft.calendar = false;
+      detailTaskDraft.recurrenceType = "none";
     } else if (!detailTaskDraft.dueDate) {
       detailTaskDraft.dueDate = dateKey(new Date());
     }
@@ -4629,6 +5539,8 @@ function addProjectTask() {
   normalizeTaskTimeRange(detailTaskDraft);
   const text = String(detailTaskDraft.title || "").trim();
   if (!text) return;
+  const editingTarget = state.tasks.find((item) => item.id === detailTaskDraft.editingTaskId);
+  if (!(editingTarget?.isRecurring && detailTaskDraft.editingScope === "single") && !validateWorkTaskRecurrenceDraft(detailTaskDraft)) return;
   const taskPayload = {
     projectId: project.id,
     text,
@@ -4648,8 +5560,55 @@ function addProjectTask() {
     if (!task || !canManageTask(task)) return;
     const previous = JSON.stringify(task);
     const previousOwners = taskOwners(task);
-    Object.assign(task, taskPayload);
-    if (previous !== JSON.stringify(task)) {
+    if (!task.isRecurring) {
+      Object.assign(task, taskPayload, nonRecurringWorkTaskFields());
+    } else if (detailTaskDraft.editingScope === "single") {
+      const duplicate = state.tasks.some((item) => item.id !== task.id && item.projectId === project.id && item.recurrenceGroupId === task.recurrenceGroupId && (item.recurrenceDate || item.dueDate) === taskPayload.dueDate);
+      if (duplicate) {
+        showToast("같은 반복 그룹에 해당 날짜의 할 일이 이미 있습니다.");
+        return;
+      }
+      const baseTitle = stripWorkTaskOccurrenceTitle(text);
+      Object.assign(task, taskPayload, {
+        text: workTaskOccurrenceTitle(baseTitle, task.recurrenceOccurrenceNumber || 1),
+        recurrenceBaseTitle: baseTitle,
+        recurrenceDate: taskPayload.dueDate,
+        recurrenceDetached: true
+      });
+    } else {
+      const groupId = task.recurrenceGroupId;
+      const groupTasks = state.tasks
+        .filter((item) => item.projectId === project.id && item.recurrenceGroupId === groupId)
+        .sort((a, b) => String(a.recurrenceDate || a.dueDate).localeCompare(String(b.recurrenceDate || b.dueDate)));
+      const selectedDate = task.recurrenceDate || task.dueDate;
+      const replacing = detailTaskDraft.editingScope === "all"
+        ? groupTasks
+        : groupTasks.filter((item) => String(item.recurrenceDate || item.dueDate) >= selectedDate);
+      const kept = detailTaskDraft.editingScope === "all"
+        ? state.tasks.filter((item) => item.projectId !== project.id || item.recurrenceGroupId !== groupId)
+        : state.tasks.filter((item) => item.projectId !== project.id || item.recurrenceGroupId !== groupId || String(item.recurrenceDate || item.dueDate) < selectedDate);
+      if (detailTaskDraft.editingScope === "future") {
+        kept.filter((item) => item.projectId === project.id && item.recurrenceGroupId === groupId).forEach((item) => {
+          item.recurrenceEndType = "date";
+          item.recurrenceEndDate = previousWorkTaskDate(selectedDate);
+          item.recurrenceCount = 0;
+        });
+      }
+      if (detailTaskDraft.recurrenceType === "none") {
+        state.tasks = [...kept, { ...task, ...taskPayload, text, ...nonRecurringWorkTaskFields() }];
+      } else {
+        const nextGroupId = detailTaskDraft.editingScope === "all" ? groupId : makeId();
+        const startNumber = detailTaskDraft.editingScope === "all" ? 1 : Math.max(1, Number(task.recurrenceOccurrenceNumber) || 1);
+        const generated = buildWorkTaskRecurrenceTasks({ ...taskPayload, projectId: project.id }, detailTaskDraft, {
+          groupId: nextGroupId,
+          originId: detailTaskDraft.editingScope === "all" ? (task.recurrenceOriginId || groupTasks[0]?.id) : task.id,
+          startNumber,
+          reusableTasks: replacing
+        });
+        state.tasks = [...kept, ...generated];
+      }
+    }
+    if (previous !== JSON.stringify(task) || task.isRecurring) {
       notifyOwners(uniqueValues([...projectOwners(project), ...previousOwners, ...taskPayload.owners]), `${notificationActor().name}님이 ‘${project.title}’의 할 일 ‘${text}’을 수정했습니다.`, { type: "project-task", projectId: project.id, taskId: task.id, actionType: "project_task_updated", title: "할 일 수정", targetTab: "tasks" });
     }
     showToast("할 일이 수정되었습니다.");
@@ -4658,11 +5617,21 @@ function addProjectTask() {
       id: makeId(),
       createdAt: new Date().toISOString(),
       done: false,
-      ...taskPayload
+      ...taskPayload,
+      ...nonRecurringWorkTaskFields()
     };
-    state.tasks.push(newTask);
+    if (detailTaskDraft.recurrenceType === "none") {
+      state.tasks.push(newTask);
+    } else {
+      const generated = buildWorkTaskRecurrenceTasks({ ...taskPayload, projectId: project.id }, detailTaskDraft, {
+        groupId: makeId(),
+        originId: newTask.id,
+        reusableTasks: [newTask]
+      });
+      state.tasks.push(...generated);
+    }
     notifyOwners(uniqueValues([...projectOwners(project), ...taskPayload.owners]), `${notificationActor().name}님이 ‘${project.title}’에 할 일 ‘${text}’을 추가했습니다.`, { type: "project-task", projectId: project.id, taskId: newTask.id, actionType: "project_task_added", title: "할 일 추가", targetTab: "tasks" });
-    showToast("할 일이 추가되었습니다.");
+    showToast(detailTaskDraft.recurrenceType === "none" ? "할 일이 추가되었습니다." : "반복 할 일이 추가되었습니다.");
   }
   resetProjectTaskDraft(project);
   detailTaskComposerOpen = false;
@@ -4671,26 +5640,42 @@ function addProjectTask() {
   renderProjectDetail();
 }
 
-function editProjectTask(taskId) {
+function editProjectTask(taskId, scope = "single") {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!task || !canManageTask(task)) {
     showToast("담당자 또는 관리자만 수정할 수 있습니다.");
     return;
   }
   detailTaskDraft = {
-    title: task.text || "",
+    title: task.isRecurring ? (task.recurrenceBaseTitle || stripWorkTaskOccurrenceTitle(task.text)) : (task.text || ""),
     detail: task.detail || "",
     type: task.type || "",
     owners: taskOwners(task),
-    dueDate: task.noDueDate ? "" : (task.dueDate || dateKey(new Date())),
+    dueDate: task.noDueDate ? "" : (scope === "all" && task.isRecurring ? (task.recurrenceStartDate || task.dueDate) : (task.dueDate || dateKey(new Date()))),
     noDueDate: Boolean(task.noDueDate || !task.dueDate),
     allDay: task.allDay !== false,
     startTime: task.startTime || "09:00",
     endTime: task.endTime || "10:00",
     calendar: Boolean(task.calendar),
-    editingTaskId: task.id
+    recurrenceType: task.isRecurring ? task.recurrenceType : "none",
+    recurrenceInterval: task.recurrenceInterval || 1,
+    recurrenceCustomFrequency: task.recurrenceCustomFrequency || "weekly",
+    recurrenceWeekdays: [...(task.recurrenceWeekdays || [])],
+    recurrenceMonthlyMode: task.recurrenceMonthlyMode || "day",
+    recurrenceMonthlyDay: task.recurrenceMonthlyDay || workTaskDateObject(task.dueDate)?.getDate() || 1,
+    recurrenceMonthlyOrdinal: task.recurrenceMonthlyOrdinal || 1,
+    recurrenceMonthlyWeekday: task.recurrenceMonthlyWeekday ?? workTaskDateObject(task.dueDate)?.getDay() ?? 0,
+    recurrenceEndType: task.isRecurring ? task.recurrenceEndType : "none",
+    recurrenceEndDate: task.recurrenceEndDate || "",
+    recurrenceCount: scope === "future" && task.recurrenceEndType === "count"
+      ? Math.max(1, Number(task.recurrenceCount || 1) - Number(task.recurrenceOccurrenceNumber || 1) + 1)
+      : (task.recurrenceCount || 10),
+    recurrenceExcludedDates: [...(task.recurrenceExcludedDates || [])],
+    editingTaskId: task.id,
+    editingScope: scope
   };
   detailTaskDetailOpen = Boolean(task.detail);
+  detailTaskRecurrenceOpen = Boolean(task.isRecurring);
   detailTaskComposerOpen = true;
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (project) renderProjectTasks(project);
@@ -4837,7 +5822,7 @@ function addProject() {
   const user = currentUser();
   const project = {
     id: makeId(),
-    title: "새 영상 프로젝트",
+    title: "새 프로젝트",
     method: "",
     type: "",
     owners: [],
@@ -4867,7 +5852,7 @@ function deleteProject(projectId) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
-  notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 영상 프로젝트를 삭제했습니다.`, {
+  notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 프로젝트를 삭제했습니다.`, {
     type: "project",
     projectId: project.id,
     actionType: "project_deleted",
@@ -4925,6 +5910,7 @@ function openScheduleModal(date) {
   $("#scheduleTitle").value = "";
   $("#scheduleLocation").value = "";
   $("#scheduleMemo").value = "";
+  $("#scheduleEyebrow").textContent = "NEW SCHEDULE";
   $("#scheduleForm .section-head h2").textContent = "일정 등록";
   $("#scheduleForm .pill.primary").textContent = "일정 등록";
   renderScheduleModalControls();
@@ -4951,6 +5937,7 @@ function openScheduleEditModal(scheduleId) {
   $("#scheduleTitle").value = schedule.title || "";
   $("#scheduleLocation").value = schedule.location || "";
   $("#scheduleMemo").value = schedule.memo || "";
+  $("#scheduleEyebrow").textContent = "EDIT SCHEDULE";
   $("#scheduleForm .section-head h2").textContent = "일정 수정";
   $("#scheduleForm .pill.primary").textContent = "수정 저장";
   closeStaffEventDetail();
@@ -5000,7 +5987,7 @@ function openStaffScheduleModal(date, preset = {}) {
   };
   $("#staffScheduleTitle").value = "";
   $("#staffScheduleMemo").value = "";
-  $("#staffScheduleForm .pill.primary").textContent = "예약 등록";
+  $("#staffScheduleForm button[type='submit']").textContent = "스탭 등록";
   ensureStaffScheduleRows();
   renderStaffScheduleModalControls();
   $("#staffScheduleModal").classList.add("open");
@@ -5037,7 +6024,7 @@ function openStaffScheduleEditModal(staffEventId) {
   $("#staffScheduleTitle").value = staffScheduleDraft.title;
   $("#staffScheduleMemo").value = event.memo || "";
   renderStaffScheduleModalControls();
-  $("#staffScheduleForm .pill.primary").textContent = "예약 수정";
+  $("#staffScheduleForm button[type='submit']").textContent = "예약 수정";
   $("#staffScheduleModal").classList.add("open");
   $("#staffScheduleModal").setAttribute("aria-hidden", "false");
 }
@@ -5209,7 +6196,10 @@ function openScheduleEventDetail(scheduleId) {
   if (!schedule) return;
   activeScheduleEventId = scheduleId;
   activeStaffEventId = null;
+  $("#staffEventDetailEyebrow").textContent = "SCHEDULE DETAIL";
+  $("#staffEventDetailTitle").textContent = "일정 상세";
   $("#editScheduleEventBtn").hidden = false;
+  $("#deleteStaffEventBtn").textContent = "일정 삭제";
   $("#staffEventDetailContent").innerHTML = `
     <div class="event-detail-row">
       <span>구분</span>
@@ -5253,7 +6243,7 @@ function addStaffSchedule() {
     memo: row.memo || ""
   }));
   const owners = [...new Set(staffRows.map((row) => row.owner).filter((owner) => !isUnassignedStudioOwner(owner)))];
-  const title = $("#staffScheduleTitle").value.trim() || staffScheduleDraft.trainingType || "방송실 예약";
+  const title = $("#staffScheduleTitle").value.trim() || staffScheduleDraft.trainingType || "방송실 스탭";
   const eventData = {
     title,
     room: staffScheduleDraft.room || "",
@@ -5274,11 +6264,11 @@ function addStaffSchedule() {
       const previousOwners = event.owners || [];
       Object.assign(event, eventData, { date: staffScheduleDraft.date || event.date });
       if (previous !== JSON.stringify(event)) {
-        notifyOwners(uniqueValues([...previousOwners, ...event.owners]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약을 수정했습니다.`, {
+        notifyOwners(uniqueValues([...previousOwners, ...event.owners]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 수정했습니다.`, {
           type: "staff",
           staffEventId: event.id,
           actionType: "studio_reservation_updated",
-          title: "방송실 예약 수정",
+          title: "방송실 스탭 수정",
           eventDate: event.date,
           targetView: "studio"
         });
@@ -5318,11 +6308,11 @@ function addStaffSchedule() {
       date: dateKey(nextDate),
     });
   });
-  notifyOwners(owners, `${notificationActor().name}님이 ‘${title}’ 방송실 예약${staffScheduleDraft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, {
+  notifyOwners(owners, `${notificationActor().name}님이 ‘${title}’ 방송실 스탭${staffScheduleDraft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, {
     type: "staff",
     staffEventId: firstEventId,
     actionType: staffScheduleDraft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created",
-    title: staffScheduleDraft.repeatEnabled ? "반복 일정 생성" : "방송실 예약 생성",
+    title: staffScheduleDraft.repeatEnabled ? "반복 일정 생성" : "방송실 스탭 생성",
     eventDate: staffScheduleDraft.date,
     targetView: "studio"
   });
@@ -5402,7 +6392,10 @@ function openStaffEventDetail(staffEventId) {
   normalizeStaffEventRows(event);
   activeStaffEventId = staffEventId;
   activeScheduleEventId = null;
+  $("#staffEventDetailEyebrow").textContent = "STUDIO SCHEDULE";
+  $("#staffEventDetailTitle").textContent = "방송실 스탭 상세";
   $("#editScheduleEventBtn").hidden = false;
+  $("#deleteStaffEventBtn").textContent = "스탭 삭제";
   $("#staffEventDetailContent").innerHTML = `
     <div class="event-detail-row">
       <span>일정 제목</span>
@@ -5472,11 +6465,11 @@ function deleteScheduleEvent(scheduleId) {
 function deleteStaffEvent(staffEventId) {
   const event = state.staffEvents.find((item) => item.id === staffEventId);
   if (event) {
-    notifyOwners(event.owners || [event.owner], `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약을 삭제했습니다.`, {
+    notifyOwners(event.owners || [event.owner], `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 삭제했습니다.`, {
       type: "staff",
       staffEventId: event.id,
       actionType: "studio_reservation_deleted",
-      title: "방송실 예약 삭제",
+      title: "방송실 스탭 삭제",
       eventDate: event.date,
       targetView: "studio"
     });
@@ -5790,7 +6783,7 @@ function renderStudioUnassignedNotice() {
   if (!target) return;
   const count = state.staffEvents.filter(needsStudioStaffAssignment).length;
   target.innerHTML = count
-    ? `<div class="studio-unassigned-alert"><span>스탭 배정이 안된 방송실 예약 건이 있습니다! <b>${count}건</b></span><button type="button" data-open-nearest-unassigned>가까운 날짜 배정하기</button></div>`
+    ? `<div class="studio-unassigned-alert"><span>스탭 배정이 안된 방송실 스탭 건이 있습니다! <b>${count}건</b></span><button type="button" data-open-nearest-unassigned>가까운 날짜 배정하기</button></div>`
     : "";
 }
 
@@ -6005,7 +6998,7 @@ function moveStudioEventToCell(eventId, cell, pointerEvent) {
   if (nextEnd % 60) event.endTime = timeFromMinutes(Math.min(23 * 60 + 59, nextEnd));
   saveState();
   renderAll();
-  showToast("방송실 예약 시간이 변경되었습니다.");
+  showToast("방송실 스탭 시간이 변경되었습니다.");
 }
 
 function moveStudioEventToDate(eventId, date) {
@@ -6014,7 +7007,7 @@ function moveStudioEventToDate(eventId, date) {
   event.date = date;
   saveState();
   renderAll();
-  showToast("방송실 예약 날짜가 변경되었습니다.");
+  showToast("방송실 스탭 날짜가 변경되었습니다.");
 }
 
 function boardPrefixes() {
@@ -6374,8 +7367,12 @@ function renderBoardRow(post, mobile = false) {
   if (mobile) {
     return `
       <button class="mobile-board-row ${notice ? "notice" : ""}" data-board-open="${esc(post.id)}" type="button">
-        <strong>${post.isNotice ? `<span class="board-notice-chip">공지</span>` : `<span class="board-prefix-chip">${esc(post.prefix || "일반")}</span>`}${esc(post.title || "제목 없음")}</strong>
-        <span>${esc(post.prefix || "일반")} · ${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt, true))} · 조회 ${views} · 댓글 ${comments}</span>
+        <span class="mobile-board-row-main">
+          ${post.isNotice ? `<span class="board-notice-chip">공지</span>` : `<span class="board-prefix-chip">${esc(post.prefix || "일반")}</span>`}
+          <strong>${esc(post.title || "제목 없음")}</strong>
+          <i aria-hidden="true">›</i>
+        </span>
+        <span class="mobile-board-row-meta">${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt, true))} · 조회 ${views} · 댓글 ${comments}</span>
       </button>
     `;
   }
@@ -6398,6 +7395,10 @@ function renderBoardList() {
   return `
     <div class="board-page">
       <div class="board-head board-head-compact">
+        <div class="board-head-copy">
+          <p class="eyebrow">COMMUNITY BOARD</p>
+          <p>공지와 제작 관련 내용을 공유하고 댓글로 의견을 나눕니다.</p>
+        </div>
         <button class="pill primary" type="button" data-board-write>+ 글쓰기</button>
       </div>
       <div class="board-toolbar">
@@ -6434,13 +7435,11 @@ function renderBoardEditor(postId = null) {
   return `
     <div class="board-editor-shell">
       <form id="boardEditorForm" class="board-editor-card" data-board-editor-post="${esc(post?.id || "")}">
-        <div class="board-editor-top board-editor-actions-only">
-          <div>
-            <button class="pill ghost board-list-back" type="button" data-board-close-editor>목록으로</button>
-            <button class="pill ghost" type="button" data-board-close-editor>취소</button>
-            <button class="pill primary" type="submit">${post ? "수정" : "등록"}</button>
-          </div>
-        </div>
+        <header class="board-editor-heading">
+          <p class="eyebrow">${post ? "EDIT POST" : "NEW POST"}</p>
+          <h2>${post ? "게시글 수정" : "게시글 작성"}</h2>
+          <p>제목과 내용을 입력하고 필요한 경우 공지로 등록합니다.</p>
+        </header>
         <div class="board-editor-meta">
           <label class="board-prefix-field"><span>말머리</span><select name="prefix">${renderBoardPrefixOptions(post?.prefix)}</select></label>
           <div class="board-title-line">
@@ -6481,6 +7480,13 @@ function renderBoardEditor(postId = null) {
           </div>
           <div class="board-content-editor" data-board-editor-content contenteditable="true">${sanitizeBoardHtml(post?.contentHtml || "")}</div>
         </section>
+        <footer class="board-editor-top board-editor-footer">
+          <div>
+            <button class="pill ghost board-list-back" type="button" data-board-close-editor>목록으로</button>
+            <button class="pill ghost" type="button" data-board-close-editor>취소</button>
+            <button class="pill primary" type="submit">${post ? "수정" : "등록"}</button>
+          </div>
+        </footer>
       </form>
     </div>
   `;
@@ -6491,9 +7497,16 @@ function renderBoardViewers(post) {
   const logs = [...new Map((post.viewLogs || []).map((log) => [log.userId, log])).values()];
   return `
     <div class="modal-shell open board-viewer-modal" aria-hidden="false">
-      <div class="modal-card">
-        <div class="section-head"><h3>최초 확인한 사람</h3><button class="record-control" type="button" data-board-close-viewers>닫기</button></div>
-        <div class="board-viewer-list">${logs.length ? logs.map((log) => `<span>${esc(log.name || "사용자")} <small>${esc(boardDateText(log.viewedAt, true))}</small></span>`).join("") : '<div class="empty">아직 확인자가 없습니다.</div>'}</div>
+      <div class="modal-card board-viewer-card" role="dialog" aria-modal="true" aria-labelledby="boardViewerTitle">
+        <div class="section-head board-viewer-heading">
+          <div>
+            <p class="eyebrow">VIEWERS</p>
+            <h3 id="boardViewerTitle">조회한 사람</h3>
+            <p class="board-viewer-count">총 ${logs.length}명</p>
+          </div>
+          <button class="record-control" type="button" data-board-close-viewers aria-label="조회자 목록 닫기">닫기</button>
+        </div>
+        <div class="board-viewer-list">${logs.length ? logs.map((log) => `<span><strong>${esc(log.name || "사용자")}</strong><small>최초 확인 ${esc(boardDateText(log.viewedAt, true))}</small></span>`).join("") : '<div class="empty">아직 확인한 사람이 없습니다.</div>'}</div>
       </div>
     </div>
   `;
@@ -6525,25 +7538,31 @@ function renderBoardDetail(postId) {
   const comments = boardCommentsForPost(post.id);
   const rootComments = comments.filter((comment) => !comment.parentCommentId || !comments.some((item) => item.id === comment.parentCommentId));
   const canEdit = canManageBoardPost(post);
+  const viewCount = post.viewUserIds?.length || 0;
   return `
     <div class="board-detail-shell">
       <article class="board-detail-card">
         <div class="board-detail-top">
           <button class="pill ghost board-list-back" type="button" data-board-close-detail>목록으로</button>
-          <div>
+          <div class="board-detail-actions">
             ${canEdit ? `<button class="record-control" type="button" data-board-edit="${esc(post.id)}">수정</button><button class="delete-btn" type="button" data-board-delete="${esc(post.id)}">삭제</button>` : ""}
           </div>
         </div>
         <header>
           <div class="board-detail-category">${post.isNotice ? boardNoticeChip(post) : `<span>${esc(post.prefix || "일반")}</span>`}</div>
           <h2>${esc(post.title || "제목 없음")}</h2>
-          <p>${esc(post.authorName || "사용자")} · ${esc(boardDateText(post.createdAt))}${post.updatedAt ? " · 수정됨" : ""} · <button type="button" data-board-viewers="${esc(post.id)}">조회 ${post.viewUserIds?.length || 0}</button> · 댓글 ${comments.length}</p>
+          <p class="board-detail-meta">
+            <span>${esc(post.authorName || "사용자")}</span>
+            <span>${esc(boardDateText(post.createdAt))}${post.updatedAt ? " · 수정됨" : ""}</span>
+            <button type="button" data-board-viewers="${esc(post.id)}" aria-label="조회한 사람 ${viewCount}명 보기"><i aria-hidden="true">◎</i> 조회 ${viewCount}</button>
+            <span>댓글 ${comments.length}</span>
+          </p>
           ${post.isNotice ? `<small>공지 노출: ${esc(boardNoticePeriodLabel(post))}</small>` : ""}
         </header>
         <div class="board-detail-content">${sanitizeBoardHtml(post.contentHtml || "<p>내용이 없습니다.</p>")}</div>
         <section class="board-comments">
-          <h3>댓글 ${comments.length}</h3>
-          ${rootComments.map((comment) => renderBoardCommentItem(comment, post, comments.filter((reply) => reply.parentCommentId === comment.id), false)).join("") || '<div class="empty">댓글이 없습니다.</div>'}
+          <div class="board-comments-heading"><h3>댓글</h3><span>${comments.length}</span></div>
+          ${rootComments.map((comment) => renderBoardCommentItem(comment, post, comments.filter((reply) => reply.parentCommentId === comment.id), false)).join("") || '<div class="empty board-comment-empty">아직 등록된 댓글이 없습니다.</div>'}
           <form class="board-comment-form" data-board-comment-form="${esc(post.id)}">
             <input name="body" placeholder="댓글을 입력하세요." />
             <button class="pill primary" type="submit">댓글 등록</button>
@@ -6572,7 +7591,7 @@ function renderMobileBoard() {
   const prefixButtons = [`<button class="${!boardPrefixFilter ? "active" : ""}" data-board-prefix-filter="" type="button">전체</button>`, ...boardPrefixes().map((prefix) => `<button class="${boardPrefixFilter === prefix ? "active" : ""}" data-board-prefix-filter="${esc(prefix)}" type="button">${esc(prefix)}</button>`)].join("");
   return `
     <div class="mobile-board-page">
-      <div class="mobile-section-head"><h2>게시판</h2><button class="pill primary" type="button" data-board-write>+ 글쓰기</button></div>
+      <div class="mobile-board-actions"><span>게시글 ${posts.length}개</span><button class="pill primary" type="button" data-board-write>+ 글쓰기</button></div>
       <div class="mobile-board-search">
         <input id="mobileBoardSearchInput" placeholder="제목, 내용, 작성자 검색" value="${esc(boardSearchQuery)}" />
         <button class="${mobileBoardFilterOpen ? "active" : ""}" type="button" data-mobile-board-filter>필터</button>
@@ -6861,25 +7880,28 @@ function renderAdmin() {
   $("#adminContent").classList.add("open");
 
   const dropdownGroups = [
-    ["types", "영상 프로젝트", "업무분류"],
-    ["statuses", "영상 프로젝트", "진행"],
-    ["clients", "영상 프로젝트", "발주 부서"],
-    ["projectTaskTypes", "영상 프로젝트", "할 일 분류"],
+    ["types", "프로젝트", "업무분류"],
+    ["statuses", "프로젝트", "진행"],
+    ["clients", "프로젝트", "발주 부서"],
+    ["projectTaskTypes", "프로젝트", "할 일 분류"],
     ["workTaskTypes", "업무", "할 일 분류"],
     ["workTypes", "업무", "업무분류"],
     ["workStatuses", "업무", "진행"],
     ["workClients", "업무", "발주 부서"],
     ["boardPrefixes", "게시판", "게시판 말머리"],
-    ["studioRooms", "방송실 예약 드롭다운", "장소 관리"],
-    ["staffTypes", "방송실 예약 드롭다운", "스탭 종류 관리"],
-    ["trainingTypes", "방송실 예약 드롭다운", "교육 유형 관리"]
+    ["studioRooms", "방송실 스탭 드롭다운", "장소 관리"],
+    ["staffTypes", "방송실 스탭 드롭다운", "스탭 종류 관리"],
+    ["trainingTypes", "방송실 스탭 드롭다운", "교육 유형 관리"]
   ];
   const renderOptionManager = ([key, section, label]) => `
       <article class="option-manager" data-option-group="${key}">
-        <div>
-          <p class="eyebrow">${esc(section)}</p>
-          <h3>${esc(label)}</h3>
-        </div>
+        <header class="admin-card-head">
+          <div>
+            <p class="eyebrow">${esc(section)}</p>
+            <h3>${esc(label)}</h3>
+          </div>
+          <span>${state.options[key].length}개</span>
+        </header>
         <form class="option-form">
           <input name="option" placeholder="${label} 추가" />
           <button class="pill primary" type="submit">추가</button>
@@ -6904,7 +7926,11 @@ function renderAdmin() {
 
   $("#adminContent").innerHTML = `
     <div class="admin-hub-head">
-      <div><strong>${adminSection === "members" ? "멤버 관리" : "드롭다운 관리"}</strong><span>${adminSection === "members" ? "계정, 직책, 담당자 연결을 관리합니다." : "화면에서 사용하는 선택 항목을 관리합니다."}</span></div>
+      <div class="admin-hub-copy">
+        <p class="eyebrow">ADMIN SETTINGS</p>
+        <h2>${adminSection === "members" ? "멤버 관리" : "드롭다운 관리"}</h2>
+        <span>${adminSection === "members" ? "계정, 직책, 담당자 연결을 관리합니다." : "화면에서 사용하는 선택 항목을 관리합니다."}</span>
+      </div>
       <nav aria-label="관리자 설정 메뉴">
         <button class="${adminSection === "dropdowns" ? "active" : ""}" data-admin-section="dropdowns" type="button">드롭다운 관리</button>
         <button class="${adminSection === "members" ? "active" : ""}" data-admin-section="members" type="button">멤버 관리</button>
@@ -6920,10 +7946,13 @@ function renderOwnerLinkManager() {
   const users = state.users.filter((user) => (IS_LOCAL_ENV || user.username !== "1") && user.status !== "inactive" && user.approved !== false);
   return `
     <article class="option-manager account-manager owner-link-manager">
-      <div>
-        <p class="eyebrow">owners</p>
-        <h3>담당자 연결 관리</h3>
-      </div>
+      <header class="admin-card-head">
+        <div>
+          <p class="eyebrow">owners</p>
+          <h3>담당자 연결 관리</h3>
+        </div>
+        <span>${ownerSlots().length}개</span>
+      </header>
       <div class="owner-link-actions">
         <small>계정을 선택한 뒤 연결 저장을 눌러야 반영됩니다.</small>
         <button class="pill primary" type="button" data-save-owner-links>연결 저장</button>
@@ -6933,11 +7962,12 @@ function renderOwnerLinkManager() {
         ${ownerSlots().map((owner) => {
           const user = state.users.find((item) => item.id === owner.linkedUserId);
           const stateText = !owner.linkedUserId ? "알림 없음" : !user || user.status === "inactive" ? "비활성 계정" : "연결됨";
+          const stateClass = !owner.linkedUserId ? "unlinked" : !user || user.status === "inactive" ? "inactive" : "connected";
           return `
             <div class="owner-link-row" data-owner-id="${esc(owner.id)}">
               <strong>${esc(owner.name)}</strong>
               <span>${esc(user?.username || "미연결")}</span>
-              <small>${esc(stateText)}</small>
+              <small class="owner-link-state ${stateClass}"><i></i>${esc(stateText)}</small>
               <select data-link-owner-id="${esc(owner.id)}">
                 <option value="">미연결</option>
                 ${users.map((account) => `<option value="${esc(account.id)}" ${owner.linkedUserId === account.id ? "selected" : ""}>${esc(account.username)}</option>`).join("")}
@@ -6966,17 +7996,26 @@ function renderAccountManager() {
   const users = state.users.filter((user) => IS_LOCAL_ENV || user.username !== "1");
   return `
     <article class="option-manager account-manager">
-      <div>
-        <p class="eyebrow">accounts</p>
-        <h3>계정 관리</h3>
-      </div>
+      <header class="admin-card-head">
+        <div>
+          <p class="eyebrow">accounts</p>
+          <h3>계정 관리</h3>
+        </div>
+        <span>${users.length}명</span>
+      </header>
       <div class="account-list">
         ${users
-          .map((user) => `
+          .map((user) => {
+            const statusClass = user.status === "inactive" ? "inactive" : user.approved === false || user.status === "pending" ? "pending" : user.role === "admin" ? "admin" : "active";
+            const statusText = user.status === "inactive" ? "삭제됨" : user.approved === false || user.status === "pending" ? "미승인" : user.role === "admin" ? "관리자" : "일반";
+            return `
             <div class="account-row" data-user-id="${esc(user.id)}">
-              <div>
-                <strong>${esc(user.name || user.username)}</strong>
-                <small>${esc(user.position || "과원")} · ${user.status === "inactive" ? "삭제됨" : user.approved === false || user.status === "pending" ? "미승인" : user.role === "admin" ? "관리자" : "일반 계정"}</small>
+              <div class="account-copy">
+                <div class="account-name-line">
+                  <strong>${esc(user.name || user.username)}</strong>
+                  <span class="account-status ${statusClass}">${statusText}</span>
+                </div>
+                <small>${esc(user.position || "과원")}</small>
                 <small>${esc(user.email || user.username || "-")}</small>
               </div>
               <div class="account-actions">
@@ -6987,7 +8026,8 @@ function renderAccountManager() {
                 <button class="delete-btn" data-delete-user="${esc(user.id)}" ${user.id === state.currentUser ? "disabled" : ""} type="button" aria-label="계정 삭제">×</button>
               </div>
             </div>
-          `)
+          `;
+          })
           .join("")}
       </div>
     </article>
@@ -7256,7 +8296,7 @@ function deleteOption(group, value) {
 }
 
 function exportCsv() {
-  const header = ["영상 프로젝트명", "업무분류", "진행", "담당자", "발주 부서", "시작일자", "촬영일자", "1차 완성", "최종 출고일자", "진행률", "총예산", "집행액"];
+  const header = ["프로젝트명", "업무분류", "진행", "담당자", "발주 부서", "시작일자", "촬영일자", "1차 완성", "최종 출고일자", "진행률", "총예산", "집행액"];
   const rows = state.projects.map((project) => [
     project.title,
     project.type,
@@ -7290,6 +8330,7 @@ let mobileTaskHideDone = viewPref("mobileTaskHideDone", true);
 let mobileTaskOwner = viewPref("mobileTaskOwner", "");
 let mobileTaskSortOpen = false;
 let mobileTaskOwnerFilterOpen = false;
+let mobileTaskDetailRef = null;
 let mobileProjectSortOpen = false;
 let mobileAddMode = "";
 let mobileMoreRoute = viewPref("mobileMoreRoute", "more");
@@ -7330,7 +8371,7 @@ function isMobileViewport() {
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 예약", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 스탭", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -7382,7 +8423,7 @@ function notificationCategoryIcon(item) {
 function renderNotificationItem(item) {
   const actor = item.actorName || "알림";
   const message = item.message || item.body || item.title || "새 알림이 있습니다.";
-  const sourceLabel = item.parentType === "project" || item.sourceType === "project" ? "영상 프로젝트"
+  const sourceLabel = item.parentType === "project" || item.sourceType === "project" ? "프로젝트"
     : item.parentType === "work" || item.sourceType === "work" ? "업무"
       : item.sourceType?.includes("task") ? "할 일"
         : item.sourceType === "staff" ? "방송실" : item.sourceType === "schedule" ? "일정" : "알림";
@@ -7417,11 +8458,23 @@ function renderNotificationSettings() {
     record: "관리기록 추가·수정·삭제",
     task: "할 일 추가·수정·완료·삭제",
     work: "업무 상태 및 내용 변경",
-    studio: "방송실 예약 변경",
+    studio: "방송실 스탭 변경",
     schedule: "일정 변경",
     system: "기타 시스템 알림"
   };
-  return `<section class="notification-settings ${notificationSettingsOpen ? "open" : ""}"><header><h3>알림 설정</h3><span>항목별 수신 설정</span></header>${Object.entries(labels).map(([key, label]) => `<label><span>${label}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</section>`;
+  return `
+    <section class="notification-settings ${notificationSettingsOpen ? "open" : ""}">
+      <header><h3>설정</h3><span>화면 및 알림 환경</span></header>
+      <div class="notification-setting-section-title">화면</div>
+      <label class="notification-theme-setting">
+        <span><b>다크 모드</b><small>어두운 화면 테마를 사용합니다.</small></span>
+        <input data-theme-setting type="checkbox" ${settings.darkMode ? "checked" : ""} />
+        <i></i>
+      </label>
+      <div class="notification-setting-section-title">알림</div>
+      ${Object.entries(labels).map(([key, label]) => `<label><span>${label}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}
+    </section>
+  `;
 }
 
 function renderWebNotificationPopup() {
@@ -7429,7 +8482,7 @@ function renderWebNotificationPopup() {
   if (!popup) return;
   const items = currentUserNotifications().slice(0, 8);
   popup.innerHTML = `
-    <header><h3>알림</h3><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
+    <header><h3>알림</h3><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="설정">⚙</button></div></header>
     <div class="web-notification-list">${items.length ? items.map(renderNotificationItem).join("") : '<div class="notification-empty compact"><strong>새 알림이 없습니다.</strong></div>'}</div>
     <button class="web-notification-all" data-notification-open-center type="button">모든 알림 보기</button>
   `;
@@ -7439,8 +8492,20 @@ function renderWebNotificationPopup() {
 }
 
 function renderNotificationCenter() {
+  const settingsMode = notificationSettingsOpen;
+  const items = currentUserNotifications();
+  const card = $("#notificationCenterModal .notification-center-card");
+  const title = $("#notificationCenterTitle");
+  const eyebrow = $("#notificationCenterEyebrow");
+  const description = $("#notificationCenterDescription");
+  card?.classList.toggle("is-empty", !items.length && !settingsMode);
+  card?.classList.toggle("is-settings", settingsMode);
+  if (title) title.textContent = settingsMode ? "설정" : "알림";
+  if (eyebrow) eyebrow.textContent = settingsMode ? "SETTINGS" : "NOTIFICATIONS";
+  if (description) description.textContent = settingsMode ? "화면 테마와 알림 수신 항목을 관리합니다." : "업무 변경과 담당 항목의 새 소식을 확인합니다.";
+  $("#notificationCenterModal [data-notification-settings]")?.classList.toggle("active", settingsMode);
   const list = $("#notificationCenterList");
-  if (list) list.innerHTML = renderNotificationGroups(currentUserNotifications());
+  if (list) list.innerHTML = renderNotificationGroups(items);
   const settings = $("#notificationCenterSettings");
   if (settings) settings.innerHTML = notificationSettingsOpen ? renderNotificationSettings() : "";
   const showRead = $("[data-notification-show-read]");
@@ -7464,12 +8529,23 @@ function renderNotificationSurfaces() {
 }
 
 function renderMobileNotifications() {
+  const items = currentUserNotifications();
   return `
-    <div class="mobile-notification-page">
-      <header><button class="mobile-notification-close" data-mobile-notifications-close type="button" aria-label="알림 닫기">‹</button><h2>알림</h2><div><button data-notification-read-all type="button">모두 읽음</button><button data-notification-clear-all type="button">모두 지우기</button><button data-notification-settings type="button" aria-label="알림 설정">⚙</button></div></header>
-      <label class="notification-show-read"><input data-notification-show-read type="checkbox" ${notificationShowRead ? "checked" : ""} /> 읽은 알림 표시</label>
-      ${notificationSettingsOpen ? renderNotificationSettings() : ""}
-      <div class="mobile-notification-list">${renderNotificationGroups(currentUserNotifications())}</div>
+    <div class="mobile-notification-page ${!items.length ? "is-empty" : ""}">
+      <header class="mobile-notification-head">
+        <button class="mobile-notification-close" data-mobile-notifications-close type="button" aria-label="알림 닫기">‹</button>
+        <div class="mobile-notification-title">
+          <h2>알림</h2>
+        </div>
+      </header>
+      <div class="mobile-notification-controlbar">
+        <div class="mobile-notification-bulk-actions">
+          <button data-notification-read-all type="button">모두 읽음</button>
+          <button data-notification-clear-all type="button">모두 지우기</button>
+        </div>
+        <label class="notification-show-read"><input data-notification-show-read type="checkbox" ${notificationShowRead ? "checked" : ""} /><span>읽은 알림</span></label>
+      </div>
+      <div class="mobile-notification-list">${renderNotificationGroups(items)}</div>
     </div>
   `;
 }
@@ -7583,6 +8659,7 @@ function openNotificationTarget(item) {
     mobileActiveSection = "projects";
     setView("projects");
     if (targetTab === "tasks" && targetId) highlightedProjectTaskId = targetId;
+    if (targetTab === "tasks" && targetId) detailTaskHideDone = false;
     if (targetTab === "records" && targetId) {
       recordFilterMode = "all";
       recordSearchQuery = "";
@@ -7754,10 +8831,29 @@ function renderMobileKpiStrip() {
 
 function renderMobileProjectCards() {
   const projects = sortedMobileProjects();
+  const activeProjects = state.projects.filter((project) => mobileProjectDueInfo(project).className !== "done");
+  const dueSoonCount = activeProjects.filter((project) => ["soon", "today"].includes(mobileProjectDueInfo(project).className)).length;
+  const overdueCount = activeProjects.filter((project) => mobileProjectDueInfo(project).className === "overdue").length;
   return `
+    <section class="mobile-video-summary-card">
+      <div>
+        <span>VIDEO</span>
+        <strong>${activeProjects.length}개의 진행 프로젝트</strong>
+        <small>제작 상태와 주요 마감 일정을 확인하세요.</small>
+      </div>
+      <div>
+        <span><small>임박</small><b>${dueSoonCount}</b></span>
+        <span><small>지연</small><b>${overdueCount}</b></span>
+      </div>
+    </section>
     <div class="mobile-project-toolbar">
       <button class="mobile-project-sort ${mobileProjectSortOpen ? "active" : ""}" data-mobile-open-project-sort type="button">
-        ${esc(mobileProjectSortLabel())} <span>⌄</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 4v14"></path><path d="M5 15l3 3 3-3"></path>
+          <path d="M16 20V6"></path><path d="M13 9l3-3 3 3"></path>
+        </svg>
+        <span>${esc(mobileProjectSortLabel())}</span>
+        <i>⌄</i>
       </button>
       <label class="mobile-hide-done-toggle">
         <span>완료</span>
@@ -7765,57 +8861,149 @@ function renderMobileProjectCards() {
         <b></b>
       </label>
     </div>
-    <div class="mobile-section-head mobile-project-head"><h2>프로젝트</h2><span>총 ${projects.length}건</span></div>
+    <div class="mobile-section-head mobile-project-head"><span>총 ${projects.length}건</span></div>
     <div class="mobile-card-list mobile-project-list">
       ${projects.length ? projects.map((project) => {
         const due = mobileProjectDueInfo(project);
+        const statusClassName = mobileProjectStatusClass(project.status);
         return `
           <button class="mobile-project-card" data-mobile-open-project="${esc(project.id)}" type="button">
+            <i class="mobile-project-accent ${statusClassName}" aria-hidden="true"></i>
             <div class="mobile-project-main">
               <strong>${esc(project.title || "제목 없음")}</strong>
-              <p>
-                <span class="mobile-project-status ${mobileProjectStatusClass(project.status)}">${esc(mobileStatusText(project.status))}</span>
-                <span><em>담당자</em> ${esc(mobileOwnersText(projectOwners(project)))}</span>
-                <span><em>발주부서</em> ${esc(project.client || "-")}</span>
-              </p>
-              <small>마감일 ${project.finalDate ? esc(formatDate(project.finalDate)) : "없음"}</small>
-            </div>
-            <div class="mobile-project-side">
-              <b class="mobile-project-dday ${esc(due.className)}">${esc(due.label)}</b>
-              <i>›</i>
+              <div class="mobile-project-compact-meta">
+                <span class="mobile-project-status ${statusClassName}">${esc(mobileStatusText(project.status))}</span>
+                <span title="${esc(mobileOwnersText(projectOwners(project)))}">${esc(mobileOwnersText(projectOwners(project)))}</span>
+                <span title="${esc(project.client || "-")}">${esc(project.client || "-")}</span>
+                <span class="mobile-project-deadline ${esc(due.className)}">${project.finalDate ? esc(formatDate(project.finalDate)) : "마감 없음"}</span>
+                <i>›</i>
+              </div>
             </div>
           </button>
         `;
-      }).join("") : `<div class="empty">${projectHideDone && state.projects.some((project) => project.broadcastCompleted) ? "방영완료 항목 표시를 켜면 확인할 수 있습니다." : "등록된 영상 프로젝트가 없습니다."}</div>`}
+      }).join("") : `<div class="empty">${projectHideDone && state.projects.some((project) => project.broadcastCompleted) ? "방영완료 항목 표시를 켜면 확인할 수 있습니다." : "등록된 프로젝트가 없습니다."}</div>`}
     </div>
     ${renderMobileProjectSortSheet()}
   `;
 }
 
-function renderMobileWorkCards() {
-  const works = state.works
+const mobileWorkSortOptions = [
+  [{ key: "finalDate", direction: "asc" }, "마감일 빠른 순"],
+  [{ key: "finalDate", direction: "desc" }, "마감일 늦은 순"],
+  [{ key: "kickoffDate", direction: "asc" }, "시작일 빠른 순"],
+  [{ key: "status", direction: "asc" }, "진행 상태 순"],
+  [{ key: "title", direction: "asc" }, "업무명 순"]
+];
+
+function mobileWorkSortLabel() {
+  const option = mobileWorkSortOptions.find(([value]) => value.key === workSort.key && value.direction === workSort.direction);
+  return option?.[1] || "마감일 빠른 순";
+}
+
+function mobileWorkSortValue(work, key) {
+  if (key === "status") return state.options.workStatuses.indexOf(work.status);
+  if (work.noSchedule && ["kickoffDate", "finalDate"].includes(key)) return "9999-12-31";
+  return work[key] || "";
+}
+
+function sortedMobileWorks() {
+  return state.works
     .filter((work) => !(workHideDone && work.status === "완료"))
-    .sort((a, b) => String(a.finalDate || "").localeCompare(String(b.finalDate || "")));
+    .sort((a, b) => {
+      const direction = workSort.direction === "desc" ? -1 : 1;
+      const aValue = mobileWorkSortValue(a, workSort.key);
+      const bValue = mobileWorkSortValue(b, workSort.key);
+      if (typeof aValue === "number" && typeof bValue === "number") return (aValue - bValue) * direction;
+      return String(aValue).localeCompare(String(bValue), "ko") * direction;
+    });
+}
+
+function mobileWorkDueInfo(work) {
+  if (work.status === "완료") return { label: "완료", className: "done" };
+  if (work.noSchedule || !work.finalDate) return { label: "일정 없음", className: "none" };
+  const diff = daysUntil(work.finalDate);
+  if (diff < 0) return { label: "지연", className: "overdue" };
+  if (diff === 0) return { label: "오늘", className: "today" };
+  if (diff <= 6) return { label: `D-${diff}`, className: "soon" };
+  return { label: `D-${diff}`, className: "safe" };
+}
+
+function renderMobileWorkSortSheet() {
+  if (!mobileWorkSortOpen) return "";
   return `
-    ${renderMobileKpiStrip()}
-    <div class="mobile-list-tools">
-      <span></span>
+    <div class="mobile-sort-backdrop" data-mobile-close-work-sort></div>
+    <section class="mobile-sort-sheet mobile-work-sort-sheet">
+      <i></i>
+      <h3>정렬 방식</h3>
+      ${mobileWorkSortOptions.map(([value, label]) => {
+        const active = workSort.key === value.key && workSort.direction === value.direction;
+        return `
+          <button class="${active ? "active" : ""}" data-mobile-work-sort-key="${esc(value.key)}" data-mobile-work-sort-direction="${esc(value.direction)}" type="button">
+            <span></span>
+            ${esc(label)}
+            ${active ? "<b>✓</b>" : ""}
+          </button>
+        `;
+      }).join("")}
+    </section>
+  `;
+}
+
+function renderMobileWorkCards() {
+  const works = sortedMobileWorks();
+  const activeWorks = state.works.filter((work) => work.status !== "완료");
+  const dueSoonCount = activeWorks.filter((work) => ["soon", "today"].includes(mobileWorkDueInfo(work).className)).length;
+  const overdueCount = activeWorks.filter((work) => mobileWorkDueInfo(work).className === "overdue").length;
+  return `
+    <section class="mobile-work-summary-card">
+      <div>
+        <span>WORK</span>
+        <strong>${activeWorks.length}개의 진행 업무</strong>
+        <small>담당 업무와 주요 마감 일정을 확인하세요.</small>
+      </div>
+      <div>
+        <span><small>임박</small><b>${dueSoonCount}</b></span>
+        <span><small>지연</small><b>${overdueCount}</b></span>
+      </div>
+    </section>
+    <div class="mobile-work-toolbar">
+      <button class="mobile-work-sort ${mobileWorkSortOpen ? "active" : ""}" data-mobile-open-work-sort type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 4v14"></path><path d="M5 15l3 3 3-3"></path>
+          <path d="M16 20V6"></path><path d="M13 9l3-3 3 3"></path>
+        </svg>
+        <span>${esc(mobileWorkSortLabel())}</span>
+        <i>⌄</i>
+      </button>
       <label class="mobile-hide-done-toggle">
         <span>완료</span>
         <input data-mobile-show-completed-works type="checkbox" ${!workHideDone ? "checked" : ""} />
         <b></b>
       </label>
     </div>
-    <div class="mobile-section-head mobile-work-head"><span>${works.length}건</span></div>
-    <div class="mobile-card-list">
-      ${works.length ? works.map((work) => `
-        <button class="mobile-work-card" data-mobile-open-work="${esc(work.id)}" type="button">
-          <strong>${esc(work.title || "제목 없음")}</strong>
-          <div><span class="mobile-chip ${mobileWorkStatusClass(work.status)}">${esc(mobileStatusText(work.status))}</span><span>${esc(mobileOwnersText(workOwners(work)))}</span></div>
-          <small>마감일 ${work.noSchedule ? "일정 없음" : work.finalDate ? esc(formatDate(work.finalDate)) : "없음"}</small>
-        </button>
-      `).join("") : `<div class="empty">${workHideDone && state.works.some((work) => work.status === "완료") ? "완료 스위치를 켜면 완료된 업무를 볼 수 있습니다." : "등록된 업무가 없습니다."}</div>`}
+    <div class="mobile-section-head mobile-work-head"><span>총 ${works.length}건</span></div>
+    <div class="mobile-card-list mobile-work-list">
+      ${works.length ? works.map((work) => {
+        const due = mobileWorkDueInfo(work);
+        const statusClassName = mobileWorkStatusClass(work.status);
+        return `
+          <button class="mobile-work-card" data-mobile-open-work="${esc(work.id)}" type="button">
+            <i class="mobile-work-accent ${statusClassName}" aria-hidden="true"></i>
+            <div class="mobile-work-main">
+              <strong>${esc(work.title || "제목 없음")}</strong>
+              <div class="mobile-work-compact-meta">
+                <span class="mobile-work-status ${statusClassName}">${esc(mobileStatusText(work.status))}</span>
+                <span title="${esc(mobileOwnersText(workOwners(work)))}">${esc(mobileOwnersText(workOwners(work)))}</span>
+                <span title="${esc(work.client || "-")}">${esc(work.client || "-")}</span>
+                <span class="mobile-work-deadline ${esc(due.className)}">${work.noSchedule || !work.finalDate ? "일정 없음" : esc(formatDate(work.finalDate))}</span>
+              </div>
+            </div>
+            <span class="mobile-work-due-chip ${esc(due.className)}">${esc(due.label)}</span>
+          </button>
+        `;
+      }).join("") : `<div class="empty">${workHideDone && state.works.some((work) => work.status === "완료") ? "완료 스위치를 켜면 완료된 업무를 볼 수 있습니다." : "등록된 업무가 없습니다."}</div>`}
     </div>
+    ${renderMobileWorkSortSheet()}
   `;
 }
 
@@ -7861,10 +9049,12 @@ function mobileTaskDueText(task) {
 
 function renderMobileTaskCard(item) {
   const badge = taskDdayInfo(item);
+  const sourceLabel = item.source === "project" ? "영상" : "업무";
   return `
     <article class="mobile-task-card ${item.task.done ? "is-done" : ""}" data-mobile-task-card="${esc(item.id)}" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
       <input class="mobile-task-check" type="checkbox" data-overview-task-source="${esc(item.source)}" data-overview-task-check="${esc(item.id)}" ${item.task.done ? "checked" : ""} ${item.canManage ? "" : "disabled"} />
-      <button class="mobile-task-open" type="button" data-mobile-open-task-source="${esc(item.source)}" data-mobile-open-task-id="${esc(item.id)}">
+      <button class="mobile-task-open" type="button">
+        <span class="mobile-task-card-meta"><em>${esc(sourceLabel)}</em></span>
         <strong>${esc(item.task.text || "제목 없음")}</strong>
         <span>${esc(item.sourceTitle)} · ${esc(taskOwnersLabel(item.task))}</span>
         <small>${esc(mobileTaskDueText(item.task))}</small>
@@ -7910,12 +9100,191 @@ function renderMobileOwnerFilterSheet() {
   `;
 }
 
+function mobileTaskItem(source, taskId) {
+  return taskOverviewItems().find((item) => item.source === source && item.id === taskId) || null;
+}
+
+function closeMobileTaskDetail() {
+  mobileTaskDetailRef = null;
+  renderMobileDashboard();
+}
+
+function openMobileTaskDetail(source, taskId) {
+  const item = mobileTaskItem(source, taskId);
+  if (!item) return;
+  mobileTaskDetailRef = { source, taskId };
+  mobileTaskSortOpen = false;
+  mobileTaskOwnerFilterOpen = false;
+  renderMobileDashboard();
+}
+
+function openMobileTaskParent(source, taskId) {
+  const item = mobileTaskItem(source, taskId);
+  if (!item) return;
+  mobileTaskDetailRef = null;
+  mobileTaskSortOpen = false;
+  mobileTaskOwnerFilterOpen = false;
+  if (item.source === "project") {
+    const project = state.projects.find((entry) => entry.id === item.sourceId);
+    if (!project) return showToast("연결된 영상을 찾을 수 없습니다.");
+    mobileActiveSection = "projects";
+    setView("projects");
+    highlightedProjectTaskId = item.id;
+    openProjectDetail(item.sourceId, "tasks", () => {
+      highlightProjectOrWorkNotification({ scope: "project", tab: "tasks", targetId: item.id });
+      clearTaskHighlight("project");
+    });
+    return;
+  }
+  const work = state.works.find((entry) => entry.id === item.sourceId);
+  if (!work) return showToast("연결된 업무를 찾을 수 없습니다.");
+  mobileActiveSection = "works";
+  setView("works");
+  highlightedWorkTaskId = item.id;
+  workTaskHideDone = false;
+  openWorkDetail(item.sourceId, "tasks", () => {
+    highlightProjectOrWorkNotification({ scope: "work", tab: "tasks", targetId: item.id });
+    clearTaskHighlight("work");
+  });
+}
+
+function mobileSelectValue(name, options, selected = "", placeholder = "선택") {
+  return `
+    <select name="${name}">
+      <option value="">${esc(placeholder)}</option>
+      ${options.map((option) => `<option value="${esc(option)}" ${option === selected ? "selected" : ""}>${esc(option)}</option>`).join("")}
+    </select>
+  `;
+}
+
+function renderMobileTaskDetail() {
+  if (!mobileTaskDetailRef) return "";
+  const item = mobileTaskItem(mobileTaskDetailRef.source, mobileTaskDetailRef.taskId);
+  if (!item) {
+    mobileTaskDetailRef = null;
+    return "";
+  }
+  const task = item.task;
+  const editable = item.canManage;
+  const dueDate = task.dueDate || dateKey(new Date());
+  return `
+    <div class="mobile-task-detail-layer" role="dialog" aria-modal="true" aria-label="할 일 상세">
+      <button class="mobile-task-detail-backdrop" data-mobile-task-detail-close type="button" aria-label="닫기"></button>
+      <form class="mobile-task-detail-card" data-mobile-task-detail-form>
+        <header>
+          <button data-mobile-task-detail-close type="button" aria-label="할 일 상세 닫기">×</button>
+          <div><span>TASK</span><strong>${editable ? "할 일 수정" : "할 일 상세"}</strong></div>
+          <b class="mobile-dday-badge ${esc(taskDdayInfo(item).className)}">${esc(taskDdayInfo(item).label)}</b>
+        </header>
+        <div class="mobile-task-detail-body">
+          <section class="mobile-task-detail-parent">
+            <span>${esc(item.sourceLabel)}</span>
+            <strong>${esc(item.sourceTitle)}</strong>
+          </section>
+          <section>
+            <h3>기본정보</h3>
+            <label>할 일 제목 <b>*</b><input name="title" value="${esc(task.text || "")}" placeholder="할 일 제목" required ${editable ? "" : "disabled"} /></label>
+            <label>업무 분류${mobileSelectValue("type", taskTypeOptions(), task.type || "", "업무 분류 선택").replace("<select", `<select ${editable ? "" : "disabled"}`)}</label>
+          </section>
+          <section>
+            <h3>담당자</h3>
+            ${mobileOwnerCheckboxes("owners", taskOwners(task)).replaceAll("<input ", `<input ${editable ? "" : "disabled"} `)}
+          </section>
+          <section class="mobile-task-date-section">
+            <h3>일정</h3>
+            <label>마감일<input name="dueDate" type="date" value="${esc(dueDate)}" ${editable ? "" : "disabled"} /></label>
+            <div class="mobile-task-option-grid">
+              <label class="mobile-toggle-line"><input name="noDueDate" type="checkbox" ${task.noDueDate || !task.dueDate ? "checked" : ""} ${editable ? "" : "disabled"} /> 마감일 없음</label>
+              <label class="mobile-toggle-line"><input name="allDay" type="checkbox" ${task.allDay !== false ? "checked" : ""} ${editable ? "" : "disabled"} /> 종일</label>
+              <label class="mobile-toggle-line"><input name="calendar" type="checkbox" ${task.calendar !== false ? "checked" : ""} ${editable ? "" : "disabled"} /> 캘린더 등록</label>
+            </div>
+            <div class="mobile-time-row"><label>시작<input name="startTime" type="time" step="600" value="${esc(task.startTime || "09:00")}" ${editable ? "" : "disabled"} /></label><span>~</span><label>종료<input name="endTime" type="time" step="600" value="${esc(task.endTime || "10:00")}" ${editable ? "" : "disabled"} /></label></div>
+          </section>
+          <section>
+            <h3>세부내용</h3>
+            <textarea name="detail" placeholder="세부내용을 입력하세요." ${editable ? "" : "disabled"}>${esc(task.detail || "")}</textarea>
+          </section>
+          ${editable ? `<button class="mobile-task-delete-button" data-mobile-task-delete type="button">할 일 삭제</button>` : ""}
+        </div>
+        <footer>
+          <button data-mobile-task-detail-close type="button">${editable ? "취소" : "닫기"}</button>
+          ${editable ? '<button class="primary" type="submit">변경사항 저장</button>' : ""}
+        </footer>
+      </form>
+    </div>
+  `;
+}
+
+function saveMobileTaskDetail(form) {
+  if (!mobileTaskDetailRef) return;
+  const item = mobileTaskItem(mobileTaskDetailRef.source, mobileTaskDetailRef.taskId);
+  if (!item || !item.canManage) return showToast("담당자 또는 관리자만 할 일을 변경할 수 있습니다.");
+  const data = new FormData(form);
+  const previousOwners = taskOwners(item.task);
+  const owners = mobileFormOwners(form);
+  item.task.text = String(data.get("title") || "").trim() || "새 할 일";
+  item.task.detail = String(data.get("detail") || "");
+  item.task.type = String(data.get("type") || "");
+  item.task.owners = owners;
+  item.task.owner = owners[0] || "";
+  item.task.noDueDate = Boolean(data.get("noDueDate"));
+  item.task.dueDate = item.task.noDueDate ? "" : String(data.get("dueDate") || dateKey(new Date()));
+  item.task.allDay = Boolean(data.get("allDay"));
+  item.task.startTime = String(data.get("startTime") || "09:00");
+  item.task.endTime = String(data.get("endTime") || "10:00");
+  item.task.calendar = item.task.noDueDate ? false : Boolean(data.get("calendar"));
+  const parent = item.source === "project"
+    ? state.projects.find((project) => project.id === item.sourceId)
+    : state.works.find((work) => work.id === item.sourceId);
+  const parentOwners = parent ? (item.source === "project" ? projectOwners(parent) : workOwners(parent)) : [];
+  notifyOwners(uniqueValues([...previousOwners, ...owners, ...parentOwners]), `${notificationActor().name}님이 ‘${item.sourceTitle}’의 할 일 ‘${item.task.text}’을 수정했습니다.`, {
+    type: item.source === "project" ? "project-task" : "work-task",
+    projectId: item.source === "project" ? item.sourceId : undefined,
+    workId: item.source === "work" ? item.sourceId : undefined,
+    taskId: item.id,
+    actionType: item.source === "project" ? "project_task_updated" : "work_task_updated",
+    title: "할 일 수정",
+    targetTab: "tasks"
+  });
+  saveState();
+  mobileTaskDetailRef = null;
+  showToast("할 일이 수정되었습니다.");
+  renderAll();
+}
+
+function deleteMobileTaskDetail() {
+  if (!mobileTaskDetailRef) return;
+  const item = mobileTaskItem(mobileTaskDetailRef.source, mobileTaskDetailRef.taskId);
+  if (!item || !item.canManage) return showToast("담당자 또는 관리자만 할 일을 삭제할 수 있습니다.");
+  confirmDelete(() => {
+    notifyTaskDeletion(item.source, item.task);
+    if (item.source === "project") {
+      state.tasks = state.tasks.filter((task) => task.id !== item.id);
+    } else {
+      const work = state.works.find((entry) => entry.id === item.sourceId);
+      if (work) work.tasks = (work.tasks || []).filter((task) => task.id !== item.id);
+    }
+    mobileTaskDetailRef = null;
+    saveState();
+    showToast("할 일이 삭제되었습니다.");
+    renderAll();
+  });
+}
+
 function renderMobileTasks() {
-  const { matchingItems, visibleItems } = mobileFilteredTasks();
+  const { allItems, matchingItems, visibleItems } = mobileFilteredTasks();
   const filters = [["all", "전체"], ["today", "오늘"], ["overdue", "지연"], ["week", "이번주"]];
   const emptyMessage = mobileTaskEmptyMessage(matchingItems.length, visibleItems.length);
+  const openItems = allItems.filter((item) => !item.task.done);
+  const todayKey = mobileTodayKey();
+  const todayCount = openItems.filter((item) => item.task.dueDate === todayKey).length;
+  const overdueCount = openItems.filter((item) => item.task.dueDate && item.task.dueDate < todayKey).length;
   return `
     <div class="mobile-task-page">
+      <section class="mobile-task-summary-card">
+        <div><span>TASKS</span><strong>${openItems.length}개의 미완료 할 일</strong><small>마감 일정과 담당 업무를 한눈에 확인하세요.</small></div>
+        <div><span><small>오늘</small><b>${todayCount}</b></span><span><small>지연</small><b>${overdueCount}</b></span></div>
+      </section>
       <div class="mobile-filter-chips">
         ${filters.map(([key, label]) => `<button class="${mobileTaskFilter === key ? "active" : ""}" data-mobile-task-filter="${key}" type="button">${label}</button>`).join("")}
       </div>
@@ -7929,7 +9298,8 @@ function renderMobileTasks() {
           </svg>
         </button>
         <button class="mobile-owner-filter-trigger ${mobileTaskOwnerFilterOpen || mobileTaskOwner ? "active" : ""}" data-mobile-open-owner-filter type="button" aria-label="담당자 필터">
-          ☰${mobileTaskOwner ? `<small>${esc(ownerOptionLabel(mobileTaskOwner))}</small>` : ""}
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16"></path><path d="M7 12h10"></path><path d="M10 18h4"></path></svg>
+          ${mobileTaskOwner ? `<small>${esc(ownerOptionLabel(mobileTaskOwner))}</small>` : ""}
         </button>
         <label class="mobile-hide-done-toggle">
           <span>완료</span>
@@ -8192,13 +9562,17 @@ function renderMobileCalendar() {
   return `
     <div class="mobile-calendar-page ${searchView ? "is-searching" : ""}">
       <header class="mobile-calendar-toolbar">
-        <button data-mobile-calendar-prev type="button" aria-label="이전 ${periodUnit}">‹</button>
-        <label class="mobile-calendar-month-title"><span>${periodTitle}</span>${mobileCalendarViewMode === "week" ? "" : `<input data-mobile-calendar-month-picker type="month" value="${year}-${String(month + 1).padStart(2, "0")}" aria-label="월 선택" />`}</label>
-        <button data-mobile-calendar-next type="button" aria-label="다음 ${periodUnit}">›</button>
-        <button class="mobile-calendar-today" data-mobile-calendar-today type="button">오늘</button>
-        <button class="mobile-calendar-icon ${searchView ? "active" : ""}" data-mobile-calendar-search-toggle type="button" aria-label="일정 검색">⌕</button>
-        <button class="mobile-calendar-icon ${filterCount ? "active" : ""}" data-mobile-calendar-filter-open type="button" aria-label="필터${filterCount ? ` ${filterCount}개 적용` : ""}">▽${filterCount ? `<b>${filterCount}</b>` : ""}</button>
-        <button class="mobile-calendar-icon add" data-mobile-calendar-add type="button" aria-label="일정 추가">＋</button>
+        <div class="mobile-calendar-period">
+          <button data-mobile-calendar-prev type="button" aria-label="이전 ${periodUnit}">‹</button>
+          <label class="mobile-calendar-month-title"><span>${periodTitle}</span>${mobileCalendarViewMode === "week" ? "" : `<input data-mobile-calendar-month-picker type="month" value="${year}-${String(month + 1).padStart(2, "0")}" aria-label="월 선택" />`}</label>
+          <button data-mobile-calendar-next type="button" aria-label="다음 ${periodUnit}">›</button>
+        </div>
+        <div class="mobile-calendar-actions">
+          <button class="mobile-calendar-today" data-mobile-calendar-today type="button">오늘</button>
+          <button class="mobile-calendar-icon ${searchView ? "active" : ""}" data-mobile-calendar-search-toggle type="button" aria-label="일정 검색"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path></svg></button>
+          <button class="mobile-calendar-icon ${filterCount ? "active" : ""}" data-mobile-calendar-filter-open type="button" aria-label="필터${filterCount ? ` ${filterCount}개 적용` : ""}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"></path></svg>${filterCount ? `<b>${filterCount}</b>` : ""}</button>
+          <button class="mobile-calendar-icon add" data-mobile-calendar-add type="button" aria-label="일정 추가">＋</button>
+        </div>
       </header>
       ${searchView ? `<div class="mobile-calendar-search"><input data-mobile-calendar-search-input value="${esc(mobileCalendarSearchQuery)}" placeholder="제목, 담당자, 장소, 메모 검색" autocomplete="off" /><button data-mobile-calendar-search-close type="button">취소</button></div>` : ""}
       <div class="mobile-calendar-view-switch" aria-label="캘린더 보기 방식">
@@ -8287,7 +9661,7 @@ function renderMobileStudioEventCard(event) {
 }
 
 function renderMobileStudioEmpty() {
-  return `<div class="mobile-studio-empty"><span>▣</span><strong>등록된 방송실 예약이 없습니다.</strong><small>선택한 날짜에 새 예약을 등록할 수 있습니다.</small><button data-mobile-studio-create type="button">＋ 예약 등록</button></div>`;
+  return `<div class="mobile-studio-empty"><span>▣</span><strong>등록된 방송실 스탭이 없습니다.</strong><small>선택한 날짜에 새 스탭을 등록할 수 있습니다.</small><button data-mobile-studio-create type="button">＋ 스탭 등록</button></div>`;
 }
 
 function renderMobileStudioDateStrip() {
@@ -8344,7 +9718,7 @@ function renderMobileStudioFilterSheet() {
   const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
   const types = trainingTypeOptions();
   const owners = ownerFilterKeys().filter((key) => !mobileStudioOwnerQuery || ownerFilterLabel(key).toLowerCase().includes(mobileStudioOwnerQuery.toLowerCase()));
-  return `<div class="mobile-studio-filter open" role="dialog" aria-modal="true" aria-label="방송실 예약 필터"><button class="mobile-studio-filter-backdrop" data-mobile-studio-filter-close type="button" aria-label="필터 닫기"></button><section><i></i><header><h2>필터</h2><button data-mobile-studio-filter-close type="button" aria-label="닫기">×</button></header><div class="mobile-studio-filter-scroll"><fieldset><legend>예약 유형</legend><div class="mobile-studio-filter-chips"><button class="${types.every((type) => mobileCalendarFilterEnabled(draft.types, type)) ? "selected" : ""}" data-mobile-studio-filter-type="all" type="button">전체</button>${types.map((type) => `<button class="${mobileCalendarFilterEnabled(draft.types, type) ? "selected" : ""}" data-mobile-studio-filter-type="${esc(type)}" type="button">${esc(type)}</button>`).join("")}</div></fieldset><fieldset><legend>담당자</legend><input data-mobile-studio-owner-search placeholder="담당자 검색" value="${esc(mobileStudioOwnerQuery)}" /><div class="mobile-studio-filter-chips" data-mobile-studio-owner-options><button class="${ownerFilterKeys().every((owner) => ownerFilterEnabled(draft.owners, owner)) ? "selected" : ""}" data-mobile-studio-filter-owner="all" type="button">전체</button>${owners.map((owner) => `<button class="${ownerFilterEnabled(draft.owners, owner) ? "selected" : ""}" data-mobile-studio-filter-owner="${esc(owner)}" data-owner-label="${esc(ownerFilterLabel(owner))}" type="button">${esc(ownerFilterLabel(owner))}</button>`).join("")}</div></fieldset><fieldset><legend>기타</legend><label class="mobile-studio-check"><input data-mobile-studio-filter-recurring type="checkbox" ${draft.hideRecurring ? "checked" : ""} /><span>반복 일정 표시 제외</span></label><label class="mobile-studio-check"><input data-mobile-studio-filter-unassigned type="checkbox" ${draft.unassignedOnly ? "checked" : ""} /><span>미배정 일정만 보기</span></label></fieldset></div><footer><button data-mobile-studio-filter-reset type="button">초기화</button><button data-mobile-studio-filter-apply type="button">적용하기</button></footer></section></div>`;
+  return `<div class="mobile-studio-filter open" role="dialog" aria-modal="true" aria-label="방송실 스탭 필터"><button class="mobile-studio-filter-backdrop" data-mobile-studio-filter-close type="button" aria-label="필터 닫기"></button><section><i></i><header><h2>필터</h2><button data-mobile-studio-filter-close type="button" aria-label="닫기">×</button></header><div class="mobile-studio-filter-scroll"><fieldset><legend>스탭 유형</legend><div class="mobile-studio-filter-chips"><button class="${types.every((type) => mobileCalendarFilterEnabled(draft.types, type)) ? "selected" : ""}" data-mobile-studio-filter-type="all" type="button">전체</button>${types.map((type) => `<button class="${mobileCalendarFilterEnabled(draft.types, type) ? "selected" : ""}" data-mobile-studio-filter-type="${esc(type)}" type="button">${esc(type)}</button>`).join("")}</div></fieldset><fieldset><legend>담당자</legend><input data-mobile-studio-owner-search placeholder="담당자 검색" value="${esc(mobileStudioOwnerQuery)}" /><div class="mobile-studio-filter-chips" data-mobile-studio-owner-options><button class="${ownerFilterKeys().every((owner) => ownerFilterEnabled(draft.owners, owner)) ? "selected" : ""}" data-mobile-studio-filter-owner="all" type="button">전체</button>${owners.map((owner) => `<button class="${ownerFilterEnabled(draft.owners, owner) ? "selected" : ""}" data-mobile-studio-filter-owner="${esc(owner)}" data-owner-label="${esc(ownerFilterLabel(owner))}" type="button">${esc(ownerFilterLabel(owner))}</button>`).join("")}</div></fieldset><fieldset><legend>기타</legend><label class="mobile-studio-check"><input data-mobile-studio-filter-recurring type="checkbox" ${draft.hideRecurring ? "checked" : ""} /><span>반복 일정 표시 제외</span></label><label class="mobile-studio-check"><input data-mobile-studio-filter-unassigned type="checkbox" ${draft.unassignedOnly ? "checked" : ""} /><span>미배정 일정만 보기</span></label></fieldset></div><footer><button data-mobile-studio-filter-reset type="button">초기화</button><button data-mobile-studio-filter-apply type="button">적용하기</button></footer></section></div>`;
 }
 
 function mobileStudioSelectOptions(options, selected, placeholder) {
@@ -8412,11 +9786,44 @@ function validateMobileStudioBasic() {
 
 function renderMobileStudioBasicStep(draft) {
   const error = (key) => mobileStudioFormErrors[key] ? `<small class="mobile-studio-error">${esc(mobileStudioFormErrors[key])}</small>` : "";
-  return `<section class="mobile-studio-form-step"><h2>기본 정보</h2><div class="mobile-studio-form-section"><label>일정 제목 <b>*</b><input data-mobile-studio-form-field="title" value="${esc(draft.title)}" maxlength="100" placeholder="일정 제목" />${error("title")}</label><label>장소 <b>*</b><select data-mobile-studio-form-field="room">${mobileStudioSelectOptions(studioRoomOptions(), draft.room, "장소 선택")}</select>${error("room")}</label><label>예약 유형 <b>*</b><select data-mobile-studio-form-field="trainingType">${mobileStudioSelectOptions(trainingTypeOptions(), draft.trainingType, "예약 유형 선택")}</select>${error("trainingType")}</label></div><div class="mobile-studio-form-section"><h3>일시</h3><label>날짜 <b>*</b><input data-mobile-studio-form-field="date" type="date" value="${esc(draft.date)}" />${error("date")}</label><div class="mobile-studio-time-fields ${draft.allDay ? "is-hidden" : ""}"><label>시작 시간 <b>*</b><input data-mobile-studio-form-field="startTime" type="time" step="600" value="${esc(draft.startTime)}" /></label><span>~</span><label>종료 시간 <b>*</b><input data-mobile-studio-form-field="endTime" type="time" step="600" value="${esc(draft.endTime)}" /></label></div>${error("time")}<label class="mobile-studio-check"><input data-mobile-studio-form-toggle="allDay" type="checkbox" ${draft.allDay ? "checked" : ""} /><span>종일 일정</span></label></div><div class="mobile-studio-form-section"><label>메모<textarea data-mobile-studio-form-field="memo" maxlength="200" placeholder="준비물, 교육 내용, 진행 메모를 입력하세요.">${esc(draft.memo)}</textarea><small class="mobile-studio-memo-count">${String(draft.memo || "").length} / 200</small></label></div><div class="mobile-studio-form-section"><h3>반복 설정</h3><label class="mobile-studio-check"><input data-mobile-studio-form-toggle="repeatEnabled" type="checkbox" ${draft.repeatEnabled ? "checked" : ""} ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /><span>${draft.repeatEnabled ? "매주 반복" : "반복 안 함"}</span></label>${draft.repeatEnabled ? `<div class="mobile-studio-repeat-days">${[[1,"월"],[2,"화"],[3,"수"],[4,"목"],[5,"금"],[6,"토"],[0,"일"]].map(([day,label]) => `<button class="${draft.repeatDays.includes(day) ? "selected" : ""}" data-mobile-studio-repeat-day="${day}" type="button" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""}>${label}</button>`).join("")}</div><label>반복 횟수<input data-mobile-studio-form-field="repeatCount" type="number" min="1" max="52" value="${Number(draft.repeatCount) || 1}" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /></label>${mobileStudioFormMode === "edit" && draft.seriesId ? "<small>기존 반복 일정은 현재 회차의 기본 정보만 수정됩니다.</small>" : ""}${error("repeat")}` : ""}</div></section>`;
+  const selectTrigger = (key, value, placeholder) => `<button class="mobile-studio-select-trigger" data-mobile-studio-select="${key}" type="button"><span>${esc(value || placeholder)}</span><i aria-hidden="true">⌄</i></button>`;
+  const timeTrigger = (key, value) => `<button class="mobile-studio-time-trigger" data-mobile-studio-time-picker="${key}" type="button" ${draft.allDay ? "disabled aria-disabled=\"true\"" : ""}><span>${esc(formatTimeButton(value))}</span><i aria-hidden="true">⌄</i></button>`;
+  return `
+    <section class="mobile-studio-form-step">
+      <h2>기본 정보</h2>
+      <div class="mobile-studio-form-section">
+        <label>일정 제목 <b>*</b><input data-mobile-studio-form-field="title" value="${esc(draft.title)}" maxlength="100" placeholder="일정 제목" />${error("title")}</label>
+        <label>장소 <b>*</b>${selectTrigger("room", draft.room, "장소 선택")}${error("room")}</label>
+        <label>예약 유형 <b>*</b>${selectTrigger("trainingType", draft.trainingType, "예약 유형 선택")}${error("trainingType")}</label>
+      </div>
+      <div class="mobile-studio-form-section mobile-studio-schedule-section">
+        <h3>일시</h3>
+        <div class="mobile-studio-date-row">
+          <label>날짜 <b>*</b><button class="mobile-studio-date-trigger" data-mobile-studio-date-picker type="button"><span>${esc(formatDate(draft.date))}</span><i aria-hidden="true">⌄</i></button>${error("date")}</label>
+          <label class="mobile-studio-check"><input data-mobile-studio-form-toggle="allDay" type="checkbox" ${draft.allDay ? "checked" : ""} /><span>종일 일정</span></label>
+        </div>
+        <div class="mobile-studio-time-fields ${draft.allDay ? "is-disabled" : ""}">
+          <label>시작 시간 <b>*</b>${timeTrigger("startTime", draft.startTime)}</label>
+          <span>~</span>
+          <label>종료 시간 <b>*</b>${timeTrigger("endTime", draft.endTime)}</label>
+        </div>
+        ${error("time")}
+      </div>
+      <div class="mobile-studio-form-section">
+        <label>메모<textarea data-mobile-studio-form-field="memo" maxlength="200" placeholder="준비물, 교육 내용, 진행 메모를 입력하세요.">${esc(draft.memo)}</textarea><small class="mobile-studio-memo-count">${String(draft.memo || "").length} / 200</small></label>
+      </div>
+      <div class="mobile-studio-form-section">
+        <h3>반복 설정</h3>
+        <label class="mobile-studio-check"><input data-mobile-studio-form-toggle="repeatEnabled" type="checkbox" ${draft.repeatEnabled ? "checked" : ""} ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /><span>${draft.repeatEnabled ? "매주 반복" : "반복 안 함"}</span></label>
+        ${draft.repeatEnabled ? `<div class="mobile-studio-repeat-days">${[[1,"월"],[2,"화"],[3,"수"],[4,"목"],[5,"금"],[6,"토"],[0,"일"]].map(([day,label]) => `<button class="${draft.repeatDays.includes(day) ? "selected" : ""}" data-mobile-studio-repeat-day="${day}" type="button" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""}>${label}</button>`).join("")}</div><label>반복 횟수<input data-mobile-studio-form-field="repeatCount" type="number" min="1" max="52" value="${Number(draft.repeatCount) || 1}" ${mobileStudioFormMode === "edit" && draft.seriesId ? "disabled" : ""} /></label>${mobileStudioFormMode === "edit" && draft.seriesId ? "<small>기존 반복 일정은 현재 회차의 기본 정보만 수정됩니다.</small>" : ""}${error("repeat")}` : ""}
+      </div>
+    </section>
+  `;
 }
 
 function renderMobileStudioStaffEditor(rows, prefix = "form") {
-  return `<div class="mobile-studio-staff-cards">${rows.map((row, index) => `<article data-mobile-studio-${prefix}-row="${esc(row.id)}"><header><span class="mobile-studio-drag" data-drag-handle>⋮⋮</span><strong>스탭 ${index + 1}</strong><div><button data-mobile-studio-row-up="${esc(row.id)}" type="button" aria-label="위로 이동" ${index === 0 ? "disabled" : ""}>↑</button><button data-mobile-studio-row-down="${esc(row.id)}" type="button" aria-label="아래로 이동" ${index === rows.length - 1 ? "disabled" : ""}>↓</button><button class="danger" data-mobile-studio-row-delete="${esc(row.id)}" type="button" aria-label="스탭 삭제">×</button></div></header><label>스탭 종류<select data-mobile-studio-row-field="type" data-row-id="${esc(row.id)}">${mobileStudioSelectOptions(staffTypeOptions(), row.type, "스탭 종류 선택")}</select></label><label>담당자<select data-mobile-studio-row-field="owner" data-row-id="${esc(row.id)}">${mobileStudioOwnerSelectOptions(row.owner)}</select></label><label>역할 또는 메모<input data-mobile-studio-row-field="memo" data-row-id="${esc(row.id)}" value="${esc(row.memo || "")}" maxlength="100" placeholder="역할 또는 메모" /></label></article>`).join("")}</div>`;
+  const trigger = (row, key, value, placeholder) => `<button class="mobile-studio-select-trigger" data-mobile-studio-row-select="${key}" data-row-id="${esc(row.id)}" type="button"><span>${esc(value || placeholder)}</span><i aria-hidden="true">⌄</i></button>`;
+  return `<div class="mobile-studio-staff-cards">${rows.map((row, index) => `<article data-mobile-studio-${prefix}-row="${esc(row.id)}"><header><span class="mobile-studio-drag" data-drag-handle>⋮⋮</span><strong>스탭 ${index + 1}</strong><div><button data-mobile-studio-row-up="${esc(row.id)}" type="button" aria-label="위로 이동" ${index === 0 ? "disabled" : ""}>↑</button><button data-mobile-studio-row-down="${esc(row.id)}" type="button" aria-label="아래로 이동" ${index === rows.length - 1 ? "disabled" : ""}>↓</button><button class="danger" data-mobile-studio-row-delete="${esc(row.id)}" type="button" aria-label="스탭 삭제">×</button></div></header><label>스탭 종류${trigger(row, "type", row.type, "스탭 종류 선택")}</label><label>담당자${trigger(row, "owner", ownerOptionLabel(row.owner), "담당자 선택")}</label><label>역할 또는 메모<input data-mobile-studio-row-field="memo" data-row-id="${esc(row.id)}" value="${esc(row.memo || "")}" maxlength="100" placeholder="역할 또는 메모" /></label></article>`).join("")}</div>`;
 }
 
 function renderMobileStudioStaffStep(draft) {
@@ -8426,8 +9833,8 @@ function renderMobileStudioStaffStep(draft) {
 function renderMobileStudioForm() {
   if (!mobileStudioFormOpen || !mobileStudioFormDraft) return "";
   const draft = mobileStudioFormDraft;
-  const title = mobileStudioFormMode === "edit" ? "방송실 예약 수정" : "방송실 예약 등록";
-  return `<div class="mobile-studio-fullscreen" role="dialog" aria-modal="true" aria-label="${title}"><header><button data-mobile-studio-form-close type="button" aria-label="닫기">×</button><strong>${title}</strong><span>${mobileStudioFormStep} / 2</span></header><div class="mobile-studio-step-indicator"><i class="active"></i><b></b><i class="${mobileStudioFormStep === 2 ? "active" : ""}"></i></div><main>${mobileStudioFormStep === 1 ? renderMobileStudioBasicStep(draft) : renderMobileStudioStaffStep(draft)}</main><footer>${mobileStudioFormStep === 1 ? `<button data-mobile-studio-form-close type="button">취소</button><button class="primary" data-mobile-studio-form-next type="button">다음</button>` : `<button data-mobile-studio-form-prev type="button">이전</button><button class="primary" data-mobile-studio-form-save type="button">${mobileStudioFormMode === "edit" ? "수정 완료" : "예약 등록"}</button>`}</footer></div>`;
+  const title = mobileStudioFormMode === "edit" ? "방송실 스탭 수정" : "방송실 스탭 등록";
+  return `<div class="mobile-studio-fullscreen" role="dialog" aria-modal="true" aria-label="${title}"><header><button data-mobile-studio-form-close type="button" aria-label="닫기">×</button><strong>${title}</strong><span>${mobileStudioFormStep} / 2</span></header><div class="mobile-studio-step-indicator"><i class="active"></i><b></b><i class="${mobileStudioFormStep === 2 ? "active" : ""}"></i></div><main>${mobileStudioFormStep === 1 ? renderMobileStudioBasicStep(draft) : renderMobileStudioStaffStep(draft)}</main><footer>${mobileStudioFormStep === 1 ? `<button data-mobile-studio-form-close type="button">취소</button><button class="primary" data-mobile-studio-form-next type="button">다음</button>` : `<button data-mobile-studio-form-prev type="button">이전</button><button class="primary" data-mobile-studio-form-save type="button">${mobileStudioFormMode === "edit" ? "수정 완료" : "스탭 등록"}</button>`}</footer></div>`;
 }
 
 function mobileStudioFormRows() {
@@ -8460,7 +9867,7 @@ function saveMobileStudioReservation() {
     if (!event) return;
     const previousOwners = event.owners || [event.owner].filter(Boolean);
     Object.assign(event, eventData);
-    notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 예약을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 예약 수정", eventDate: event.date, targetView: "studio" });
+    notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 스탭을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 스탭 수정", eventDate: event.date, targetView: "studio" });
     mobileStudioDetailId = event.id;
   } else {
     const base = mobileStudioDateObject(draft.date);
@@ -8480,13 +9887,13 @@ function saveMobileStudioReservation() {
       if (!firstId) firstId = id;
       state.staffEvents.push({ id, ...eventData, date: dateKey(date), seriesId });
     });
-    notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 예약${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 예약 생성", eventDate: draft.date, targetView: "studio" });
+    notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 스탭${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 스탭 생성", eventDate: draft.date, targetView: "studio" });
     mobileStudioDate = draft.date;
   }
   saveState();
   mobileStudioFormOpen = false;
   mobileStudioFormDraft = null;
-  showToast(mobileStudioFormMode === "edit" ? "방송실 예약이 수정되었습니다." : "방송실 예약이 등록되었습니다.");
+  showToast(mobileStudioFormMode === "edit" ? "방송실 스탭이 수정되었습니다." : "방송실 스탭이 등록되었습니다.");
   renderAll();
 }
 
@@ -8522,7 +9929,7 @@ function saveMobileStudioStaffOnly() {
   const previousOwners = event.owners || [event.owner].filter(Boolean);
   event.staffRows = mobileStudioDetailDraft.staffRows.slice(0, 6).map((row) => ({ type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
   syncStaffEventSummary(event);
-  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 예약의 스탭을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 스탭 변경", eventDate: event.date, targetView: "studio" });
+  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 스탭 변경", eventDate: event.date, targetView: "studio" });
   saveState();
   mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
   mobileStudioDetailDirty = false;
@@ -8534,7 +9941,7 @@ function renderMobileStudioDetail() {
   const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
   if (!event || !mobileStudioDetailDraft) return "";
   const time = event.allDay !== false ? "종일 일정" : `${event.startTime || "09:00"} ~ ${event.endTime || "10:00"}`;
-  return `<div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 상세"><header><button data-mobile-studio-detail-close type="button" aria-label="뒤로가기">‹</button><strong>방송실 상세</strong><button data-mobile-studio-edit="${esc(event.id)}" type="button">수정</button></header><main><section class="mobile-studio-summary" ${studioTypeStyle(event.trainingType || event.type)}><i></i><h2>${esc(staffReservationTitle(event))}</h2><p>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</p><p>${esc(formatDate(event.date))} · ${esc(time)}</p><p>${esc(mobileStudioSeriesSummary(event))}</p>${event.memo ? `<small>${esc(event.memo)}</small>` : ""}</section><section class="mobile-studio-detail-staff"><header><div><h2>스탭 목록</h2><p>상세 화면에서 바로 수정할 수 있습니다. 최대 6명</p></div><button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button></header>${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}<button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button></section><button class="mobile-studio-delete" data-mobile-studio-delete-open type="button">예약 삭제</button></main>${mobileStudioDeleteConfirm ? `<div class="mobile-studio-confirm"><section><h3>이 방송실 예약을 삭제하시겠습니까?</h3><p>삭제한 예약은 복구할 수 없습니다.</p><button data-mobile-studio-delete-cancel type="button">취소</button><button class="danger" data-mobile-studio-delete-one type="button">이 일정만 삭제</button>${event.seriesId ? `<button class="danger" data-mobile-studio-delete-series type="button">전체 반복 일정 삭제</button>` : ""}</section></div>` : ""}</div>`;
+  return `<div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 스탭 상세"><header><button data-mobile-studio-detail-close type="button" aria-label="뒤로가기">‹</button><strong>방송실 스탭 상세</strong><button data-mobile-studio-edit="${esc(event.id)}" type="button">수정</button></header><main><section class="mobile-studio-summary" ${studioTypeStyle(event.trainingType || event.type)}><i></i><h2>${esc(staffReservationTitle(event))}</h2><p>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</p><p>${esc(formatDate(event.date))} · ${esc(time)}</p><p>${esc(mobileStudioSeriesSummary(event))}</p>${event.memo ? `<small>${esc(event.memo)}</small>` : ""}</section><section class="mobile-studio-detail-staff"><header><div><h2>스탭 목록</h2><p>상세 화면에서 바로 수정할 수 있습니다. 최대 6명</p></div><button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button></header>${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}<button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button></section><button class="mobile-studio-delete" data-mobile-studio-delete-open type="button">스탭 삭제</button></main>${mobileStudioDeleteConfirm ? `<div class="mobile-studio-confirm"><section><h3>이 방송실 스탭을 삭제하시겠습니까?</h3><p>삭제한 스탭은 복구할 수 없습니다.</p><button data-mobile-studio-delete-cancel type="button">취소</button><button class="danger" data-mobile-studio-delete-one type="button">이 일정만 삭제</button>${event.seriesId ? `<button class="danger" data-mobile-studio-delete-series type="button">전체 반복 일정 삭제</button>` : ""}</section></div>` : ""}</div>`;
 }
 
 function renderMobileStudio() {
@@ -8553,7 +9960,17 @@ function mobileAvatarMarkup(user, className = "") {
 
 function mobileMoreRow({ icon, label, route = "", target = "", badge = "", danger = false, disabled = false }) {
   const attrs = route ? `data-mobile-more-route="${esc(route)}"` : target ? `data-mobile-more-target="${esc(target)}"` : "";
-  return `<button class="mobile-more-row ${danger ? "danger" : ""}" ${attrs} type="button" ${disabled ? "disabled" : ""}><i>${icon}</i><span>${esc(label)}</span>${badge ? `<b>${esc(badge)}</b>` : ""}<em>›</em></button>`;
+  const iconPaths = {
+    "♙": '<circle cx="9" cy="7" r="3"/><path d="M3.5 18a5.5 5.5 0 0 1 11 0"/><path d="M15 8.5h5M17.5 6v5"/>',
+    "▤": '<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/>',
+    "▣": '<rect x="3" y="5" width="18" height="15" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',
+    "♢": '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/>',
+    "⚙": '<circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1a7 7 0 0 0-1.7-1L14.5 3h-5L9.2 6a7 7 0 0 0-1.7 1L5 6.1 3 9.5 5.1 11a7 7 0 0 0 0 2L3 14.5l2 3.4 2.5-1a7 7 0 0 0 1.7 1l.3 3.1h5l.3-3.1a7 7 0 0 0 1.7-1l2.5 1 2-3.4-2.1-1.5a7 7 0 0 0 .1-1Z"/>',
+    "◇": '<path d="M12 3 20 7v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7l8-4Z"/><path d="m8.5 12 2.2 2.2L15.8 9"/>',
+    "↪": '<path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/>'
+  };
+  const iconMarkup = iconPaths[icon] ? `<svg viewBox="0 0 24 24" aria-hidden="true">${iconPaths[icon]}</svg>` : esc(icon);
+  return `<button class="mobile-more-row ${danger ? "danger" : ""}" ${attrs} type="button" ${disabled ? "disabled" : ""}><i>${iconMarkup}</i><span>${esc(label)}</span>${badge ? `<b>${esc(badge)}</b>` : ""}<em>›</em></button>`;
 }
 
 function renderMobileMoreInline() {
@@ -8592,9 +10009,11 @@ function renderMobileProfile() {
         ${mobileAvatarMarkup({ ...user, avatarUrl: mobilePendingAvatarUrl || user?.avatarUrl }, "large")}
         <strong>${esc(user?.name || "사용자")}</strong>
         <small>${mobileProfileUploading ? "사진 업로드 중…" : esc(mobileProfileUploadMessage)}</small>
-        <div><label>사진 촬영<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" capture="user" /></label><label>앨범 선택<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" /></label></div>
-        ${mobilePendingAvatarBlob ? `<button class="pill primary" data-mobile-profile-upload type="button">사진 적용</button>` : ""}
-        ${user?.avatarPath || user?.avatarUrl ? `<button class="record-control danger" data-mobile-profile-photo-delete type="button">사진 삭제</button>` : ""}
+        <div class="mobile-profile-photo-actions">
+          <label>사진 촬영<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" capture="user" /></label>
+          <label>앨범 선택<input data-mobile-profile-photo type="file" accept="image/jpeg,image/png,image/webp" /></label>
+          <button class="record-control danger" data-mobile-profile-photo-delete type="button" ${user?.avatarPath || user?.avatarUrl ? "" : "disabled"}>사진 삭제</button>
+        </div>
       </section>
       <section class="mobile-settings-group">${infoRows.map(([label, value]) => `<div class="mobile-info-row"><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join("")}</section>
       <section class="mobile-settings-group"><label class="mobile-profile-edit-row"><span>연락처</span><input name="phone" value="${esc(user?.phone || "")}" placeholder="연락처 입력" /></label></section>
@@ -8699,11 +10118,10 @@ function openDesktopProfile(open = true) {
       ${mobileAvatarMarkup({ ...user, avatarUrl: mobilePendingAvatarUrl || user.avatarUrl }, "large")}
       <strong>${esc(user.name || user.username || "사용자")}</strong>
       <small>${mobileProfileUploading ? "사진 업로드 중…" : esc(mobileProfileUploadMessage)}</small>
-      <div>
+      <div class="desktop-profile-photo-actions">
         <label>사진 촬영<input data-desktop-profile-photo type="file" accept="image/jpeg,image/png,image/webp" capture="user" /></label>
         <label>앨범 선택<input data-desktop-profile-photo type="file" accept="image/jpeg,image/png,image/webp" /></label>
-        ${mobilePendingAvatarBlob ? `<button class="primary" data-desktop-profile-upload type="button">사진 적용</button>` : ""}
-        ${user.avatarPath || user.avatarUrl ? `<button class="danger" data-desktop-profile-photo-delete type="button">사진 삭제</button>` : ""}
+        <button class="danger" data-desktop-profile-photo-delete type="button" ${user.avatarPath || user.avatarUrl ? "" : "disabled"}>사진 삭제</button>
       </div>
     </section>
     <section class="desktop-profile-info">${infoRows.map(([label, value]) => `<div><span>${esc(label)}</span><b>${esc(value)}</b></div>`).join("")}</section>
@@ -8750,11 +10168,11 @@ function renderMobileMemberDetail(userId) {
 function renderMobilePreferences() {
   const user = currentUser();
   const settings = notificationSettingsForUser(user?.id || "");
-  const notificationLabels = { all: "전체 알림", projectStatus: "프로젝트 상태 변경", projectContent: "프로젝트 내용 수정", ownerChange: "담당자 변경", record: "관리기록 변경", task: "할 일 변경", work: "업무 변경", studio: "방송실 예약 변경", schedule: "일정 변경", system: "기타 알림" };
+  const notificationLabels = { all: "전체 알림", projectStatus: "프로젝트 상태 변경", projectContent: "프로젝트 내용 수정", ownerChange: "담당자 변경", record: "관리기록 변경", task: "할 일 변경", work: "업무 변경", studio: "방송실 스탭 변경", schedule: "일정 변경", system: "기타 알림" };
   return mobileSubpage("설정", `
     <section class="mobile-settings-section"><h3>계정 및 프로필</h3><div>${mobileMoreRow({ icon: "♙", label: "프로필 관리", route: "profile" })}<div class="mobile-info-row"><span>로그인 계정</span><b>${esc(user?.email || user?.username || "-")}</b></div></div></section>
-    <section class="mobile-settings-section"><h3>알림 설정</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
-    <section class="mobile-settings-section"><h3>화면 설정</h3><div><div class="mobile-info-row"><span>테마</span><b>다크 모드</b></div></div></section>
+    <section class="mobile-settings-section"><h3>화면 설정</h3><div><label class="mobile-setting-toggle"><span>다크 모드</span><input data-theme-setting type="checkbox" ${settings.darkMode ? "checked" : ""} /><i></i></label></div></section>
+    <section class="mobile-settings-section"><h3>알림</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
     <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
     <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v56</b></div></div></section>
     <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
@@ -8914,6 +10332,14 @@ function bindMobileCoreActions(app) {
     saveViewPrefs({ projectSort });
     renderMobileDashboard();
   });
+  bind("[data-mobile-open-work-sort]", () => { mobileWorkSortOpen = !mobileWorkSortOpen; renderMobileDashboard(); });
+  bind("[data-mobile-close-work-sort]", () => { mobileWorkSortOpen = false; renderMobileDashboard(); });
+  bind("[data-mobile-work-sort-key]", (button) => {
+    workSort = { key: button.dataset.mobileWorkSortKey, direction: button.dataset.mobileWorkSortDirection };
+    mobileWorkSortOpen = false;
+    saveViewPrefs({ workSort });
+    renderMobileDashboard();
+  });
   bind("[data-mobile-more-route]", (button) => navigateMobileMore(button.dataset.mobileMoreRoute));
   bind("[data-mobile-more-back]", () => mobileMoreBack());
   bind("[data-mobile-more-target]", (button) => openMobileSection(button.dataset.mobileMoreTarget));
@@ -8948,10 +10374,13 @@ function bindMobileCoreActions(app) {
     saveOwnerLinkSettings().finally(() => { if (button.isConnected) button.disabled = false; });
   });
   bind("[data-mobile-notifications-close]", () => openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection));
-  bind("[data-mobile-open-task-id]", (button) => {
-    const item = taskOverviewItems().find((entry) => entry.id === button.dataset.mobileOpenTaskId && entry.source === button.dataset.mobileOpenTaskSource);
-    if (item?.source === "project" && item.sourceId) openProjectDetail(item.sourceId, "tasks");
-    if (item?.source === "work" && item.sourceId) openWorkDetail(item.sourceId, "tasks");
+  app.querySelectorAll("[data-mobile-open-task-id]").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("[data-overview-task-check]")) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openMobileTaskParent(card.dataset.mobileOpenTaskSource, card.dataset.mobileOpenTaskId);
+    });
   });
   bind("[data-mobile-calendar-event]", (button) => openCalendarEventDetail(button));
   bind("[data-mobile-month-date]", (button) => {
@@ -9126,6 +10555,46 @@ function bindMobileCoreActions(app) {
     renderMobileDashboard();
   });
   bind("[data-mobile-studio-form-save]", () => saveMobileStudioReservation());
+  bind("[data-mobile-studio-select]", (button) => {
+    if (!mobileStudioFormDraft) return;
+    const key = button.dataset.mobileStudioSelect;
+    const options = key === "room" ? studioRoomOptions() : trainingTypeOptions();
+    openDropdown(button, options, mobileStudioFormDraft[key] || "", (value) => {
+      if (!mobileStudioFormDraft) return;
+      mobileStudioFormDraft[key] = value;
+      renderMobileDashboard();
+    });
+  });
+  bind("[data-mobile-studio-date-picker]", (button) => {
+    if (!mobileStudioFormDraft) return;
+    openDatePicker(button, mobileStudioFormDraft.date || mobileStudioDate, (value) => {
+      if (!mobileStudioFormDraft || !value) return;
+      mobileStudioFormDraft.date = value;
+      renderMobileDashboard();
+    });
+  });
+  bind("[data-mobile-studio-time-picker]", (button) => {
+    if (!mobileStudioFormDraft || button.disabled || mobileStudioFormDraft.allDay) return;
+    const key = button.dataset.mobileStudioTimePicker;
+    openTimePicker(button, mobileStudioFormDraft[key] || (key === "startTime" ? "09:00" : "10:00"), (value) => {
+      if (!mobileStudioFormDraft) return;
+      mobileStudioFormDraft[key] = value;
+      renderMobileDashboard();
+    });
+  });
+  bind("[data-mobile-studio-row-select]", (button) => {
+    const rows = mobileStudioFormRows();
+    const row = rows.find((item) => item.id === button.dataset.rowId);
+    if (!row) return;
+    const key = button.dataset.mobileStudioRowSelect;
+    const options = key === "type" ? staffTypeOptions() : ownerOptions();
+    const formatter = key === "owner" ? ownerOptionLabel : (option) => option;
+    openDropdown(button, options, row[key] || "", (value) => {
+      row[key] = value;
+      if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+      renderMobileDashboard();
+    }, formatter);
+  });
   bind("[data-mobile-studio-repeat-day]", (button) => {
     const day = Number(button.dataset.mobileStudioRepeatDay);
     const days = new Set(mobileStudioFormDraft?.repeatDays || []);
@@ -9305,6 +10774,7 @@ function closeMobileDetailSheets(afterClose) {
 }
 
 function performOpenMobileSection(section) {
+  if (section !== "tasks") mobileTaskDetailRef = null;
   if (section !== "board") {
     activeBoardPostId = null;
     boardEditorPostId = null;
@@ -9381,8 +10851,18 @@ function mobileMoreBack() {
   renderMobileDashboard();
 }
 
-function handleMobileMorePopState(event) {
-  if (!isMobileViewport() || mobileActiveSection !== "settings") return;
+function handleMobilePopState(event) {
+  if (!isMobileViewport()) return;
+  if (event.state?.mobileTaskCreate && mobileAddMode !== "task" && mobileActiveSection === "tasks") {
+    openMobileAddSheet("task");
+    return;
+  }
+  if (mobileAddMode === "task" && !event.state?.mobileTaskCreate) {
+    closeMobileAddSheet({ navigate: false });
+    window.scrollTo({ top: 0, behavior: "auto" });
+    return;
+  }
+  if (mobileActiveSection !== "settings") return;
   const nextRoute = event.state?.mobileMoreRoute || "more";
   if (mobileProfileDirty && !window.confirm("저장하지 않은 변경사항을 버리고 나갈까요?")) {
     history.pushState({ ...(history.state || {}), mobileMoreRoute }, "");
@@ -9416,6 +10896,7 @@ function closeTopMobileLayer() {
   if (mobileLayerIsOpen("#datePickerLayer")) { closeDatePicker(); return true; }
   if (mobileLayerIsOpen("#timePickerLayer")) { closeTimePicker(); return true; }
   if (mobileLayerIsOpen("#deleteConfirmModal")) { closeDeleteConfirm(); return true; }
+  if (mobileLayerIsOpen("#workTaskScopeModal")) { closeWorkTaskScopeModal(); return true; }
   if (mobileLayerIsOpen("#unsavedBasicModal")) { closeUnsavedBasicModal(); return true; }
   if (mobileLayerIsOpen("#notificationClearModal")) { closeNotificationClearConfirm(); return true; }
   if (mobileLayerIsOpen("#repeatDeleteModal")) { closeRepeatDeleteModal(); return true; }
@@ -9429,10 +10910,12 @@ function closeTopMobileLayer() {
   if (mobileLayerIsOpen("#mobileAddSheet")) { closeMobileAddSheet(); return true; }
   if (mobileLayerIsOpen("#mobileMoreSheet")) { openMobileMoreSheet(false); return true; }
   if (mobileLayerIsOpen("#mobileFabMenu")) { toggleMobileFab(false); return true; }
+  if (mobileTaskDetailRef) { closeMobileTaskDetail(); return true; }
   if (mobileStudioDeleteConfirm) { mobileStudioDeleteConfirm = false; renderMobileDashboard(); return true; }
   if (mobileStudioFilterOpen) { mobileStudioFilterOpen = false; mobileStudioFilterDraft = null; renderMobileDashboard(); return true; }
   if (mobileCalendarFilterOpen) { closeMobileCalendarFilter(); return true; }
   if (mobileProjectSortOpen) { mobileProjectSortOpen = false; renderMobileDashboard(); return true; }
+  if (mobileWorkSortOpen) { mobileWorkSortOpen = false; renderMobileDashboard(); return true; }
   if (mobileTaskSortOpen || mobileTaskOwnerFilterOpen) {
     mobileTaskSortOpen = false;
     mobileTaskOwnerFilterOpen = false;
@@ -9547,7 +11030,10 @@ async function prepareMobileProfilePhoto(file) {
     if (mobilePendingAvatarUrl) URL.revokeObjectURL(mobilePendingAvatarUrl);
     mobilePendingAvatarUrl = URL.createObjectURL(mobilePendingAvatarBlob);
     mobileProfileDirty = true;
-    mobileProfileUploadMessage = "정사각형으로 크롭된 사진을 확인해주세요.";
+    mobileProfileUploadMessage = "프로필 사진을 저장하는 중…";
+    renderMobileDashboard();
+    await uploadMobileProfilePhoto();
+    return;
   } catch {
     mobileProfileUploadMessage = "사진을 처리하지 못했습니다. 다른 이미지를 선택해주세요.";
   }
@@ -9610,6 +11096,10 @@ async function uploadMobileProfilePhoto() {
     mobileProfileUploadMessage = "프로필 사진이 변경되었습니다.";
     saveState();
   } catch {
+    mobilePendingAvatarBlob = null;
+    if (mobilePendingAvatarUrl) URL.revokeObjectURL(mobilePendingAvatarUrl);
+    mobilePendingAvatarUrl = "";
+    mobileProfileDirty = false;
     mobileProfileUploadMessage = "사진 업로드에 실패했습니다. Storage 설정과 권한을 확인해주세요.";
   } finally {
     mobileProfileUploading = false;
@@ -9669,11 +11159,18 @@ document.addEventListener("touchmove", (event) => {
   if (event.touches.length > 1) event.preventDefault();
 }, { passive: false });
 
-function closeMobileAddSheet() {
+function closeMobileAddSheet({ navigate = true } = {}) {
+  if (navigate && mobileAddMode === "task" && history.state?.mobileTaskCreate) {
+    history.back();
+    return;
+  }
+  closeDatePicker();
   const sheet = $("#mobileAddSheet");
   if (!sheet) return;
   sheet.classList.remove("open");
   sheet.setAttribute("aria-hidden", "true");
+  $("#mobileAddForm")?.removeAttribute("data-mode");
+  document.body.classList.remove("mobile-task-create-open");
   mobileAddMode = "";
 }
 
@@ -9691,20 +11188,94 @@ function mobileSelect(name, options, placeholder = "선택") {
   return `<select name="${name}"><option value="">${esc(placeholder)}</option>${options.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}</select>`;
 }
 
-function mobileProjectWorkSelect() {
+function mobileTaskDropdown(name, options, placeholder) {
   return `
-    <select name="target">
-      <option value="">연결 대상 선택</option>
-      ${state.projects.map((project) => `<option value="project:${esc(project.id)}">영상 · ${esc(project.title)}</option>`).join("")}
-      ${state.works.map((work) => `<option value="work:${esc(work.id)}">업무 · ${esc(work.title)}</option>`).join("")}
-    </select>
+    <div class="mobile-task-dropdown" data-mobile-task-dropdown>
+      <input type="hidden" name="${esc(name)}" value="" />
+      <button class="mobile-task-dropdown-trigger" data-mobile-task-dropdown-toggle type="button" aria-expanded="false">
+        <span>${esc(placeholder)}</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"></path></svg>
+      </button>
+      <div class="mobile-task-dropdown-menu" role="listbox" aria-hidden="true">
+        ${options.length ? options.map((option) => `
+          <button type="button" role="option" data-mobile-task-dropdown-value="${esc(option.value)}" data-mobile-task-dropdown-label="${esc(option.label)}">
+            <span>${esc(option.label)}</span><i>✓</i>
+          </button>
+        `).join("") : '<p>선택할 항목이 없습니다.</p>'}
+      </div>
+    </div>
+  `;
+}
+
+function mobileTaskTargetDropdown() {
+  return mobileTaskDropdown("target", [
+    ...state.projects.map((project) => ({ value: `project:${project.id}`, label: `영상 · ${project.title}` })),
+    ...state.works.map((work) => ({ value: `work:${work.id}`, label: `업무 · ${work.title}` }))
+  ], "연결 대상 선택");
+}
+
+function mobileTaskOwnerDropdown() {
+  return mobileTaskDropdown("owners", ownerOptions().map((ownerId) => ({
+    value: ownerId,
+    label: ownerOptionLabel(ownerId)
+  })), "담당자 선택");
+}
+
+function mobileScheduleOwnerDropdown(name = "owners", selected = []) {
+  const selectedLabels = ownerOptions().filter((ownerId) => selected.includes(ownerId)).map(ownerOptionLabel);
+  const summary = selectedLabels.length > 1 ? `${selectedLabels[0]} 외 ${selectedLabels.length - 1}명` : selectedLabels[0] || "담당자 선택";
+  return `
+    <details class="mobile-schedule-owner-dropdown ${selectedLabels.length ? "has-value" : ""}" data-mobile-schedule-owner-dropdown>
+      <summary><span data-mobile-schedule-owner-summary>${esc(summary)}</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5"></path></svg></summary>
+      <div class="mobile-schedule-owner-menu">
+        ${ownerOptions().map((ownerId) => `
+          <label><input type="checkbox" name="${esc(name)}" value="${esc(ownerId)}" ${selected.includes(ownerId) ? "checked" : ""} /><span>${esc(ownerOptionLabel(ownerId))}</span><i>✓</i></label>
+        `).join("")}
+      </div>
+    </details>
+  `;
+}
+
+function updateMobileScheduleOwnerSummary(dropdown) {
+  if (!dropdown) return;
+  const labels = [...dropdown.querySelectorAll('input[name="owners"]:checked')].map((input) => ownerOptionLabel(input.value));
+  const summary = dropdown.querySelector("[data-mobile-schedule-owner-summary]");
+  if (summary) summary.textContent = labels.length > 1 ? `${labels[0]} 외 ${labels.length - 1}명` : labels[0] || "담당자 선택";
+  dropdown.classList.toggle("has-value", labels.length > 0);
+}
+
+function mobileTaskDatePicker(name, value, label = "마감일") {
+  return `
+    <div class="mobile-task-date-field">
+      <span>${esc(label)}</span>
+      <input type="hidden" name="${esc(name)}" value="${esc(value)}" />
+      <button class="mobile-task-date-trigger has-value" data-mobile-task-date-toggle type="button" aria-haspopup="dialog">
+        <span>${esc(formatDate(value))}</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true">
+          <path d="M5.5 3.5v3M14.5 3.5v3M3.5 8h13M4.5 5h11a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+}
+
+function mobileScheduleTimePicker(name, value, label, disabled = false) {
+  return `
+    <div class="mobile-schedule-time-field ${disabled ? "is-disabled" : ""}">
+      <span>${esc(label)}</span>
+      <input type="hidden" name="${esc(name)}" value="${esc(value)}" />
+      <button class="mobile-schedule-time-trigger" data-mobile-schedule-time-toggle type="button" aria-haspopup="dialog" ${disabled ? "disabled aria-disabled=\"true\"" : ""}>
+        <span>${esc(formatTimeButton(value))}</span>
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"></circle><path d="M10 6v4l3 2"></path></svg>
+      </button>
+    </div>
   `;
 }
 
 function renderMobileAddForm(mode) {
   const today = mode === "schedule" && selectedCalendarDate ? selectedCalendarDate : dateKey(new Date());
   const configs = {
-    project: ["영상 추가", "영상 등록"],
+    project: ["프로젝트 추가", "프로젝트 등록"],
     work: ["업무 추가", "업무 등록"],
     task: ["할 일 추가", "할 일 등록"],
     schedule: ["간단 일정 추가", "일정 등록"]
@@ -9713,7 +11284,7 @@ function renderMobileAddForm(mode) {
   let body = "";
   if (mode === "project") {
     body = `
-      <section><h3>기본정보</h3><input name="title" placeholder="영상명" required />${mobileSelect("type", state.options.types, "분류 선택")}${mobileSelect("client", state.options.clients, "발주부서 선택")}</section>
+      <section><h3>기본정보</h3><input name="title" placeholder="프로젝트명" required />${mobileSelect("type", state.options.types, "분류 선택")}${mobileSelect("client", state.options.clients, "발주부서 선택")}</section>
       <section><h3>담당/상태</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("status", state.options.statuses, "진행상태 선택")}</section>
       <section><h3>일정</h3><label>시작일<input name="kickoffDate" type="date" value="${today}" /></label><label>촬영일<input name="shootDate" type="date" value="${today}" /></label><label>1차 완성일<input name="firstEditDate" type="date" value="${today}" /></label><label>최종 출고일<input name="finalDate" type="date" value="${today}" /></label></section>
       <section><h3>메모</h3><textarea name="memo" placeholder="메모"></textarea></section>
@@ -9727,22 +11298,25 @@ function renderMobileAddForm(mode) {
     `;
   } else if (mode === "task") {
     body = `
-      <section><h3>기본정보</h3><input name="title" placeholder="할 일 제목" required /></section>
-      <section><h3>연결</h3>${mobileProjectWorkSelect()}</section>
-      <section><h3>담당/분류</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("type", taskTypeOptions(), "업무 분류 선택")}</section>
-      <section><h3>일정</h3><label>마감일<input name="dueDate" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="noDueDate" type="checkbox" /> 마감일 없음</label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" value="09:00" /><input name="endTime" type="time" value="10:00" /></div></section>
+      <section><h3>기본정보</h3><input name="title" placeholder="할 일 제목" required />${mobileTaskDropdown("type", taskTypeOptions().map((type) => ({ value: type, label: type })), "업무 분류 선택")}</section>
+      <section><h3>연결</h3>${mobileTaskTargetDropdown()}</section>
+      <section><h3>담당자</h3>${mobileTaskOwnerDropdown()}</section>
+      <section><h3>일정</h3>${mobileTaskDatePicker("dueDate", today)}<div class="mobile-task-schedule-options"><label class="mobile-toggle-line"><input name="noDueDate" type="checkbox" /> 마감일 없음</label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label></div><div class="mobile-time-row"><input name="startTime" type="time" value="09:00" /><input name="endTime" type="time" value="10:00" /></div></section>
       <section><h3>세부내용</h3><textarea name="detail" placeholder="세부내용"></textarea></section>
     `;
   } else {
     body = `
-      <section><h3>기본정보</h3><input name="title" placeholder="일정명" required />${mobileProjectWorkSelect()}</section>
-      <section><h3>일정</h3><label>날짜<input name="date" type="date" value="${today}" /></label><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><div class="mobile-time-row"><input name="startTime" type="time" step="600" value="09:00" /><input name="endTime" type="time" step="600" value="10:00" /></div></section>
-      <section><h3>담당자</h3>${mobileOwnerCheckboxes("owners")}</section>
+      <section><h3>기본정보</h3><input name="title" placeholder="일정명" required /></section>
+      <section><h3>일정</h3><div class="mobile-schedule-date-time-row">${mobileTaskDatePicker("date", today, "날짜")}${mobileScheduleTimePicker("startTime", "09:00", "시작 시간", true)}${mobileScheduleTimePicker("endTime", "10:00", "종료 시간", true)}</div><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일 일정</label></section>
+      <section><h3>담당자</h3>${mobileScheduleOwnerDropdown("owners")}</section>
       <section><h3>메모</h3><input name="location" placeholder="장소" /><textarea name="memo" placeholder="메모"></textarea></section>
     `;
   }
+  const header = mode === "task"
+    ? `<header><button type="button" data-close-mobile-add aria-label="할 일 목록으로 돌아가기">‹</button><div><span>TASK</span><strong>${esc(title)}</strong></div><i aria-hidden="true"></i></header>`
+    : `<header><button type="button" data-close-mobile-add>닫기</button><strong>${esc(title)}</strong><button type="submit">${esc(submitLabel)}</button></header>`;
   return `
-    <header><button type="button" data-close-mobile-add>닫기</button><strong>${esc(title)}</strong><button type="submit">${esc(submitLabel)}</button></header>
+    ${header}
     <div class="mobile-add-body">${body}</div>
     <footer><button class="pill primary" type="submit">${esc(submitLabel)}</button></footer>
   `;
@@ -9753,13 +11327,24 @@ function openMobileAddSheet(mode) {
   const sheet = $("#mobileAddSheet");
   const form = $("#mobileAddForm");
   if (!sheet || !form) return;
+  if (mode === "task" && isMobileViewport() && !history.state?.mobileTaskCreate) {
+    history.pushState({ ...(history.state || {}), mobileTaskCreate: true }, "");
+  }
+  form.dataset.mode = mode;
   form.innerHTML = renderMobileAddForm(mode);
   sheet.classList.add("open");
   sheet.setAttribute("aria-hidden", "false");
+  document.body.classList.toggle("mobile-task-create-open", mode === "task");
+  if (mode === "task") {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
 }
 
 function mobileFormOwners(form) {
-  return Array.from(form.querySelectorAll('input[name="owners"]:checked')).map((input) => input.value);
+  return Array.from(form.querySelectorAll('input[name="owners"]'))
+    .filter((input) => input.type !== "checkbox" || input.checked)
+    .map((input) => input.value)
+    .filter(Boolean);
 }
 
 function submitMobileAddForm(form) {
@@ -9768,7 +11353,7 @@ function submitMobileAddForm(form) {
   if (mobileAddMode === "project") {
     const project = {
       id: makeId(),
-      title: String(data.get("title") || "").trim() || "새 영상 프로젝트",
+      title: String(data.get("title") || "").trim() || "새 프로젝트",
       method: "",
       type: String(data.get("type") || ""),
       owners: mobileFormOwners(form),
@@ -9786,7 +11371,7 @@ function submitMobileAddForm(form) {
       records: []
     };
     state.projects.unshift(project);
-    notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 영상 프로젝트를 생성했습니다.`, {
+    notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 프로젝트를 생성했습니다.`, {
       type: "project",
       projectId: project.id,
       actionType: "project_created",
@@ -9883,7 +11468,9 @@ function submitMobileAddForm(form) {
       });
     }
     saveState();
-    closeMobileAddSheet();
+    const taskCreateHistoryActive = Boolean(history.state?.mobileTaskCreate);
+    closeMobileAddSheet({ navigate: false });
+    if (taskCreateHistoryActive) history.back();
     mobileActiveSection = "tasks";
     renderAll();
     return;
@@ -9917,6 +11504,7 @@ function submitMobileAddForm(form) {
 }
 
 function renderAll() {
+  applyUserTheme();
   renderKpis();
   renderWorkSummary();
   renderStatusMix();
@@ -9962,8 +11550,14 @@ document.addEventListener("click", () => {
   }
 });
 $("#dropdownLayer").addEventListener("click", (event) => event.stopPropagation());
-$("#datePickerLayer").addEventListener("click", (event) => event.stopPropagation());
-$("#timePickerLayer").addEventListener("click", (event) => event.stopPropagation());
+$("#datePickerLayer").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (event.target === event.currentTarget) closeDatePicker();
+});
+$("#timePickerLayer").addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (event.target === event.currentTarget) closeTimePicker();
+});
 [$("#datePickerLayer"), $("#timePickerLayer")].forEach((layer) => {
   layer.addEventListener("wheel", (event) => event.stopPropagation(), { passive: false });
   layer.addEventListener("touchmove", (event) => event.stopPropagation(), { passive: false });
@@ -10008,6 +11602,7 @@ document.addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-notification-open-center]")) {
+    notificationSettingsOpen = false;
     closeWebNotifications();
     openNotificationCenter(true);
     return;
@@ -10029,6 +11624,21 @@ document.addEventListener("change", (event) => {
     saveViewPrefs({ notificationShowRead });
     if (isMobileViewport() && mobileActiveSection === "notifications") renderMobileDashboard();
     renderNotificationSurfaces();
+    return;
+  }
+  if (event.target.matches("[data-theme-setting]")) {
+    const user = currentUser();
+    if (!user) return;
+    state.notificationSettingsByUser = state.notificationSettingsByUser || {};
+    state.notificationSettingsByUser[user.id] = {
+      ...notificationSettingsForUser(user.id),
+      darkMode: event.target.checked
+    };
+    saveState();
+    applyUserTheme();
+    if (isMobileViewport() && mobileActiveSection === "settings") renderMobileDashboard();
+    if (notificationCenterOpen) renderNotificationCenter();
+    showToast(event.target.checked ? "다크 모드를 켰습니다." : "라이트 모드로 변경했습니다.");
     return;
   }
   const settingKey = event.target.dataset.notificationSetting;
@@ -10080,7 +11690,103 @@ $("#mobileMoreSheet")?.addEventListener("click", (event) => {
   openMobileSection(target);
 });
 $("#mobileAddSheet")?.addEventListener("click", (event) => {
-  if (event.target.closest("[data-close-mobile-add]")) closeMobileAddSheet();
+  if (event.target.closest("[data-close-mobile-add]")) {
+    closeMobileAddSheet();
+    return;
+  }
+  const dateTrigger = event.target.closest("[data-mobile-task-date-toggle]");
+  if (dateTrigger) {
+    event.stopPropagation();
+    const field = dateTrigger.closest(".mobile-task-date-field");
+    const input = field?.querySelector('input[type="hidden"]');
+    if (!field || !input) return;
+    $("#mobileAddForm")?.querySelectorAll("[data-mobile-task-dropdown].open").forEach((dropdown) => {
+      dropdown.classList.remove("open");
+      dropdown.querySelector("[data-mobile-task-dropdown-toggle]")?.setAttribute("aria-expanded", "false");
+      dropdown.querySelector(".mobile-task-dropdown-menu")?.setAttribute("aria-hidden", "true");
+    });
+    openDatePicker(dateTrigger, input.value, (value) => {
+      const noDueDate = field.closest("section")?.querySelector('input[name="noDueDate"]');
+      if (!value) {
+        input.value = "";
+        if (noDueDate) noDueDate.checked = true;
+        return;
+      }
+      input.value = value;
+      if (noDueDate) noDueDate.checked = false;
+      dateTrigger.querySelector("span").textContent = formatDate(value);
+      dateTrigger.classList.add("has-value");
+    });
+    return;
+  }
+  const scheduleTimeTrigger = event.target.closest("[data-mobile-schedule-time-toggle]");
+  if (scheduleTimeTrigger) {
+    if (scheduleTimeTrigger.disabled) return;
+    event.stopPropagation();
+    const field = scheduleTimeTrigger.closest(".mobile-schedule-time-field");
+    const input = field?.querySelector('input[type="hidden"]');
+    if (!field || !input) return;
+    openTimePicker(scheduleTimeTrigger, input.value, (value) => {
+      input.value = value;
+      scheduleTimeTrigger.querySelector("span").textContent = formatTimeButton(value);
+    });
+    return;
+  }
+  if (!event.target.closest("[data-mobile-schedule-owner-dropdown]")) {
+    $("#mobileAddForm")?.querySelectorAll("[data-mobile-schedule-owner-dropdown][open]").forEach((dropdown) => { dropdown.open = false; });
+  }
+  const dropdownOption = event.target.closest("[data-mobile-task-dropdown-value]");
+  if (dropdownOption) {
+    const dropdown = dropdownOption.closest("[data-mobile-task-dropdown]");
+    const input = dropdown?.querySelector('input[type="hidden"]');
+    const trigger = dropdown?.querySelector("[data-mobile-task-dropdown-toggle]");
+    if (!dropdown || !input || !trigger) return;
+    input.value = dropdownOption.dataset.mobileTaskDropdownValue || "";
+    trigger.querySelector("span").textContent = dropdownOption.dataset.mobileTaskDropdownLabel || "";
+    trigger.classList.add("has-value");
+    trigger.setAttribute("aria-expanded", "false");
+    dropdown.querySelectorAll("[data-mobile-task-dropdown-value]").forEach((button) => {
+      button.classList.toggle("selected", button === dropdownOption);
+      button.setAttribute("aria-selected", String(button === dropdownOption));
+    });
+    dropdown.classList.remove("open");
+    dropdown.querySelector(".mobile-task-dropdown-menu")?.setAttribute("aria-hidden", "true");
+    return;
+  }
+  const dropdownToggle = event.target.closest("[data-mobile-task-dropdown-toggle]");
+  if (dropdownToggle) {
+    const dropdown = dropdownToggle.closest("[data-mobile-task-dropdown]");
+    const willOpen = !dropdown?.classList.contains("open");
+    $("#mobileAddForm")?.querySelectorAll("[data-mobile-task-dropdown]").forEach((item) => {
+      item.classList.remove("open");
+      item.querySelector("[data-mobile-task-dropdown-toggle]")?.setAttribute("aria-expanded", "false");
+      item.querySelector(".mobile-task-dropdown-menu")?.setAttribute("aria-hidden", "true");
+    });
+    if (dropdown && willOpen) {
+      dropdown.classList.add("open");
+      dropdownToggle.setAttribute("aria-expanded", "true");
+      dropdown.querySelector(".mobile-task-dropdown-menu")?.setAttribute("aria-hidden", "false");
+    }
+    return;
+  }
+  $("#mobileAddForm")?.querySelectorAll("[data-mobile-task-dropdown].open").forEach((dropdown) => {
+    dropdown.classList.remove("open");
+    dropdown.querySelector("[data-mobile-task-dropdown-toggle]")?.setAttribute("aria-expanded", "false");
+    dropdown.querySelector(".mobile-task-dropdown-menu")?.setAttribute("aria-hidden", "true");
+  });
+});
+$("#mobileAddSheet")?.addEventListener("change", (event) => {
+  if (event.target.matches('#mobileAddForm[data-mode="schedule"] input[name="allDay"]')) {
+    const disabled = event.target.checked;
+    event.target.closest("section")?.querySelectorAll("[data-mobile-schedule-time-toggle]").forEach((button) => {
+      button.disabled = disabled;
+      button.setAttribute("aria-disabled", String(disabled));
+      button.closest(".mobile-schedule-time-field")?.classList.toggle("is-disabled", disabled);
+    });
+    return;
+  }
+  const ownerDropdown = event.target.closest("[data-mobile-schedule-owner-dropdown]");
+  if (ownerDropdown && event.target.matches('input[name="owners"]')) updateMobileScheduleOwnerSummary(ownerDropdown);
 });
 $("#mobileAddForm")?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -10193,10 +11899,6 @@ $("#mobileApp")?.addEventListener("click", (event) => {
     navigateMobileMore(`member:${memberId}`);
     return;
   }
-  if (event.target.closest("[data-mobile-profile-upload]")) {
-    uploadMobileProfilePhoto();
-    return;
-  }
   if (event.target.closest("[data-mobile-profile-photo-delete]")) {
     deleteMobileProfilePhoto();
     return;
@@ -10288,6 +11990,27 @@ $("#mobileApp")?.addEventListener("click", (event) => {
     renderMobileDashboard();
     return;
   }
+  if (event.target.closest("[data-mobile-open-work-sort]")) {
+    mobileWorkSortOpen = !mobileWorkSortOpen;
+    renderMobileDashboard();
+    return;
+  }
+  if (event.target.closest("[data-mobile-close-work-sort]")) {
+    mobileWorkSortOpen = false;
+    renderMobileDashboard();
+    return;
+  }
+  const workSortButton = event.target.closest("[data-mobile-work-sort-key]");
+  if (workSortButton) {
+    workSort = {
+      key: workSortButton.dataset.mobileWorkSortKey,
+      direction: workSortButton.dataset.mobileWorkSortDirection
+    };
+    mobileWorkSortOpen = false;
+    saveViewPrefs({ workSort });
+    renderMobileDashboard();
+    return;
+  }
   const filter = event.target.closest("[data-mobile-task-filter]")?.dataset.mobileTaskFilter;
   if (filter) {
     mobileTaskFilter = filter;
@@ -10338,17 +12061,8 @@ $("#mobileApp")?.addEventListener("click", (event) => {
   if (event.target.closest("[data-overview-task-check]")) return;
   const taskButton = event.target.closest("[data-mobile-open-task-id]");
   if (taskButton) {
-    const item = taskOverviewItems().find((entry) => entry.id === taskButton.dataset.mobileOpenTaskId && entry.source === taskButton.dataset.mobileOpenTaskSource);
-    if (item?.source === "project" && item.sourceId) {
-      highlightedProjectTaskId = item.id;
-      openProjectDetail(item.sourceId, "tasks");
-      renderDetailTabs();
-    }
-    if (item?.source === "work" && item.sourceId) {
-      highlightedWorkTaskId = item.id;
-      openWorkDetail(item.sourceId, "tasks");
-      renderWorkDetailTabs();
-    }
+    openMobileTaskParent(taskButton.dataset.mobileOpenTaskSource, taskButton.dataset.mobileOpenTaskId);
+    return;
   }
   const calendarEvent = event.target.closest("[data-mobile-calendar-event]");
   if (calendarEvent) {
@@ -10480,7 +12194,7 @@ $("#mobileApp")?.addEventListener("click", (event) => {
 // iOS Safari/PWA에서 일부 동적 버튼의 click이 누락되는 경우를 보완합니다.
 $("#mobileApp")?.addEventListener("touchstart", (event) => {
   if (event.touches.length !== 1 || !(event.target instanceof Element)) return;
-  const actionable = event.target.closest("button, label.mobile-hide-done-toggle, label.mobile-setting-toggle, label.mobile-directory-inactive");
+  const actionable = event.target.closest("button, [data-mobile-open-task-id], label.mobile-hide-done-toggle, label.mobile-setting-toggle, label.mobile-directory-inactive");
   if (!actionable || event.target.closest("input, textarea, select, [contenteditable='true']")) return;
   const touch = event.touches[0];
   mobileTouchActivation = { target: actionable, x: touch.clientX, y: touch.clientY, at: Date.now() };
@@ -10609,7 +12323,7 @@ $("#mobileApp")?.addEventListener("touchend", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && mobileCalendarFilterOpen) closeMobileCalendarFilter();
 });
-window.addEventListener("popstate", handleMobileMorePopState);
+window.addEventListener("popstate", handleMobilePopState);
 createMobileEdgeSwipeBack();
 $("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
@@ -10715,6 +12429,21 @@ $("#signupBtn").addEventListener("click", () => showAuthMode("signup"));
 
 $("#backLoginBtn").addEventListener("click", () => showAuthMode("login"));
 
+$("#signupPositionButton").addEventListener("click", (event) => {
+  event.stopPropagation();
+  setAuthPositionMenu(!event.currentTarget.classList.contains("open"));
+});
+
+$("#signupPositionMenu").addEventListener("click", (event) => {
+  event.stopPropagation();
+  const option = event.target.closest("[data-auth-position]");
+  if (option) selectAuthPosition(option.dataset.authPosition);
+});
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".auth-position-field")) setAuthPositionMenu(false);
+});
+
 $("#createAccountBtn").addEventListener("click", () => {
   signup(
     $("#signupEmail").value,
@@ -10747,11 +12476,6 @@ $("#desktopProfileModal")?.addEventListener("change", async (event) => {
   openDesktopProfile(true);
 });
 $("#desktopProfileModal")?.addEventListener("click", async (event) => {
-  if (event.target.closest("[data-desktop-profile-upload]")) {
-    await uploadMobileProfilePhoto();
-    openDesktopProfile(true);
-    return;
-  }
   if (event.target.closest("[data-desktop-profile-photo-delete]")) {
     await deleteMobileProfilePhoto();
     openDesktopProfile(true);
@@ -11185,6 +12909,13 @@ document.querySelector(".detail-tabs").addEventListener("click", (event) => {
 });
 
 $("#workTaskPanel").addEventListener("click", (event) => {
+  if (event.target.closest("[data-work-task-recurrence-toggle]")) {
+    syncWorkTaskDraftInputs();
+    workTaskRecurrenceOpen = !workTaskRecurrenceOpen;
+    const work = state.works.find((item) => item.id === activeWorkId);
+    if (work) renderWorkTasks(work);
+    return;
+  }
   if (event.target.closest("[data-work-task-detail-toggle]")) {
     syncWorkTaskDraftInputs();
     workTaskDetailOpen = !workTaskDetailOpen;
@@ -11249,7 +12980,10 @@ $("#workTaskPanel").addEventListener("click", (event) => {
   }
   const editButton = event.target.closest("[data-edit-work-task]");
   if (editButton) {
-    editWorkTask(editButton.dataset.editWorkTask);
+    const work = state.works.find((item) => item.id === activeWorkId);
+    const task = work?.tasks?.find((item) => item.id === editButton.dataset.editWorkTask);
+    if (task?.isRecurring) openWorkTaskScopeModal("edit", task.id);
+    else editWorkTask(editButton.dataset.editWorkTask);
     return;
   }
   const deleteButton = event.target.closest("[data-delete-work-task]");
@@ -11261,6 +12995,10 @@ $("#workTaskPanel").addEventListener("click", (event) => {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
     return;
   }
+  if (task?.isRecurring) {
+    openWorkTaskScopeModal("delete", taskId);
+    return;
+  }
   confirmDelete(() => {
     notifyTaskDeletion("work", task);
     work.tasks = work.tasks.filter((item) => item.id !== taskId);
@@ -11268,6 +13006,29 @@ $("#workTaskPanel").addEventListener("click", (event) => {
     renderAll();
     renderWorkDetail();
   });
+});
+
+$("#workTaskScopeCancelBtn")?.addEventListener("click", closeWorkTaskScopeModal);
+$("#workTaskScopeModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "workTaskScopeModal") {
+    closeWorkTaskScopeModal();
+    return;
+  }
+  const scopeButton = event.target.closest("[data-work-task-scope]");
+  if (!scopeButton || !pendingWorkTaskScopeAction) return;
+  const pending = { ...pendingWorkTaskScopeAction };
+  const scope = scopeButton.dataset.workTaskScope;
+  closeWorkTaskScopeModal();
+  if (pending.action === "edit") {
+    if (pending.entity === "project") editProjectTask(pending.taskId, scope);
+    else editWorkTask(pending.taskId, scope);
+  } else {
+    confirmDelete(() => pending.entity === "project" ? deleteProjectTaskByScope(pending.taskId, scope) : deleteWorkTaskByScope(pending.taskId, scope));
+  }
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && $("#workTaskScopeModal")?.classList.contains("open")) closeWorkTaskScopeModal();
 });
 
 $("#workTaskPanel").addEventListener("change", (event) => {
@@ -11384,6 +13145,13 @@ $("#managementRecords").addEventListener("input", (event) => {
 });
 
 $("#projectTaskPanel").addEventListener("click", (event) => {
+  if (event.target.closest("[data-project-task-recurrence-toggle]")) {
+    syncProjectTaskDraftInputs();
+    detailTaskRecurrenceOpen = !detailTaskRecurrenceOpen;
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    if (project) renderProjectTasks(project);
+    return;
+  }
   if (event.target.closest("[data-project-task-detail-toggle]")) {
     syncProjectTaskDraftInputs();
     detailTaskDetailOpen = !detailTaskDetailOpen;
@@ -11448,7 +13216,9 @@ $("#projectTaskPanel").addEventListener("click", (event) => {
   }
   const editButton = event.target.closest("[data-edit-project-task]");
   if (editButton) {
-    editProjectTask(editButton.dataset.editProjectTask);
+    const task = state.tasks.find((item) => item.id === editButton.dataset.editProjectTask);
+    if (task?.isRecurring) openProjectTaskScopeModal("edit", task.id);
+    else editProjectTask(editButton.dataset.editProjectTask);
     return;
   }
   const deleteButton = event.target.closest("[data-delete-project-task]");
@@ -11457,6 +13227,10 @@ $("#projectTaskPanel").addEventListener("click", (event) => {
   const task = state.tasks.find((item) => item.id === taskId);
   if (!canManageTask(task)) {
     showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
+    return;
+  }
+  if (task?.isRecurring) {
+    openProjectTaskScopeModal("delete", taskId);
     return;
   }
   confirmDelete(() => {
@@ -11469,6 +13243,13 @@ $("#projectTaskPanel").addEventListener("click", (event) => {
 });
 
 $("#projectTaskPanel").addEventListener("change", (event) => {
+  if (event.target.matches("#projectTaskHideDone")) {
+    detailTaskHideDone = event.target.checked;
+    saveViewPrefs({ detailTaskHideDone });
+    const project = state.projects.find((item) => item.id === activeProjectId);
+    if (project) renderProjectTasks(project);
+    return;
+  }
   const taskId = event.target.dataset.projectTaskCheck;
   if (!taskId) return;
   const task = state.tasks.find((item) => item.id === taskId);
@@ -11508,12 +13289,14 @@ $("#taskList").addEventListener("click", (event) => {
   if (!item) return;
   if (item.source === "project") {
     highlightedProjectTaskId = item.id;
+    detailTaskHideDone = false;
     openProjectDetail(item.sourceId, "tasks");
     renderDetailTabs();
     clearTaskHighlight("project");
   }
   if (item.source === "work") {
     highlightedWorkTaskId = item.id;
+    workTaskHideDone = false;
     openWorkDetail(item.sourceId, "tasks");
     renderWorkDetailTabs();
     clearTaskHighlight("work");
@@ -11550,12 +13333,6 @@ $("#tasksView").addEventListener("click", (event) => {
   if (!filterButton) return;
   taskOverviewFilter = filterButton.dataset.taskOverviewFilter;
   saveViewPrefs({ taskOverviewFilter });
-  renderTasks();
-});
-
-$("#taskOverviewSort").addEventListener("change", (event) => {
-  taskOverviewSort = normalizeTaskSort(event.target.value);
-  saveViewPrefs({ taskOverviewSort });
   renderTasks();
 });
 

@@ -1,0 +1,1310 @@
+/* Mobile calendar UI. Calendar data, filters, and event actions are unchanged. */
+@media (max-width: 768px) {
+  body:has(#mobileApp[data-mobile-section="calendar"]) {
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .main {
+    /* Keep a 12px visual gap below the fixed header even on notched iPhones. */
+    padding: max(76px, calc(65px + env(safe-area-inset-top))) 16px calc(104px + max(10px, env(safe-area-inset-bottom)));
+    background: var(--mobile-video-canvas);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) #mobileApp.mobile-app {
+    gap: 10px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-topbar.mobile-v2 {
+    min-height: 64px;
+    border-bottom: 1px solid var(--mobile-video-line);
+    background: color-mix(in srgb, var(--mobile-video-canvas) 94%, transparent);
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    color: var(--mobile-video-ink);
+    backdrop-filter: blur(18px);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-topbar.mobile-v2 strong {
+    color: var(--mobile-video-ink);
+    font-family: "Geist", "Inter", Arial, sans-serif;
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -1px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-icon-btn {
+    min-width: 58px;
+    min-height: 38px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-tabbar.mobile-v2 {
+    border-top: 1px solid var(--mobile-video-line);
+    background: color-mix(in srgb, var(--mobile-video-elevated) 95%, transparent);
+    backdrop-filter: blur(18px);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-tab {
+    color: var(--mobile-video-mute);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) .mobile-tab.active {
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  .mobile-calendar-page {
+    gap: 10px;
+    color: var(--mobile-video-ink);
+    font-family: "Geist", "Inter", Arial, sans-serif;
+  }
+
+  .mobile-calendar-toolbar {
+    position: relative;
+    z-index: 24;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .mobile-calendar-period,
+  .mobile-calendar-actions {
+    display: grid;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mobile-calendar-period {
+    grid-template-columns: 34px minmax(0, 1fr) 34px;
+    min-width: 0;
+    height: 40px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 8px;
+    background: var(--mobile-video-elevated);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-calendar-actions {
+    grid-template-columns: repeat(4, 40px);
+  }
+
+  .mobile-calendar-period > button,
+  .mobile-calendar-month-title,
+  .mobile-calendar-actions > button {
+    min-width: 0;
+    min-height: 34px;
+    display: grid;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--mobile-video-body);
+    padding: 0;
+    font-family: inherit;
+    font-size: 18px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  .mobile-calendar-month-title {
+    position: relative;
+    overflow: hidden;
+    color: var(--mobile-video-ink);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+    white-space: nowrap;
+  }
+
+  .mobile-calendar-month-title input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-height: 34px;
+    opacity: 0;
+  }
+
+  .mobile-calendar-actions > button {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-color: var(--mobile-video-line);
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-calendar-actions .mobile-calendar-today {
+    color: var(--mobile-video-body);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-actions .mobile-calendar-icon {
+    position: relative;
+    color: var(--mobile-video-body);
+    font-size: 20px;
+  }
+
+  .mobile-calendar-actions .mobile-calendar-icon svg {
+    width: 17px;
+    height: 17px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  .mobile-calendar-actions .mobile-calendar-icon.active {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  .mobile-calendar-actions .mobile-calendar-icon.add {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 22px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-actions .mobile-calendar-icon b {
+    right: -3px;
+    top: -4px;
+    min-width: 15px;
+    height: 15px;
+    border: 1px solid var(--mobile-video-elevated);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 8px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-search {
+    grid-template-columns: minmax(0, 1fr) 48px;
+    gap: 6px;
+  }
+
+  .mobile-calendar-search input {
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 12px;
+    box-shadow: none;
+  }
+
+  .mobile-calendar-search input::placeholder {
+    color: var(--mobile-video-faint);
+  }
+
+  .mobile-calendar-search button {
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-view-switch {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 10px;
+    background: var(--mobile-video-elevated);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-calendar-view-switch button {
+    min-height: 36px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--mobile-video-mute);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-view-switch button.active {
+    border-color: color-mix(in srgb, var(--mobile-video-accent) 32%, var(--mobile-video-line));
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+    box-shadow: none;
+  }
+
+  .mobile-month-calendar {
+    min-width: 0;
+    padding: 9px 9px 10px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 12px;
+    background: var(--mobile-video-elevated);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-month-weekdays,
+  .mobile-month-grid {
+    gap: 1px;
+  }
+
+  .mobile-month-weekdays {
+    margin-bottom: 3px;
+  }
+
+  .mobile-month-weekdays span {
+    min-height: 24px;
+    color: var(--mobile-video-mute);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .mobile-month-weekdays span:first-child {
+    color: #d24b57;
+  }
+
+  .mobile-month-grid button {
+    min-height: 42px;
+    grid-template-rows: 28px 9px;
+    border: 0;
+    background: transparent;
+    color: var(--mobile-video-body);
+    padding: 2px 0 1px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .mobile-month-grid button b {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+  }
+
+  .mobile-month-grid button.muted {
+    opacity: 0.28;
+  }
+
+  .mobile-month-grid button.today,
+  .mobile-month-grid button.selected {
+    color: var(--mobile-video-ink);
+    background: transparent;
+  }
+
+  .mobile-month-grid button.today b {
+    color: var(--mobile-video-accent-deep);
+    box-shadow: inset 0 0 0 1px var(--mobile-video-accent);
+  }
+
+  .mobile-month-grid button.selected b {
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    box-shadow: none;
+  }
+
+  .mobile-calendar-dots {
+    height: 9px;
+    gap: 2px;
+  }
+
+  .mobile-calendar-dots i {
+    width: 4px;
+    min-width: 4px;
+    height: 4px;
+  }
+
+  .mobile-calendar-dots i.source-project { background: #00b545; }
+  .mobile-calendar-dots i.source-work { background: #0070f3; }
+  .mobile-calendar-dots i.source-task { background: #7928ca; }
+  .mobile-calendar-dots i.source-staff { background: #f5a623; }
+  .mobile-calendar-dots i.source-schedule { background: var(--mobile-video-mute); }
+
+  .mobile-calendar-dots em {
+    color: var(--mobile-video-mute);
+    font-size: 8px;
+  }
+
+  .mobile-calendar-day-list,
+  .mobile-calendar-month-list section {
+    gap: 8px;
+  }
+
+  .mobile-calendar-day-list > header,
+  .mobile-calendar-month-list section > header {
+    min-height: 32px;
+    padding: 0 2px;
+  }
+
+  .mobile-calendar-day-list h3,
+  .mobile-calendar-month-list h3 {
+    color: var(--mobile-video-ink);
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 22px;
+    letter-spacing: -0.4px;
+  }
+
+  .mobile-calendar-day-list header span,
+  .mobile-calendar-month-list header span {
+    color: var(--mobile-video-mute);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-event-list,
+  .mobile-calendar-month-list {
+    gap: 8px;
+  }
+
+  .mobile-calendar-event-card {
+    min-height: 76px;
+    grid-template-columns: 48px minmax(0, 1fr) 14px;
+    align-items: center;
+    gap: 9px;
+    overflow: hidden;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 10px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    padding: 11px 10px 10px 13px;
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-calendar-event-card::before {
+    width: 3px;
+    background: var(--mobile-video-mute);
+  }
+
+  .mobile-calendar-event-card.source-project::before { background: #00b545; }
+  .mobile-calendar-event-card.source-work::before { background: #0070f3; }
+  .mobile-calendar-event-card.source-task::before { background: #7928ca; }
+  .mobile-calendar-event-card.source-staff::before { background: #f5a623; }
+
+  .mobile-calendar-event-card.is-completed {
+    opacity: 0.58;
+  }
+
+  .mobile-calendar-event-time {
+    display: grid;
+    gap: 2px;
+    color: var(--mobile-video-body);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-event-time small {
+    color: var(--mobile-video-mute);
+    font-size: 9px;
+  }
+
+  .mobile-calendar-event-body {
+    gap: 3px;
+  }
+
+  .mobile-calendar-event-body strong {
+    color: var(--mobile-video-ink);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 18px;
+  }
+
+  .mobile-calendar-event-body > span,
+  .mobile-calendar-event-body > small {
+    color: var(--mobile-video-mute);
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 14px;
+  }
+
+  .mobile-calendar-event-chips {
+    gap: 4px;
+  }
+
+  .mobile-calendar-event-chips i {
+    padding: 2px 6px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 999px;
+    background: var(--mobile-video-soft);
+    color: var(--mobile-video-body);
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-event-arrow {
+    color: var(--mobile-video-mute);
+    font-size: 18px;
+  }
+
+  .mobile-calendar-empty {
+    min-height: 116px;
+    gap: 6px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 10px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-calendar-empty strong {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-empty span {
+    color: var(--mobile-video-mute);
+    font-size: 10px;
+  }
+
+  .mobile-calendar-empty button {
+    min-height: 36px;
+    border: 1px solid var(--mobile-video-accent);
+    border-radius: 6px;
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    padding: 0 13px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .mobile-week-calendar {
+    gap: 4px;
+    padding: 9px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 12px;
+    background: var(--mobile-video-elevated);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  .mobile-week-calendar button {
+    height: 64px;
+    min-height: 64px;
+    grid-template-rows: 14px 22px 12px;
+    align-content: center;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--mobile-video-body);
+  }
+
+  .mobile-week-calendar button span,
+  .mobile-week-calendar button i {
+    color: var(--mobile-video-mute);
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  .mobile-week-calendar button i,
+  .mobile-week-calendar button:not(:has(i))::after {
+    min-height: 12px;
+    font-style: normal;
+  }
+
+  .mobile-week-calendar button:not(:has(i))::after {
+    content: "";
+  }
+
+  .mobile-week-calendar button.selected {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  .mobile-week-calendar button.selected span,
+  .mobile-week-calendar button.selected i {
+    color: var(--mobile-video-accent-deep);
+  }
+
+  .mobile-calendar-filter-backdrop {
+    background: rgba(23, 23, 23, 0.34);
+    backdrop-filter: blur(5px);
+  }
+
+  .mobile-calendar-filter-sheet > section {
+    max-height: min(84dvh, 720px);
+    padding: 9px 14px calc(14px + env(safe-area-inset-bottom));
+    border: 1px solid var(--mobile-video-line);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-float);
+  }
+
+  .mobile-sheet-handle {
+    background: var(--mobile-video-faint);
+  }
+
+  .mobile-calendar-filter-sheet header h2 {
+    color: var(--mobile-video-ink);
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-filter-sheet header button {
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-filter-sheet fieldset {
+    border-bottom: 1px solid var(--mobile-video-line);
+  }
+
+  .mobile-calendar-filter-sheet legend {
+    color: var(--mobile-video-ink);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-filter-chips {
+    gap: 6px;
+  }
+
+  .mobile-calendar-filter-chips button {
+    min-height: 34px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 64px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  .mobile-calendar-filter-chips button span {
+    color: var(--mobile-video-accent-deep);
+  }
+
+  .mobile-calendar-filter-chips button.selected {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+    box-shadow: none;
+  }
+
+  .mobile-calendar-segmented {
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 10px;
+    background: var(--mobile-video-soft);
+  }
+
+  .mobile-calendar-segmented button {
+    min-height: 36px;
+    border-radius: 6px;
+    color: var(--mobile-video-body);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .mobile-calendar-segmented button.selected {
+    border: 1px solid var(--mobile-video-line);
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+  }
+
+  .mobile-calendar-completed-toggle b {
+    color: var(--mobile-video-ink);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-completed-toggle small {
+    color: var(--mobile-video-mute);
+    font-size: 9px;
+  }
+
+  .mobile-calendar-completed-toggle i {
+    background: var(--mobile-video-soft);
+  }
+
+  .mobile-calendar-completed-toggle i::after {
+    background: var(--mobile-video-elevated);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  }
+
+  .mobile-calendar-completed-toggle:has(input:checked) i {
+    background: var(--mobile-video-accent);
+  }
+
+  .mobile-calendar-filter-sheet footer button {
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .mobile-calendar-filter-sheet footer button:last-child {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+  }
+
+  /* 캘린더 일정 등록·수정 팝업 */
+  #scheduleModal.schedule-modal,
+  #staffEventDetailModal.event-detail-modal {
+    align-items: flex-end;
+    z-index: 220;
+    padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--mobile-video-canvas) 72%, transparent);
+    backdrop-filter: blur(7px) saturate(0.9);
+  }
+
+  #scheduleModal .schedule-card,
+  #staffEventDetailModal .event-detail-card {
+    width: 100%;
+    max-width: 520px;
+    max-height: min(88dvh, 760px);
+    margin: 0 auto;
+    overflow-y: auto;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 16px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    padding: 18px 16px;
+    box-shadow: var(--mobile-video-float);
+    overscroll-behavior: contain;
+  }
+
+  #scheduleModal .schedule-card {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  #scheduleModal .schedule-card > *,
+  #staffEventDetailModal .event-detail > * {
+    grid-column: 1 / -1;
+  }
+
+  #scheduleModal .schedule-card > .section-head,
+  #staffEventDetailModal .event-detail-card > .section-head {
+    align-items: center;
+    min-height: 52px;
+    border-bottom: 1px solid var(--mobile-video-line);
+    padding-bottom: 12px;
+  }
+
+  #scheduleModal .schedule-card .eyebrow,
+  #staffEventDetailModal .event-detail-card .eyebrow {
+    color: var(--mobile-video-mute);
+    font-size: 9px;
+  }
+
+  #scheduleModal .schedule-card h2,
+  #staffEventDetailModal .event-detail-card h2 {
+    color: var(--mobile-video-ink);
+    font-size: 19px;
+    line-height: 26px;
+    letter-spacing: -0.5px;
+  }
+
+  #scheduleModal #closeScheduleBtn,
+  #staffEventDetailModal #closeStaffEventDetailBtn {
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    box-shadow: none;
+  }
+
+  #scheduleModal .schedule-card label {
+    gap: 6px;
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #scheduleModal .schedule-card input:not([type="checkbox"]):not([type="hidden"]),
+  #scheduleModal .schedule-card textarea,
+  #scheduleModal .schedule-card .custom-select,
+  #scheduleModal .schedule-card .date-button,
+  #scheduleModal .schedule-card .time-button {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    padding: 0 10px;
+    font-size: 12px;
+    box-shadow: none;
+  }
+
+  #scheduleModal .schedule-card textarea {
+    min-height: 84px;
+    padding: 10px;
+  }
+
+  #scheduleModal .schedule-card .time-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #scheduleModal .schedule-card > .pill.primary {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--mobile-video-accent);
+    border-radius: 6px;
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  /* 캘린더 팝업 체크박스 공통형 */
+  :is(#scheduleModal, #staffEventDetailModal, #mobileAddForm[data-mode="schedule"]) input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    margin: 0;
+    padding: 0 !important;
+    box-sizing: border-box;
+    flex: 0 0 18px;
+    border: 1.5px solid var(--mobile-video-faint);
+    border-radius: 4px;
+    background: var(--mobile-video-elevated);
+    box-shadow: none;
+  }
+
+  :is(#scheduleModal, #staffEventDetailModal, #mobileAddForm[data-mode="schedule"]) input[type="checkbox"]::after {
+    content: none;
+  }
+
+  :is(#scheduleModal, #staffEventDetailModal, #mobileAddForm[data-mode="schedule"]) input[type="checkbox"]:checked {
+    border-color: var(--mobile-video-accent);
+    background-color: var(--mobile-video-accent);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 13px 13px;
+  }
+
+  #scheduleModal .schedule-card .check-line {
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    padding: 0 10px;
+  }
+
+  #scheduleModal .schedule-card .check-line:has(input:checked) {
+    border-color: color-mix(in srgb, var(--mobile-video-accent) 42%, var(--mobile-video-line));
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  /* 캘린더 일정 상세 팝업 */
+  #staffEventDetailModal .event-detail {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  #staffEventDetailModal .event-detail-row,
+  #staffEventDetailModal .event-memo,
+  #staffEventDetailModal .event-detail-staff {
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 8px;
+    background: var(--mobile-video-canvas);
+  }
+
+  #staffEventDetailModal .event-detail-row {
+    grid-template-columns: 76px minmax(0, 1fr);
+    min-height: 46px;
+    gap: 10px;
+    padding: 9px 11px;
+  }
+
+  #staffEventDetailModal :is(.event-detail-row span, .event-memo span, .event-detail-staff-head span) {
+    color: var(--mobile-video-mute);
+    font-size: 10px;
+  }
+
+  #staffEventDetailModal .event-detail-row strong {
+    color: var(--mobile-video-ink);
+    font-size: 12px;
+  }
+
+  #staffEventDetailModal .event-memo {
+    min-height: 82px;
+    padding: 11px;
+  }
+
+  #staffEventDetailModal .event-memo p {
+    color: var(--mobile-video-body);
+    font-size: 12px;
+  }
+
+  #staffEventDetailModal .event-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    border-top: 1px solid var(--mobile-video-line);
+    padding-top: 12px;
+  }
+
+  #staffEventDetailModal .event-detail-actions .pill {
+    min-width: 0;
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    font-size: 12px;
+    box-shadow: none;
+  }
+
+  #staffEventDetailModal .event-detail-actions .danger-pill {
+    border-color: #ffd2d2;
+    background: #fff1f1;
+    color: #c50000;
+  }
+
+  /* 모바일 간단 일정 등록 시트 */
+  #mobileAddSheet.open:has(#mobileAddForm[data-mode="schedule"]) {
+    display: block;
+    z-index: 220;
+    background: transparent;
+  }
+
+  #mobileAddSheet:has(#mobileAddForm[data-mode="schedule"]) .mobile-sheet-backdrop {
+    background: rgba(23, 23, 23, 0.34);
+    backdrop-filter: blur(5px);
+  }
+
+  #mobileAddForm[data-mode="schedule"].mobile-add-card {
+    position: absolute;
+    inset: auto 0 0;
+    width: 100%;
+    max-height: min(91dvh, 760px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    border: 1px solid var(--mobile-video-line);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-float);
+  }
+
+  #mobileAddForm[data-mode="schedule"] header {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr) 72px;
+    align-items: center;
+    gap: 8px;
+    min-height: 58px;
+    border-bottom: 1px solid var(--mobile-video-line);
+    background: color-mix(in srgb, var(--mobile-video-elevated) 96%, transparent);
+    padding: 8px 12px;
+    backdrop-filter: blur(14px);
+  }
+
+  #mobileAddForm[data-mode="schedule"] header strong {
+    color: var(--mobile-video-ink);
+    text-align: center;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 22px;
+    letter-spacing: -0.4px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] header button {
+    min-height: 38px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: none;
+  }
+
+  #mobileAddForm[data-mode="schedule"] header button[type="submit"] {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-add-body {
+    min-height: 0;
+    display: grid;
+    gap: 8px;
+    overflow-y: auto;
+    background: var(--mobile-video-canvas);
+    padding: 12px 12px 24px;
+    overscroll-behavior: contain;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-add-body section {
+    display: grid;
+    gap: 9px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 12px;
+    background: var(--mobile-video-elevated);
+    padding: 14px;
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-add-body h3 {
+    margin: 0 0 2px;
+    color: var(--mobile-video-ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    letter-spacing: -0.3px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(input:not([type="checkbox"]):not([type="hidden"]), select, textarea, .mobile-task-dropdown-trigger, .mobile-task-date-trigger, .mobile-schedule-time-trigger) {
+    width: 100%;
+    min-height: 42px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    padding: 0 10px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    outline: none;
+    box-shadow: none;
+  }
+
+  #mobileAddForm[data-mode="schedule"] textarea {
+    min-height: 82px;
+    padding: 12px 10px !important;
+    line-height: 1.45;
+    resize: vertical;
+  }
+
+  #mobileAddForm[data-mode="schedule"] textarea::placeholder {
+    line-height: 1.45;
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(input, textarea)::placeholder {
+    color: var(--mobile-video-faint);
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-task-date-field, .mobile-schedule-time-field) {
+    display: grid;
+    gap: 6px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-date-time-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.18fr) repeat(2, minmax(0, 1fr));
+    align-items: end;
+    gap: 6px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-date-time-row :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr) 14px;
+    gap: 4px;
+    padding: 0 8px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-date-time-row :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-time-field.is-disabled {
+    opacity: 0.55;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-time-trigger:disabled {
+    cursor: default;
+    border-color: var(--mobile-video-line);
+    background: var(--mobile-video-soft);
+    color: var(--mobile-video-mute);
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-task-date-field, .mobile-schedule-time-field) > span,
+  #mobileAddForm[data-mode="schedule"] .mobile-add-body label {
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    font-weight: 500;
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: var(--mobile-video-mute);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-toggle-line {
+    min-height: 38px;
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    color: var(--mobile-video-body) !important;
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-toggle-line, .mobile-check-list label) input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    min-width: 18px;
+    max-width: 18px;
+    height: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    margin: 0;
+    padding: 0 !important;
+    box-sizing: border-box;
+    flex: 0 0 18px;
+    border: 1.5px solid var(--mobile-video-faint);
+    border-radius: 4px;
+    background: var(--mobile-video-elevated);
+  }
+
+  #mobileAddForm[data-mode="schedule"] :is(.mobile-toggle-line, .mobile-check-list label) input[type="checkbox"]:checked {
+    border-color: var(--mobile-video-accent);
+    background-color: var(--mobile-video-accent);
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 13px 13px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown {
+    position: relative;
+    width: 100%;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown summary {
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-body);
+    padding: 0 10px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    list-style: none;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown summary::-webkit-details-marker {
+    display: none;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown summary svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: var(--mobile-video-mute);
+    stroke-width: 1.5;
+    transition: transform 160ms ease;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown[open] summary svg {
+    transform: rotate(180deg);
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-dropdown.has-value summary {
+    color: var(--mobile-video-ink);
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-menu {
+    position: absolute;
+    z-index: 8;
+    top: calc(100% + 5px);
+    left: 0;
+    right: 0;
+    display: grid;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 8px;
+    background: var(--mobile-video-elevated);
+    padding: 5px;
+    box-shadow: var(--mobile-video-float);
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-menu label {
+    min-height: 40px;
+    display: grid !important;
+    grid-template-columns: 18px minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 8px;
+    border-radius: 6px;
+    color: var(--mobile-video-body) !important;
+    padding: 0 8px;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-menu label:has(input:checked) {
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-ink) !important;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-menu label i {
+    visibility: hidden;
+    color: var(--mobile-video-accent-deep);
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  #mobileAddForm[data-mode="schedule"] .mobile-schedule-owner-menu label:has(input:checked) i {
+    visibility: visible;
+  }
+
+  #mobileAddForm[data-mode="schedule"] footer {
+    border-top: 1px solid var(--mobile-video-line);
+    background: color-mix(in srgb, var(--mobile-video-elevated) 97%, transparent);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    backdrop-filter: blur(14px);
+  }
+
+  #mobileAddForm[data-mode="schedule"] footer button {
+    width: 100%;
+    min-height: 44px;
+    border: 1px solid var(--mobile-video-accent);
+    border-radius: 6px;
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) :is(#datePickerLayer, #timePickerLayer).open {
+    inset: 0;
+    z-index: 260;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    padding: 24px 12px calc(12px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--mobile-video-canvas) 72%, transparent);
+    animation: none;
+    backdrop-filter: blur(7px) saturate(0.9);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) :is(#datePickerLayer .date-picker-card, #timePickerLayer .time-picker-card) {
+    width: 100%;
+    max-width: 440px;
+    max-height: min(78dvh, 640px);
+    margin: 0 auto;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 16px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-float);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) :is(#datePickerLayer, #timePickerLayer) button {
+    color: var(--mobile-video-body);
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) :is(#datePickerLayer, #timePickerLayer) button.selected {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+  }
+
+  body:has(#mobileApp[data-mobile-section="calendar"]) :is(#datePickerLayer .date-picker-bottom [data-date-today], #timePickerLayer [data-time-apply]) {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+  }
+
+  body[data-theme="dark"] :is(.mobile-calendar-view-switch button.active, .mobile-week-calendar button.selected, .mobile-calendar-filter-chips button.selected) {
+    color: #b9f8cf;
+  }
+}
+
+@media (max-width: 370px) {
+  body:has(#mobileApp[data-mobile-section="calendar"]) .main {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .mobile-calendar-page {
+    gap: 8px;
+  }
+
+  .mobile-calendar-toolbar {
+    grid-template-columns: minmax(0, 1fr) 146px;
+    gap: 6px;
+  }
+
+  .mobile-calendar-actions {
+    grid-template-columns: repeat(4, 36px);
+    gap: 4px;
+  }
+
+  .mobile-calendar-actions > button {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .mobile-month-calendar {
+    padding: 8px 7px 9px;
+  }
+
+  .mobile-month-grid button {
+    min-height: 40px;
+  }
+}

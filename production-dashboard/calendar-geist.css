@@ -1,0 +1,839 @@
+/* Geist calendar surface — presentation only; existing schedule data bindings stay intact. */
+@media (min-width: 769px) {
+  #calendarView {
+    width: min(1200px, 100%);
+    margin-inline: auto;
+    color: var(--geist-ink);
+  }
+
+  #calendarView button:focus-visible,
+  #calendarView input:focus-visible,
+  #scheduleModal button:focus-visible,
+  #scheduleModal input:focus-visible,
+  #scheduleModal textarea:focus-visible,
+  #staffEventDetailModal button:focus-visible,
+  body:has(#calendarView.active) .date-picker-card button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #calendarView > .panel {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    padding: 0;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+  }
+
+  #calendarView > .panel > .section-head {
+    min-height: 104px;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 22px 24px;
+  }
+
+  #calendarView > .panel > .section-head .eyebrow {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #calendarView #calendarTitle {
+    margin-top: 5px;
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  #calendarView .calendar-actions {
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  #calendarView .calendar-actions .circle,
+  #calendarView .calendar-actions .pill {
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #calendarView .calendar-actions .circle {
+    width: 40px;
+    padding: 0;
+    font-size: 20px;
+  }
+
+  #calendarView .calendar-actions .pill:hover,
+  #calendarView .calendar-actions .circle:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #calendarView .calendar-filter-checks {
+    gap: 10px;
+    margin: 0;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    padding: 14px 20px;
+  }
+
+  #calendarView .calendar-filter-group {
+    gap: 6px;
+  }
+
+  #calendarView .calendar-filter-group > strong {
+    min-width: 58px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  #calendarView .calendar-owner-filters {
+    gap: 6px;
+  }
+
+  #calendarView .calendar-filter-checks label {
+    min-height: 34px;
+    gap: 7px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #calendarView .calendar-filter-checks label:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #calendarView .calendar-filter-checks input {
+    appearance: none;
+    width: 15px;
+    min-width: 15px;
+    height: 15px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+  }
+
+  #calendarView .calendar-filter-checks input:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;
+  }
+
+  #calendarView .calendar-recurring-filter {
+    justify-self: start;
+  }
+
+  #calendarView .calendar-board {
+    gap: 0;
+  }
+
+  #calendarView .calendar-main {
+    min-width: 900px;
+  }
+
+  #calendarView .calendar-weekdays,
+  #calendarView .calendar-grid {
+    gap: 1px;
+    background: var(--geist-hairline);
+  }
+
+  #calendarView .calendar-weekdays {
+    min-height: 38px;
+    align-items: center;
+    margin: 0;
+    border-bottom: 1px solid var(--geist-hairline);
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #calendarView .calendar-weekdays span {
+    display: grid;
+    place-items: center;
+    align-self: stretch;
+    background: var(--geist-canvas);
+  }
+
+  #calendarView .calendar-weekdays span:first-child,
+  #calendarView .calendar-day.is-sunday .day-number b,
+  #calendarView .calendar-day.is-holiday .day-number b,
+  #calendarView .day-number em {
+    color: #c50000;
+  }
+
+  #calendarView .calendar-day {
+    min-height: 118px;
+    border: 0;
+    border-radius: 0;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 9px;
+    transition: background 140ms ease, box-shadow 140ms ease;
+  }
+
+  #calendarView .calendar-day:hover {
+    background: var(--geist-canvas);
+  }
+
+  #calendarView .calendar-day.is-muted {
+    background: #fcfcfc;
+    opacity: 1;
+  }
+
+  #calendarView .calendar-day.is-muted .day-number b {
+    color: #c7c7c7;
+  }
+
+  #calendarView .calendar-day.is-today {
+    background: #f7fff9;
+    box-shadow: 0 0 0 2px var(--geist-accent) inset;
+  }
+
+  #calendarView .calendar-day.is-drop-target {
+    background: var(--geist-accent-soft);
+    box-shadow: 0 0 0 2px var(--geist-accent) inset;
+    transform: none;
+  }
+
+  #calendarView .day-number {
+    min-height: 22px;
+    margin-bottom: 5px;
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #calendarView .calendar-day.is-today .day-number b {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: var(--geist-accent);
+    color: #06140a;
+    font-weight: 600;
+  }
+
+  #calendarView .calendar-event,
+  #calendarView .calendar-event.is-timed {
+    min-height: 25px;
+    gap: 5px;
+    margin-top: 4px;
+    border: 1px solid transparent;
+    border-left-width: 3px;
+    border-radius: 5px;
+    padding: 4px 6px;
+    color: var(--geist-body);
+    font-size: 10px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #calendarView .calendar-event:hover {
+    filter: brightness(0.98);
+    transform: none;
+    box-shadow: none;
+  }
+
+  #calendarView .calendar-event.is-all-day {
+    border-left-width: 1px;
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  #calendarView .calendar-event.is-all-day.project,
+  #calendarView .calendar-event.is-all-day.projectTask {
+    border-color: #0070f3;
+    background: #0070f3;
+    color: #ffffff;
+  }
+
+  #calendarView .calendar-event.is-all-day.work,
+  #calendarView .calendar-event.is-all-day.workTask {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+
+  #calendarView .calendar-event.is-all-day.schedule {
+    border-color: #f5a623;
+    background: #f5a623;
+    color: #171717;
+    padding-left: 6px;
+  }
+
+  #calendarView .calendar-event.is-all-day.staff,
+  #calendarView .calendar-event.is-all-day.training,
+  #calendarView .calendar-event.is-all-day.lesson {
+    border-color: #7928ca;
+    background: #7928ca;
+    color: #ffffff;
+  }
+
+  #calendarView .calendar-event.project,
+  #calendarView .calendar-event.projectTask,
+  #calendarView .calendar-event.is-timed.project,
+  #calendarView .calendar-event.is-timed.projectTask {
+    border-color: #bfd8ff;
+    border-left-color: #0070f3;
+    background: #eef5ff;
+    color: #0758a8;
+  }
+
+  #calendarView .calendar-event.work,
+  #calendarView .calendar-event.workTask,
+  #calendarView .calendar-event.is-timed.work,
+  #calendarView .calendar-event.is-timed.workTask {
+    border-color: #a7eec2;
+    border-left-color: var(--geist-accent);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #calendarView .calendar-event.schedule,
+  #calendarView .calendar-event.is-timed.schedule {
+    border-color: #f1d99b;
+    border-left-color: #e0a800;
+    background: #fff8df;
+    color: #755400;
+    padding-left: 6px;
+  }
+
+  #calendarView .calendar-event.schedule::before {
+    display: none;
+  }
+
+  #calendarView .calendar-event.staff,
+  #calendarView .calendar-event.training,
+  #calendarView .calendar-event.lesson,
+  #calendarView .calendar-event.is-timed.staff,
+  #calendarView .calendar-event.is-timed.training,
+  #calendarView .calendar-event.is-timed.lesson {
+    border-color: #dac6ff;
+    border-left-color: #7928ca;
+    background: #f5efff;
+    color: #5c2790;
+  }
+
+  #calendarView .event-time {
+    color: inherit;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+  }
+}
+
+/* Simple schedule form */
+#scheduleModal.schedule-modal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#scheduleModal .schedule-card {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: min(660px, 100%);
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 26px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#scheduleModal .schedule-card > .section-head,
+#scheduleModal .schedule-card > label:has(#scheduleTitle),
+#scheduleModal .schedule-card > .time-row,
+#scheduleModal .schedule-card > label:has(#scheduleMemo),
+#scheduleModal .schedule-card > .pill.primary {
+  grid-column: 1 / -1;
+}
+
+#scheduleModal .schedule-card > .section-head {
+  align-items: flex-start;
+  min-height: 58px;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding-bottom: 16px;
+}
+
+#scheduleModal .schedule-card .eyebrow,
+#staffEventDetailModal .event-detail-card .eyebrow {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#scheduleModal .schedule-card h2,
+#staffEventDetailModal .event-detail-card h2 {
+  margin-top: 4px;
+  color: var(--geist-ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 30px;
+  letter-spacing: -0.7px;
+}
+
+#scheduleModal #closeScheduleBtn,
+#staffEventDetailModal #closeStaffEventDetailBtn {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 18px;
+  box-shadow: none;
+}
+
+#scheduleModal .schedule-card label {
+  gap: 7px;
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#scheduleModal .schedule-card input:not([type="checkbox"]):not([type="hidden"]),
+#scheduleModal .schedule-card textarea,
+#scheduleModal .schedule-card .custom-select,
+#scheduleModal .schedule-card .date-button,
+#scheduleModal .schedule-card .time-button {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  padding: 0 12px;
+  font-family: "Geist", "Inter", Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+#scheduleModal .schedule-card textarea {
+  min-height: 100px;
+  resize: vertical;
+  padding: 12px;
+  line-height: 1.55;
+}
+
+#scheduleModal .schedule-card input::placeholder,
+#scheduleModal .schedule-card textarea::placeholder {
+  color: var(--geist-faint);
+}
+
+#scheduleModal .schedule-card input:focus,
+#scheduleModal .schedule-card textarea:focus,
+#scheduleModal .schedule-card .custom-select:focus,
+#scheduleModal .schedule-card .date-button:focus,
+#scheduleModal .schedule-card .time-button:focus {
+  border-color: var(--geist-accent);
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+}
+
+#scheduleModal .schedule-card .custom-select,
+#scheduleModal .schedule-card .date-button {
+  justify-content: space-between;
+}
+
+#scheduleModal .schedule-card .check-line {
+  align-self: end;
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#scheduleModal .schedule-card .check-line:has(input:checked) {
+  border-color: rgba(0, 237, 100, 0.34);
+  background: var(--geist-accent-soft);
+  color: #087231;
+}
+
+#scheduleModal .schedule-card .check-line input {
+  appearance: none;
+  width: 17px;
+  min-width: 17px;
+  height: 17px;
+  border: 1px solid #c9c9c9;
+  border-radius: 4px;
+  background: var(--geist-elevated);
+}
+
+#scheduleModal .schedule-card .check-line input:checked {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px no-repeat;
+}
+
+#scheduleModal .schedule-card .time-row {
+  gap: 12px;
+}
+
+#scheduleModal .schedule-card .time-button:disabled {
+  border-color: var(--geist-hairline);
+  background: var(--geist-soft);
+  color: var(--geist-mute);
+  opacity: 1;
+}
+
+#scheduleModal .schedule-card > .pill.primary {
+  justify-self: end;
+  width: auto;
+  min-width: 140px;
+  min-height: 42px;
+  border: 1px solid var(--geist-accent);
+  border-radius: 6px;
+  background: var(--geist-accent);
+  color: #06140a;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  text-transform: none;
+  box-shadow: none;
+}
+
+/* Calendar dropdown and date picker */
+body:has(#calendarView.active) .dropdown-layer {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 10px;
+  background: var(--geist-elevated);
+  padding: 6px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+}
+
+body:has(#calendarView.active) .dropdown-option {
+  min-height: 38px;
+  border-radius: 6px;
+  color: var(--geist-body);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#calendarView.active) .dropdown-option:hover,
+body:has(#calendarView.active) .dropdown-option.selected {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+body:has(#calendarView.active) .dropdown-option.selected i {
+  color: var(--geist-accent);
+}
+
+body:has(#calendarView.active) .date-picker-card {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 16px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+}
+
+body:has(#calendarView.active) .date-picker-top strong {
+  color: var(--geist-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+body:has(#calendarView.active) .date-picker-top button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+body:has(#calendarView.active) .date-picker-top button:hover,
+body:has(#calendarView.active) .date-picker-days button:hover {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+body:has(#calendarView.active) .date-picker-weekdays {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+body:has(#calendarView.active) .date-picker-days {
+  gap: 4px;
+}
+
+body:has(#calendarView.active) .date-picker-days button {
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#calendarView.active) .date-picker-days button.muted {
+  color: #c5c5c5;
+}
+
+body:has(#calendarView.active) .date-picker-days button.today {
+  color: var(--geist-ink);
+  box-shadow: 0 0 0 1px #c9c9c9 inset;
+}
+
+body:has(#calendarView.active) .date-picker-days button.selected {
+  background: var(--geist-accent);
+  color: #06140a;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+body:has(#calendarView.active) .date-picker-bottom {
+  margin-top: 12px;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 12px;
+}
+
+body:has(#calendarView.active) .date-picker-bottom button {
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#calendarView.active) .date-picker-bottom [data-date-today] {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+  font-weight: 600;
+}
+
+/* Simple schedule and studio-event detail */
+#staffEventDetailModal.event-detail-modal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#staffEventDetailModal .event-detail-card {
+  gap: 16px;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 26px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#staffEventDetailModal .event-detail-card:has(.event-detail-staff) {
+  width: min(900px, 100%);
+}
+
+#staffEventDetailModal .event-detail-card > .section-head {
+  align-items: flex-start;
+  min-height: 58px;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding-bottom: 16px;
+}
+
+#staffEventDetailModal .event-detail {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#staffEventDetailModal .event-detail-row {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 50px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-canvas);
+  padding: 10px 12px;
+}
+
+#staffEventDetailModal .event-detail-row span,
+#staffEventDetailModal .event-memo span,
+#staffEventDetailModal .event-detail-staff-head span {
+  color: var(--geist-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#staffEventDetailModal .event-detail-row strong {
+  overflow: hidden;
+  color: var(--geist-ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+}
+
+#staffEventDetailModal .event-memo {
+  grid-column: 1 / -1;
+  min-height: 92px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+  padding: 12px;
+}
+
+#staffEventDetailModal .event-memo p {
+  margin-top: 8px;
+  color: var(--geist-body);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+#staffEventDetailModal .event-detail-actions {
+  gap: 8px;
+  margin-top: 0;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 16px;
+}
+
+#staffEventDetailModal .event-detail-actions .pill {
+  min-width: 110px;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  box-shadow: none;
+}
+
+#staffEventDetailModal .event-detail-actions .danger-pill {
+  border-color: #ffd2d2;
+  background: #fff1f1;
+  color: #c50000;
+}
+
+#staffEventDetailModal .event-detail-staff {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 10px;
+  background: var(--geist-canvas);
+  padding: 14px;
+}
+
+#staffEventDetailModal .event-detail-staff-table-head {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#staffEventDetailModal .event-detail-staff-row {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+}
+
+#staffEventDetailModal .event-detail-staff-row .custom-select,
+#staffEventDetailModal .event-detail-staff-row input {
+  min-height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  #scheduleModal.schedule-modal,
+  #staffEventDetailModal.event-detail-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  #scheduleModal .schedule-card,
+  #staffEventDetailModal .event-detail-card {
+    width: 100%;
+    max-height: min(86dvh, 760px);
+    border-radius: 16px;
+    padding: 20px 16px;
+  }
+
+  #scheduleModal .schedule-card {
+    grid-template-columns: 1fr;
+  }
+
+  #scheduleModal .schedule-card > *,
+  #staffEventDetailModal .event-detail > * {
+    grid-column: 1 / -1;
+  }
+
+  #scheduleModal .schedule-card > .pill.primary {
+    width: 100%;
+  }
+
+  #staffEventDetailModal .event-detail {
+    grid-template-columns: 1fr;
+  }
+
+  #staffEventDetailModal .event-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #staffEventDetailModal .event-detail-actions .pill {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1040px) {
+  #calendarView .calendar-board {
+    overflow-x: auto;
+  }
+}

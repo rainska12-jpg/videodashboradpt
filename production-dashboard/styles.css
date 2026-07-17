@@ -17,6 +17,653 @@
   --font: SpotifyMixUI, CircularSp-Arab, CircularSp-Hebr, CircularSp-Cyrl, CircularSp-Grek, CircularSp-Deva, "Helvetica Neue", helvetica, arial, "Hiragino Sans", "Hiragino Kaku Gothic ProN", Meiryo, "MS Gothic", sans-serif;
 }
 
+/* Geist overview redesign — UI-only layer, existing data bindings stay intact */
+:root {
+  --geist-canvas: #fafafa;
+  --geist-elevated: #ffffff;
+  --geist-ink: #171717;
+  --geist-body: #4d4d4d;
+  --geist-mute: #8f8f8f;
+  --geist-faint: #a1a1a1;
+  --geist-hairline: #ebebeb;
+  --geist-soft: #f2f2f2;
+  --geist-link: #0070f3;
+  --geist-accent: #00ed64;
+  --geist-accent-soft: #eafff2;
+}
+
+@media (min-width: 769px) {
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) {
+    --bg: var(--geist-canvas);
+    --surface: var(--geist-elevated);
+    --surface-2: var(--geist-soft);
+    --surface-3: #ededed;
+    --text: var(--geist-ink);
+    --muted: var(--geist-mute);
+    --near: var(--geist-body);
+    --accent: var(--geist-accent);
+    --border: var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    font-family: "Geist", "Inter", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .app-shell {
+    grid-template-columns: 232px minmax(0, 1fr);
+    background: var(--geist-canvas);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    border-right: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 24px 14px 18px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .brand {
+    padding: 0 8px 26px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .brand-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--geist-accent);
+    color: var(--geist-ink);
+    font-size: 14px;
+    box-shadow: none;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .brand strong {
+    color: var(--geist-ink);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .brand span {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item {
+    justify-content: flex-start;
+    min-height: 42px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--geist-body);
+    padding: 9px 10px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item:hover {
+    border-color: var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item.active {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item.active::before {
+    display: none;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-icon,
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item:hover .nav-icon {
+    width: 20px;
+    height: 20px;
+    flex-basis: 20px;
+    color: currentColor;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-item.active .nav-icon {
+    color: var(--geist-ink);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .nav-icon svg {
+    width: 19px;
+    height: 19px;
+    stroke-width: 1.65;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-note {
+    margin-top: 22px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    padding: 14px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-note span,
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .eyebrow {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", "IBM Plex Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-note strong {
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-account {
+    border-color: var(--geist-hairline);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-account-avatar {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-account strong {
+    color: var(--geist-ink);
+    font-weight: 600;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-account span,
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .sidebar-account-toggle {
+    color: var(--geist-mute);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .main {
+    min-width: 0;
+    padding: 0 32px 64px;
+    background: var(--geist-canvas);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .topbar {
+    width: min(1200px, 100%);
+    min-height: 80px;
+    margin: 0 auto 24px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 18px 0;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .topbar h1 {
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    letter-spacing: -0.8px;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .topbar .pill.primary {
+    min-height: 40px;
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .topbar .web-notification-button {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+}
+
+#overviewView {
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  color: var(--geist-ink);
+}
+
+#overviewView .hero-panel,
+#overviewView .panel,
+#overviewView .kpi {
+  border: 1px solid var(--geist-hairline);
+  background: var(--geist-elevated);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+}
+
+#overviewView .hero-panel {
+  position: relative;
+  isolation: isolate;
+  min-height: 360px;
+  overflow: hidden;
+  border-radius: 16px;
+  padding: 48px;
+  background: var(--geist-elevated);
+}
+
+#overviewView .overview-hero-copy {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 52%;
+}
+
+#overviewView .overview-hero-copy h2 {
+  color: var(--geist-ink);
+  font-size: 48px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -2.4px;
+}
+
+#overviewView .overview-hero-copy > p:last-of-type {
+  max-width: 430px;
+  margin-top: 18px;
+  color: var(--geist-body);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+#overviewView .play-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  width: auto;
+  height: 42px;
+  min-height: 42px;
+  margin-top: 28px;
+  border-radius: 6px;
+  background: var(--geist-accent);
+  color: #06140a;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#overviewView .play-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#overviewView .overview-hero-visual {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 54%;
+  overflow: hidden;
+}
+
+#overviewView .overview-hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(rgba(23, 23, 23, 0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(23, 23, 23, 0.06) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 28%, #000 100%);
+}
+
+#overviewView .overview-mesh {
+  position: absolute;
+  inset: -15%;
+  background:
+    radial-gradient(circle at 25% 28%, rgba(80, 227, 194, 0.92) 0, rgba(80, 227, 194, 0) 29%),
+    radial-gradient(circle at 62% 19%, rgba(0, 124, 240, 0.78) 0, rgba(0, 124, 240, 0) 34%),
+    radial-gradient(circle at 78% 58%, rgba(121, 40, 202, 0.68) 0, rgba(121, 40, 202, 0) 34%),
+    radial-gradient(circle at 45% 80%, rgba(255, 0, 128, 0.62) 0, rgba(255, 0, 128, 0) 34%),
+    radial-gradient(circle at 88% 90%, rgba(249, 203, 40, 0.74) 0, rgba(249, 203, 40, 0) 30%);
+  filter: blur(24px) saturate(112%);
+  opacity: 0.92;
+  transform: scale(1.12);
+}
+
+#overviewView .overview-flow {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  left: 51%;
+  width: min(520px, 92%);
+  transform: translate(-50%, -50%);
+  fill: rgba(255, 255, 255, 0.82);
+  stroke: rgba(23, 23, 23, 0.68);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#overviewView .overview-flow path {
+  fill: none;
+}
+
+#overviewView .overview-flow-label {
+  position: absolute;
+  z-index: 3;
+  border: 1px solid rgba(23, 23, 23, 0.14);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--geist-ink);
+  padding: 5px 8px;
+  font-family: "Geist Mono", monospace;
+  font-size: 9px;
+  font-weight: 500;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+}
+
+#overviewView .overview-flow-label.label-a { top: 45%; left: 7%; }
+#overviewView .overview-flow-label.label-b { top: 16%; left: 39%; }
+#overviewView .overview-flow-label.label-c { right: 6%; bottom: 19%; }
+
+#overviewView .overview-section-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 38px 0 16px;
+}
+
+#overviewView .overview-section-intro h2 {
+  color: var(--geist-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.4px;
+}
+
+#overviewView .overview-section-intro > p {
+  color: var(--geist-mute);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+#overviewView .kpi-grid {
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+#overviewView .kpi {
+  position: relative;
+  min-height: 158px;
+  border-radius: 12px;
+  padding: 20px;
+}
+
+#overviewView .kpi-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#overviewView .kpi-head span {
+  color: var(--geist-body);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.15px;
+}
+
+#overviewView .kpi-head svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--geist-accent);
+  stroke-width: 1.35;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#overviewView .kpi strong {
+  margin: 25px 0 5px;
+  color: var(--geist-ink);
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -1.4px;
+}
+
+#overviewView .kpi small {
+  color: var(--geist-mute);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+#overviewView .summary-grid,
+#overviewView .overview-grid {
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#overviewView .summary-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+#overviewView .overview-grid {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+}
+
+#overviewView .panel {
+  min-width: 0;
+  min-height: 320px;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+#overviewView .section-head {
+  min-height: 44px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--geist-hairline);
+}
+
+#overviewView .section-head h2 {
+  color: var(--geist-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.4px;
+}
+
+#overviewView .overview-panel-link {
+  min-height: 34px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#overviewView .overview-panel-link:hover {
+  border-color: #d6d6d6;
+  background: var(--geist-canvas);
+  color: var(--geist-accent);
+}
+
+#overviewView .overview-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+#overviewView .overview-live-indicator i {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--geist-accent);
+}
+
+#overviewView .status-mix,
+#overviewView .compact-list {
+  gap: 8px;
+  margin-top: 18px;
+}
+
+#overviewView .compact-item {
+  grid-template-columns: 62px minmax(0, 1fr) auto;
+  min-height: 62px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 9px 10px;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+#overviewView .compact-item[data-open-project] {
+  cursor: pointer;
+}
+
+#overviewView .compact-item[data-open-project]:hover {
+  border-color: #d5d5d5;
+  background: var(--geist-canvas);
+}
+
+#overviewView .compact-item h3 {
+  overflow: hidden;
+  color: var(--geist-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overviewView .compact-item small {
+  display: block;
+  overflow: hidden;
+  color: var(--geist-mute);
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overviewView .date-chip {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+  padding: 7px 8px;
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#overviewView .badge {
+  border: 1px solid var(--geist-hairline);
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#overviewView .badge.ok { color: var(--geist-accent); }
+#overviewView .badge.warn { color: #9a6700; }
+#overviewView .badge.danger { color: #ee0000; }
+
+#overviewView .status-row {
+  grid-template-columns: 96px minmax(0, 1fr) 38px;
+  min-height: 32px;
+  color: var(--geist-body);
+  font-size: 12px;
+}
+
+#overviewView .status-row strong {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overviewView .status-row small {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  text-align: right;
+}
+
+#overviewView .bar {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--geist-soft);
+}
+
+#overviewView .bar span {
+  background: var(--geist-accent);
+}
+
+#overviewView .empty {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #d9d9d9;
+  border-radius: 8px;
+  background: var(--geist-canvas);
+  color: var(--geist-mute);
+  font-size: 12px;
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .app-shell {
+    grid-template-columns: 210px minmax(0, 1fr);
+  }
+
+  body:has(.view.active:is(#overviewView, #projectsView, #worksView, #tasksView, #calendarView, #studioView, #boardView)) .main {
+    padding-inline: 24px;
+  }
+
+  #overviewView .hero-panel {
+    min-height: 330px;
+    padding: 38px;
+  }
+
+  #overviewView .overview-hero-copy h2 {
+    font-size: 42px;
+    line-height: 44px;
+    letter-spacing: -1.9px;
+  }
+
+  #overviewView .overview-hero-visual {
+    width: 49%;
+  }
+
+  #overviewView .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #overviewView .summary-grid,
+  #overviewView .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Compact inline work-task composer */
 #workDetail .task-add-card.is-collapsed .task-add-head,
 #workDetail .task-add-head { min-height: 58px; padding: 10px 12px; }
@@ -9739,5 +10386,1552 @@ h3 {
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+}
+
+/* Geist authentication surface */
+.auth-card {
+  position: relative;
+  gap: 18px;
+  width: min(440px, 100%);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 32px;
+  font-family: "Geist", "Inter", Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 48px -16px rgba(0, 0, 0, 0.38);
+}
+
+.auth-panel {
+  gap: 14px;
+}
+
+.auth-card .eyebrow {
+  margin-bottom: 8px;
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.auth-card h1 {
+  margin-bottom: 14px;
+  color: var(--geist-ink);
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 40px;
+  letter-spacing: -1.28px;
+}
+
+.auth-card input:not([type="hidden"]) {
+  min-height: 48px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  padding: 0 14px;
+  font-size: 14px;
+  box-shadow: none;
+  outline: none;
+}
+
+.auth-card input:not([type="hidden"])::placeholder {
+  color: var(--geist-faint);
+}
+
+.auth-card input:not([type="hidden"]):focus {
+  border-color: var(--geist-accent);
+  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.15);
+}
+
+.auth-actions {
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.auth-card .pill {
+  min-height: 44px;
+  border-radius: 6px;
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  text-transform: none;
+}
+
+.auth-card .pill.primary,
+.auth-card #loginBtn,
+.auth-card #createAccountBtn {
+  border: 1px solid var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+}
+
+.auth-card .pill.primary:hover,
+.auth-card #loginBtn:hover,
+.auth-card #createAccountBtn:hover {
+  border-color: #00cf57;
+  background: #00cf57;
+}
+
+.auth-card .pill.ghost {
+  border: 1px solid var(--geist-hairline);
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+}
+
+.auth-card .pill.ghost:hover {
+  border-color: #d6d6d6;
+  background: var(--geist-canvas);
+}
+
+.auth-position-field {
+  position: relative;
+}
+
+.auth-position-button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.auth-position-button:hover,
+.auth-position-button.open {
+  border-color: var(--geist-accent);
+  background: var(--geist-elevated);
+}
+
+.auth-position-button.open {
+  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.15);
+}
+
+.auth-position-button svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 160ms ease;
+}
+
+.auth-position-button.open svg {
+  transform: rotate(180deg);
+}
+
+.auth-position-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  display: none;
+  gap: 3px;
+  max-height: 224px;
+  overflow-y: auto;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  padding: 6px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.28);
+}
+
+.auth-position-menu.open {
+  display: grid;
+}
+
+.auth-position-menu button {
+  min-height: 40px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-body);
+  padding: 0 11px;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.auth-position-menu button:hover,
+.auth-position-menu button.selected {
+  background: var(--geist-accent-soft);
+  color: var(--geist-ink);
+}
+
+.auth-position-menu button.selected::after {
+  content: "✓";
+  float: right;
+  color: var(--geist-accent);
+  font-weight: 600;
+}
+
+#authMessage {
+  min-height: 16px;
+  color: #c50000;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+@media (max-width: 480px) {
+  .auth-overlay {
+    padding: 12px;
+  }
+
+  .auth-card {
+    padding: 24px 20px;
+  }
+
+  .auth-card h1 {
+    font-size: 28px;
+    line-height: 36px;
+  }
+}
+
+/* Geist video list */
+#projectsView {
+  width: min(1200px, 100%);
+  margin-inline: auto;
+  color: var(--geist-ink);
+}
+
+#projectsView .project-board {
+  overflow: visible;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  padding: 0;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+}
+
+#projectsView .project-board > .section-head {
+  min-height: 112px;
+  align-items: flex-end;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding: 24px;
+}
+
+#projectsView .project-board > .section-head h2 {
+  color: var(--geist-ink);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 32px;
+  letter-spacing: -0.8px;
+}
+
+#projectsView .project-board-description {
+  margin-top: 4px;
+  color: var(--geist-mute);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+#projectsView .section-head-actions {
+  gap: 8px;
+}
+
+#projectsView .overview-hide-done {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#projectsView .overview-hide-done:has(input:checked) {
+  color: var(--geist-ink);
+}
+
+#projectsView .overview-hide-done input {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  border-color: #c9c9c9;
+  background: var(--geist-elevated);
+}
+
+#projectsView .overview-hide-done input:checked {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+}
+
+#projectsView #addProjectBtn {
+  min-height: 40px;
+  border: 1px solid var(--geist-accent);
+  border-radius: 6px;
+  background: var(--geist-accent);
+  color: #06140a;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  text-transform: none;
+}
+
+#projectsView .project-tools {
+  position: relative;
+  grid-template-columns: minmax(240px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding: 16px 18px;
+}
+
+#projectsView .project-search-field {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  width: min(460px, 100%);
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  padding: 0 12px;
+}
+
+#projectsView .project-search-field:focus-within {
+  border-color: var(--geist-accent);
+  background: var(--geist-elevated);
+  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.15);
+}
+
+#projectsView .project-search-field svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--geist-mute);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+
+#projectsView #projectSearchInput {
+  min-width: 0;
+  min-height: 40px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--geist-ink);
+  padding: 0;
+  font-size: 13px;
+  box-shadow: none;
+  outline: none;
+}
+
+#projectsView #projectSearchInput::placeholder {
+  color: var(--geist-faint);
+}
+
+#projectsView #projectFilterBtn {
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 13px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#projectsView #projectFilterBtn:hover,
+#projectsView #projectFilterBtn[aria-expanded="true"] {
+  border-color: #d1d1d1;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+}
+
+#projectsView .project-filter-panel {
+  right: 18px;
+  top: 62px;
+  width: min(560px, calc(100vw - 64px));
+  gap: 8px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  padding: 10px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+}
+
+#projectsView .project-filter-panel .custom-select {
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  padding: 0 11px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#projectsView .project-head,
+#projectsView .project-row {
+  grid-template-columns: minmax(190px, 1.45fr) minmax(110px, .7fr) minmax(92px, .55fr) minmax(110px, .7fr) minmax(94px, .58fr) minmax(72px, .42fr) minmax(118px, .68fr) minmax(118px, .68fr);
+  gap: 14px;
+  min-width: 1080px;
+}
+
+#projectsView .project-head {
+  min-height: 44px;
+  border-top: 0;
+  border-bottom: 1px solid var(--geist-hairline);
+  background: var(--geist-canvas);
+  color: var(--geist-mute);
+  padding: 0 18px;
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+#projectsView .project-head button {
+  border-radius: 0;
+  color: var(--geist-mute);
+  padding: 0;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#projectsView .project-head button.active {
+  color: var(--geist-ink);
+}
+
+#projectsView .project-head button.active::after {
+  color: var(--geist-accent);
+}
+
+#projectsView .project-list {
+  overflow-x: auto;
+  border-radius: 0 0 12px 12px;
+}
+
+#projectsView .project-row {
+  min-height: 64px;
+  border-bottom: 1px solid var(--geist-hairline);
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 10px 18px;
+  font-size: 12px;
+  font-weight: 400;
+  transition: background 160ms ease;
+}
+
+#projectsView .project-row:last-child {
+  border-bottom: 0;
+}
+
+#projectsView .project-row:hover {
+  background: var(--geist-canvas);
+  transform: none;
+}
+
+#projectsView .project-title-cell {
+  overflow: hidden;
+  color: var(--geist-ink);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#projectsView .project-row span:not(.value-chip) {
+  color: var(--geist-body);
+}
+
+#projectsView .project-row .custom-select.compact,
+#projectsView .project-row .date-button.compact {
+  min-height: 32px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#projectsView .project-row .custom-select.compact.outline-cell {
+  border: 1px solid var(--geist-hairline);
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  box-shadow: none;
+}
+
+#projectsView .project-row .custom-select.compact.stage-0,
+#projectsView .project-row .custom-select.compact.stage-1,
+#projectsView .project-row .custom-select.compact.stage-2,
+#projectsView .project-row .custom-select.compact.stage-3,
+#projectsView .project-row .custom-select.compact.stage-4 {
+  border-color: var(--geist-hairline);
+  background: var(--geist-soft);
+  color: var(--geist-body);
+}
+
+#projectsView .project-row .custom-select.compact.stage-5 {
+  border-color: rgba(0, 237, 100, 0.3);
+  background: var(--geist-accent-soft);
+  color: #087231;
+}
+
+#projectsView .project-complete-check span {
+  border: 1px solid #c9c9c9;
+  border-radius: 5px;
+  background: var(--geist-elevated);
+}
+
+#projectsView .project-complete-check input:checked + span {
+  border-color: var(--geist-accent);
+  background-color: var(--geist-accent);
+}
+
+#projectsView .empty {
+  min-height: 180px;
+  display: grid;
+  place-items: center;
+  border-radius: 0 0 12px 12px;
+  background: var(--geist-elevated);
+  color: var(--geist-mute);
+  font-size: 12px;
+}
+
+@media (min-width: 769px) {
+  body:has(#projectsView.active) .dropdown-layer {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 6px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+  }
+
+  body:has(#projectsView.active) .dropdown-option {
+    min-height: 38px;
+    border-radius: 6px;
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#projectsView.active) .dropdown-option:hover,
+  body:has(#projectsView.active) .dropdown-option.selected {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#projectsView.active) .dropdown-option.selected i {
+    color: var(--geist-accent);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  #projectsView .project-board > .section-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  #projectsView .project-board-description {
+    max-width: 360px;
+  }
+
+  #projectsView .section-head-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Geist project calendar and detail surface */
+@media (min-width: 769px) {
+  body:has(#projectsView.active) .nav-item:focus-visible,
+  body:has(#projectsView.active) .topbar button:focus-visible,
+  #projectsView button:focus-visible,
+  #projectsView input:focus-visible,
+  #projectDetail button:focus-visible,
+  #projectDetail input:focus-visible,
+  #projectDetail textarea:focus-visible,
+  body:has(#projectsView.active) .date-picker-card button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #unsavedBasicModal.confirm-modal {
+    background: rgba(23, 23, 23, 0.42);
+    padding: 24px;
+    backdrop-filter: blur(6px);
+  }
+
+  #unsavedBasicModal .unsaved-basic-card {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 12px 16px;
+    width: min(520px, 100%);
+    border: 1px solid var(--geist-hairline);
+    border-radius: 16px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 28px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+  }
+
+  #unsavedBasicModal .unsaved-basic-icon {
+    width: 48px;
+    height: 48px;
+    border: 1px solid rgba(0, 237, 100, 0.28);
+    border-radius: 10px;
+    background: var(--geist-accent-soft);
+    color: #087231;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  #unsavedBasicModal .unsaved-basic-card h3 {
+    margin: 0 0 7px;
+    color: var(--geist-ink);
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 28px;
+    letter-spacing: -0.5px;
+  }
+
+  #unsavedBasicModal .unsaved-basic-card p {
+    color: var(--geist-body);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 20px;
+  }
+
+  #unsavedBasicModal .unsaved-basic-actions {
+    display: grid;
+    grid-template-columns: 1fr 1.35fr 1fr;
+    gap: 8px;
+    padding-top: 8px;
+  }
+
+  #unsavedBasicModal .unsaved-basic-actions .pill {
+    min-width: 0;
+    min-height: 42px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #unsavedBasicModal #unsavedBasicDiscardBtn {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #unsavedBasicModal #unsavedBasicSaveBtn {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+
+  #unsavedBasicModal .unsaved-basic-actions .pill:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  body:has(#projectsView.active) .date-picker-card {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 16px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+  }
+
+  body:has(#projectsView.active) .date-picker-top strong {
+    color: var(--geist-ink);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  body:has(#projectsView.active) .date-picker-top button {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  body:has(#projectsView.active) .date-picker-top button:hover {
+    border-color: #d3d3d3;
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#projectsView.active) .date-picker-weekdays {
+    margin: 16px 0 8px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  body:has(#projectsView.active) .date-picker-days {
+    gap: 4px;
+  }
+
+  body:has(#projectsView.active) .date-picker-days button {
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#projectsView.active) .date-picker-days button:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#projectsView.active) .date-picker-days button.muted {
+    color: #c5c5c5;
+  }
+
+  body:has(#projectsView.active) .date-picker-days button.today {
+    color: var(--geist-ink);
+    box-shadow: 0 0 0 1px #c9c9c9 inset;
+  }
+
+  body:has(#projectsView.active) .date-picker-days button.selected {
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+    font-weight: 600;
+  }
+
+  body:has(#projectsView.active) .date-picker-bottom {
+    margin-top: 12px;
+    border-top: 1px solid var(--geist-hairline);
+    padding-top: 12px;
+  }
+
+  body:has(#projectsView.active) .date-picker-bottom button {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#projectsView.active) .date-picker-bottom button:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#projectsView.active) .date-picker-bottom [data-date-today] {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+    font-weight: 600;
+  }
+
+  #projectDetail.detail-shell.open {
+    display: grid;
+    place-items: start center;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: rgba(23, 23, 23, 0.42);
+    padding: 24px;
+    backdrop-filter: blur(6px);
+  }
+
+  #projectDetail .detail-page {
+    width: min(1040px, calc(100vw - 48px));
+    min-height: min(720px, calc(100vh - 48px));
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    margin: 0;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 16px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 28px 32px 36px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+    animation: modalIn 180ms ease-out;
+  }
+
+  #projectDetail .detail-actions {
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  #projectDetail .detail-actions .pill {
+    min-height: 40px;
+    border-radius: 6px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #projectDetail #closeDetailBtn {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+  }
+
+  #projectDetail #saveProjectBasicBtn {
+    border: 1px solid var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+
+  #projectDetail #saveProjectBasicBtn:disabled {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-mute);
+  }
+
+  #projectDetail #deleteDetailBtn {
+    border: 1px solid #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+  }
+
+  #projectDetail .detail-title {
+    width: 100%;
+    min-height: 54px;
+    margin: 0 0 18px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--geist-ink);
+    padding: 0;
+    font-size: 36px;
+    font-weight: 600;
+    line-height: 44px;
+    letter-spacing: -1.5px;
+    box-shadow: none;
+  }
+
+  #projectDetail .detail-title::placeholder {
+    color: var(--geist-faint);
+  }
+
+  #projectDetail .detail-title:focus {
+    outline: none;
+  }
+
+  #projectDetail .detail-tabs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0 0 20px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-soft);
+    padding: 4px;
+    box-shadow: none;
+  }
+
+  #projectDetail .detail-tab {
+    min-height: 40px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-mute);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  #projectDetail .detail-tab:hover {
+    color: var(--geist-ink);
+  }
+
+  #projectDetail .detail-tab.active {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  }
+
+  #projectDetail .detail-properties {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    margin-top: 0;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    padding: 10px 16px;
+  }
+
+  #projectDetail .property-row {
+    min-height: 58px;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 12px;
+    border-bottom: 1px solid var(--geist-hairline);
+  }
+
+  #projectDetail .property-row:nth-last-child(-n + 2) {
+    border-bottom-color: transparent;
+  }
+
+  #projectDetail .readonly-notice {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 10px 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .property-label {
+    gap: 6px;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .property-label span {
+    width: 18px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+  }
+
+  #projectDetail .property-value {
+    color: var(--geist-ink);
+  }
+
+  #projectDetail .custom-select.compact,
+  #projectDetail .date-button.compact,
+  #projectDetail .notion-input {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #projectDetail .custom-select.compact:hover,
+  #projectDetail .date-button.compact:hover,
+  #projectDetail .notion-input:focus {
+    border-color: #d1d1d1;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+  }
+
+  #projectDetail .custom-select.compact[class*="stage-"] {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-body);
+  }
+
+  #projectDetail .custom-select.compact.stage-5 {
+    border-color: rgba(0, 237, 100, 0.3);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #projectDetail .date-field-control {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  #projectDetail .calendar-toggle,
+  #projectDetail .project-broadcast-toggle {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #projectDetail .calendar-toggle:has(input:checked),
+  #projectDetail .project-broadcast-toggle:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #projectDetail .calendar-toggle input,
+  #projectDetail .project-broadcast-toggle input[type="checkbox"] {
+    appearance: none;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+    box-shadow: none;
+  }
+
+  #projectDetail .calendar-toggle input:checked,
+  #projectDetail .project-broadcast-toggle input[type="checkbox"]:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+  }
+
+  #projectDetail .owner-chip {
+    border-radius: 6px;
+    background: var(--geist-soft);
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .owner-chip.selected {
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #projectDetail .memo-toolbar {
+    gap: 3px;
+    margin-top: 16px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-soft);
+    padding: 5px;
+    box-shadow: none;
+  }
+
+  #projectDetail .memo-toolbar button {
+    min-height: 34px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-mute);
+    padding: 0 9px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .memo-toolbar button:hover,
+  #projectDetail .memo-toolbar button.active {
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 0 0 1px var(--geist-hairline) inset;
+  }
+
+  #projectDetail #detailMemo {
+    min-height: 190px;
+    margin-top: 10px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.65;
+    box-shadow: none;
+  }
+
+  #projectDetail #detailMemo:focus {
+    border-color: var(--geist-accent);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+  }
+
+  #projectDetail .records-head {
+    margin-bottom: 14px;
+  }
+
+  #projectDetail .records-head span {
+    color: var(--geist-accent);
+  }
+
+  #projectDetail .records-head h2 {
+    color: var(--geist-ink);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+  }
+
+  #projectDetail .record-composer,
+  #projectDetail .record-card,
+  #projectDetail .task-add-card {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+
+  #projectDetail .record-input,
+  #projectDetail .task-title-input,
+  #projectDetail .task-detail-field textarea,
+  #projectDetail .task-field .date-button,
+  #projectDetail .task-field .time-button,
+  #projectDetail .task-field .custom-select {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+
+  #projectDetail .record-input:focus,
+  #projectDetail .task-title-input:focus,
+  #projectDetail .task-detail-field textarea:focus {
+    border-color: var(--geist-accent);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+  }
+
+  #projectDetail .record-actions span,
+  #projectDetail .record-meta time,
+  #projectDetail .task-add-title small {
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .record-card p,
+  #projectDetail .task-detail-text {
+    color: var(--geist-body);
+    font-weight: 400;
+  }
+
+  #projectDetail .record-control {
+    min-height: 34px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .record-control:hover,
+  #projectDetail .record-control.active {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #projectDetail .record-control.danger {
+    border-color: #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+  }
+
+  #projectDetail .task-add-head {
+    padding: 16px;
+  }
+
+  #projectDetail .task-add-head:hover {
+    background: var(--geist-canvas);
+  }
+
+  #projectDetail .task-add-icon {
+    border-radius: 8px;
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+  }
+
+  #projectDetail .task-add-title h3,
+  #projectDetail .task-field > span {
+    color: var(--geist-ink);
+  }
+
+  #projectDetail .project-task-composer.task-composer-expanded {
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+  }
+
+  #projectDetail .task-form-grid,
+  #projectDetail .task-option-row {
+    border-color: var(--geist-hairline);
+  }
+
+  #projectDetail .task-form-column + .task-form-column {
+    border-left-color: var(--geist-hairline);
+  }
+
+  #projectDetail .task-type-chip,
+  #projectDetail .task-type-chip[class*="type-"] {
+    min-height: 34px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 11px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #projectDetail .task-type-chip.active,
+  #projectDetail .task-type-chip:hover {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+    box-shadow: none;
+  }
+
+  #projectDetail .pill.primary,
+  #projectDetail .task-form-footer .pill.primary {
+    border: 1px solid var(--geist-accent);
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+  }
+
+  #projectDetail .task-list {
+    gap: 10px;
+  }
+
+  #projectDetail .task-row {
+    min-height: 84px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    padding: 14px 16px;
+  }
+
+  #projectDetail .task-main {
+    cursor: pointer;
+  }
+
+  #projectDetail .task-main h3 {
+    color: var(--geist-ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+
+  #projectDetail .task-main small {
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #projectDetail .task-main input[type="checkbox"] {
+    appearance: none;
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    border: 1px solid #bfbfbf;
+    border-radius: 5px;
+    background: var(--geist-elevated);
+    cursor: pointer;
+  }
+
+  #projectDetail .task-main input[type="checkbox"]:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;
+  }
+
+  #projectDetail .task-row-actions {
+    gap: 8px;
+  }
+
+  #projectDetail .task-row-actions .record-control,
+  #projectDetail .task-row-actions .delete-btn {
+    min-height: 36px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  #projectDetail .task-row-actions .record-control {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 0 12px;
+  }
+
+  #projectDetail .task-row-actions .delete-btn {
+    width: 36px;
+    height: 36px;
+    border: 1px solid #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+  }
+
+  #projectDetail .task-row-actions .badge {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 999px;
+    background: var(--geist-soft);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #projectDetail .task-row-actions .badge.ok {
+    border-color: #9aebba;
+    background: #dffbea;
+    color: #087231;
+  }
+
+  #projectDetail .task-row-actions .badge.warn {
+    border-color: #f1cf70;
+    background: #fff3cd;
+    color: #855b00;
+  }
+
+  #projectDetail .task-row-actions .badge.danger {
+    border-color: #ffbcbc;
+    background: #ffe8e8;
+    color: #c50000;
+  }
+
+  #projectDetail .task-main input:not(:disabled),
+  #projectDetail .task-row-actions button:not(:disabled) {
+    pointer-events: auto;
+  }
+
+  #projectDetail .records-section .empty {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 960px) {
+  #projectDetail .detail-properties {
+    grid-template-columns: 1fr;
+  }
+
+  #projectDetail .property-row:nth-last-child(-n + 2) {
+    border-bottom-color: var(--geist-hairline);
+  }
+
+  #projectDetail .property-row:last-child {
+    border-bottom-color: transparent;
+  }
+}
+
+/* Geist destructive confirmation surface */
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal).confirm-modal {
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-card {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px 16px;
+  width: min(500px, 100%);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 28px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid #ffd2d2;
+  border-radius: 10px;
+  background: #fff1f1;
+  color: #c50000;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-card h3 {
+  margin: 0 0 7px;
+  color: var(--geist-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.5px;
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-card p {
+  margin: 0;
+  color: var(--geist-body);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 8px;
+}
+
+:is(#repeatDeleteModal, #notificationClearModal) .confirm-actions.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-actions .pill {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  text-transform: none;
+  box-shadow: none;
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-actions .danger-pill {
+  border-color: #ee0000;
+  background: #ee0000;
+  color: #ffffff;
+}
+
+:is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-actions .pill:focus-visible {
+  outline: 2px solid rgba(238, 0, 0, 0.28);
+  outline-offset: 2px;
+}
+
+/* Geist time picker */
+#timePickerLayer .time-picker-card {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 16px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+}
+
+#timePickerLayer .time-picker-heading {
+  padding: 0 2px 4px;
+}
+
+#timePickerLayer .time-picker-heading strong {
+  color: var(--geist-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+#timePickerLayer .time-picker-heading small {
+  color: var(--geist-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#timePickerLayer .time-picker-columns {
+  gap: 6px;
+}
+
+#timePickerLayer .time-picker-column {
+  gap: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d4 transparent;
+}
+
+#timePickerLayer .time-picker-column button {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-body);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#timePickerLayer .time-picker-column button:hover {
+  border-color: var(--geist-hairline);
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+#timePickerLayer .time-picker-column button.selected {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+  font-weight: 600;
+}
+
+#timePickerLayer .time-picker-actions {
+  border-top: 1px solid var(--geist-hairline);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+#timePickerLayer .time-picker-actions button {
+  min-height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#timePickerLayer .time-picker-actions [data-time-apply] {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+}
+
+@media (max-width: 640px) {
+  :is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal).confirm-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  :is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-card {
+    grid-template-columns: 40px minmax(0, 1fr);
+    width: 100%;
+    padding: 22px 18px 18px;
+  }
+
+  :is(#deleteConfirmModal, #repeatDeleteModal, #notificationClearModal) .confirm-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  :is(#repeatDeleteModal, #notificationClearModal) .confirm-actions.three {
+    grid-template-columns: 1fr;
   }
 }

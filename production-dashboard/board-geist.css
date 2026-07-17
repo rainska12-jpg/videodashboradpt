@@ -1,0 +1,896 @@
+/* Geist board surface — presentation only; post/comment data and permissions stay intact. */
+@media (min-width: 769px) {
+  #boardView {
+    width: min(1200px, 100%);
+    margin-inline: auto;
+    color: var(--geist-ink);
+  }
+
+  #boardView button:focus-visible,
+  #boardView input:focus-visible,
+  #boardView select:focus-visible,
+  #boardView [contenteditable="true"]:focus-visible,
+  .board-viewer-modal button:focus-visible,
+  body:has(#boardView.active) .date-picker-card button:focus-visible,
+  body:has(#boardView.active) .nav-item:focus-visible,
+  body:has(#boardView.active) .topbar button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #boardView .board-root,
+  #boardView .board-page,
+  #boardView .board-editor-shell,
+  #boardView .board-detail-shell {
+    gap: 0;
+  }
+
+  #boardView .board-page,
+  #boardView .board-editor-card,
+  #boardView .board-detail-card {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+  }
+
+  #boardView .board-page {
+    grid-template-rows: 96px 68px 54px minmax(240px, 1fr);
+    align-content: start;
+    min-height: 520px;
+  }
+
+  #boardView .board-head.board-head-compact {
+    display: flex;
+    min-height: 0;
+    height: 96px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 20px 24px;
+  }
+
+  #boardView .board-head-copy {
+    display: grid;
+    gap: 0;
+  }
+
+  #boardView .board-head-copy .eyebrow,
+  #boardView .board-editor-heading .eyebrow {
+    margin: 0 0 5px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #boardView .board-editor-heading h2 {
+    margin: 0;
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  #boardView .board-head-copy > p:last-child,
+  #boardView .board-editor-heading > p:last-child {
+    margin: 4px 0 0;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #boardView .board-head .pill.primary {
+    min-height: 40px;
+    border: 1px solid var(--geist-accent);
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    padding: 0 15px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #boardView .board-toolbar {
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) 140px 140px 140px;
+    min-height: 0;
+    height: 68px;
+    align-items: center;
+    gap: 8px;
+    border: 0;
+    border-bottom: 1px solid var(--geist-hairline);
+    border-radius: 0;
+    background: var(--geist-canvas);
+    padding: 14px 18px;
+  }
+
+  #boardView .board-toolbar input,
+  #boardView .board-toolbar select,
+  #boardView .board-editor-card input,
+  #boardView .board-editor-card select,
+  #boardView .board-comment-form input,
+  #boardView .board-comment-edit-form input,
+  #boardView .board-reply-form input {
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 0 12px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 400;
+    box-shadow: none;
+    outline: none;
+  }
+
+  #boardView .board-toolbar input {
+    background: var(--geist-elevated) url("data:image/svg+xml,%3Csvg viewBox='0 0 24 24' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='11' cy='11' r='6' fill='none' stroke='%238f8f8f' stroke-width='1.7'/%3E%3Cpath d='m16 16 4 4' fill='none' stroke='%238f8f8f' stroke-width='1.7' stroke-linecap='round'/%3E%3C/svg%3E") 11px center/17px no-repeat;
+    padding-left: 38px;
+  }
+
+  #boardView .board-toolbar input::placeholder,
+  #boardView .board-editor-card input::placeholder,
+  #boardView .board-comment-form input::placeholder,
+  #boardView .board-comment-edit-form input::placeholder,
+  #boardView .board-reply-form input::placeholder {
+    color: var(--geist-faint);
+  }
+
+  #boardView .board-toolbar input:focus,
+  #boardView .board-toolbar select:focus,
+  #boardView .board-editor-card input:focus,
+  #boardView .board-editor-card select:focus,
+  #boardView .board-comment-form input:focus,
+  #boardView .board-comment-edit-form input:focus,
+  #boardView .board-reply-form input:focus {
+    border-color: var(--geist-accent);
+    background-color: var(--geist-elevated);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.1);
+  }
+
+  #boardView .board-tabs {
+    display: flex;
+    min-height: 0;
+    height: 54px;
+    align-items: center;
+    gap: 5px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 10px 18px;
+  }
+
+  #boardView .board-tabs button {
+    min-height: 34px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #boardView .board-tabs button:hover {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #boardView .board-tabs button.active {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+    box-shadow: none;
+  }
+
+  #boardView .board-table {
+    overflow: hidden;
+    align-self: stretch;
+    border: 0;
+    border-radius: 0;
+    background: var(--geist-elevated);
+  }
+
+  #boardView .board-table-head,
+  #boardView .board-table-row {
+    grid-template-columns: 66px 98px minmax(240px, 1fr) 120px 110px 58px 58px;
+    gap: 10px;
+    min-height: 48px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 0 16px;
+  }
+
+  #boardView .board-table-head {
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+
+  #boardView .board-table-row {
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  #boardView .board-table-row:hover {
+    background: #fcfcfc;
+  }
+
+  #boardView .board-table-row.notice {
+    background: #f7fff9;
+  }
+
+  #boardView .board-table-row.notice:hover {
+    background: var(--geist-accent-soft);
+  }
+
+  #boardView .board-table-row strong {
+    gap: 7px;
+    overflow: hidden;
+    color: var(--geist-ink);
+    font-size: 12px;
+    font-weight: 500;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #boardView .board-table-row.notice strong {
+    font-weight: 600;
+  }
+
+  #boardView .board-table-row strong em {
+    flex: 0 0 auto;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #boardView .board-notice-chip,
+  #boardView .board-prefix-chip {
+    min-width: 0;
+    min-height: 24px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 5px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 7px;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 500;
+  }
+
+  #boardView .board-notice-chip {
+    border-color: rgba(0, 237, 100, 0.3);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #boardView .board-table .empty {
+    height: 100%;
+    min-height: 220px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 0;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  /* Post editor */
+  #boardView .board-editor-card {
+    display: grid;
+    gap: 18px;
+    padding: 0 24px 24px;
+  }
+
+  #boardView .board-editor-heading {
+    min-height: 112px;
+    display: grid;
+    align-content: end;
+    margin: 0 -24px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 22px 24px;
+  }
+
+  #boardView .board-editor-footer {
+    position: static;
+    inset: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-top: 16px;
+    border-top: 1px solid var(--geist-hairline);
+  }
+
+  #boardView .board-editor-footer > div {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
+  #boardView .board-editor-top .pill,
+  #boardView .board-list-back,
+  #boardView .board-detail-top .record-control,
+  #boardView .board-detail-top .delete-btn {
+    min-width: auto;
+    min-height: 38px;
+    height: 38px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #boardView .board-editor-top .pill:hover,
+  #boardView .board-list-back:hover,
+  #boardView .board-detail-top .record-control:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #boardView .board-editor-top .pill.primary {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+
+  #boardView .board-detail-top .delete-btn {
+    border-color: #ffd4d4;
+    background: #fff3f3;
+    color: #c50000;
+  }
+
+  #boardView .board-editor-meta {
+    gap: 12px;
+  }
+
+  #boardView .board-prefix-field {
+    width: min(100%, 240px);
+  }
+
+  #boardView .board-title-line {
+    grid-template-columns: minmax(300px, 1fr) max-content;
+    gap: 10px;
+  }
+
+  #boardView .board-editor-meta label,
+  #boardView .board-notice-options label {
+    gap: 7px;
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #boardView .board-notice-options {
+    min-height: 40px;
+    gap: 8px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 9px;
+  }
+
+  #boardView .board-notice-options.open {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    padding: 0 9px;
+  }
+
+  #boardView .board-notice-options .board-check {
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #boardView .board-check span {
+    width: 16px;
+    height: 16px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+  }
+
+  #boardView .board-check input:checked + span {
+    border-color: var(--geist-accent);
+    background-color: var(--geist-accent);
+    background-size: 13px;
+  }
+
+  #boardView .board-notice-extra {
+    gap: 8px;
+  }
+
+  #boardView .board-notice-extra select {
+    width: 112px;
+    min-width: 112px;
+  }
+
+  #boardView .board-notice-date-button.date-button.compact {
+    width: 142px;
+    min-width: 142px;
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #boardView .board-rich-editor {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 8px;
+    background: var(--geist-elevated);
+  }
+
+  #boardView .board-rich-toolbar {
+    gap: 4px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    padding: 8px;
+  }
+
+  #boardView .board-rich-toolbar button {
+    min-width: 36px;
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--geist-body);
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #boardView .board-rich-toolbar button:hover {
+    border-color: var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+  }
+
+  #boardView .board-content-editor {
+    min-height: 340px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 20px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.7;
+  }
+
+  #boardView .board-content-editor:focus {
+    box-shadow: 0 0 0 2px rgba(0, 237, 100, 0.22) inset;
+  }
+
+  /* Post detail and comments */
+  #boardView .board-detail-card {
+    gap: 0;
+    padding: 0;
+  }
+
+  #boardView .board-detail-top {
+    min-height: 64px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    padding: 12px 18px;
+  }
+
+  #boardView .board-detail-top > div {
+    gap: 6px;
+  }
+
+  #boardView .board-detail-card > header {
+    gap: 7px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 24px;
+  }
+
+  #boardView .board-detail-category > span:not(.board-notice-chip) {
+    display: inline-grid;
+    min-height: 24px;
+    place-items: center;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 5px;
+    background: var(--geist-soft);
+    color: var(--geist-body);
+    padding: 0 8px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #boardView .board-detail-card header h2 {
+    margin: 3px 0 0;
+    color: var(--geist-ink);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 36px;
+    letter-spacing: -1px;
+  }
+
+  #boardView .board-detail-card header p,
+  #boardView .board-detail-card header small {
+    margin: 0;
+    color: var(--geist-mute);
+    font-size: 11px;
+    font-weight: 400;
+  }
+
+  #boardView .board-detail-card header button {
+    background: transparent;
+    color: #087231;
+    font-size: inherit;
+    font-weight: 600;
+  }
+
+  #boardView .board-detail-content {
+    min-height: 220px;
+    border: 0;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 28px 24px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.75;
+  }
+
+  #boardView .board-detail-content h1,
+  #boardView .board-detail-content h2,
+  #boardView .board-detail-content h3 {
+    color: var(--geist-ink);
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  #boardView .board-comments {
+    gap: 8px;
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    padding: 22px 24px 24px;
+  }
+
+  #boardView .board-comments > h3 {
+    margin: 0 0 4px;
+    color: var(--geist-ink);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.35px;
+  }
+
+  #boardView .board-comments article,
+  #boardView .board-viewer-list span {
+    gap: 8px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 8px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 13px;
+  }
+
+  #boardView .board-comments article > p {
+    margin: 0;
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.6;
+  }
+
+  #boardView .board-comment-identity strong {
+    color: var(--geist-ink);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #boardView .board-comment-identity small {
+    color: var(--geist-mute);
+    font-size: 10px;
+    font-weight: 400;
+  }
+
+  #boardView .board-comments .board-comment-actions button,
+  #boardView .board-comments .board-reply-form .record-control,
+  #boardView .board-comment-edit-form .record-control {
+    min-width: auto;
+    min-height: 30px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 5px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 9px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #boardView .board-comments .board-comment-actions button:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #boardView .board-comments .board-comment-actions button:last-child[data-board-delete-comment] {
+    border-color: #ffd4d4;
+    background: #fff3f3;
+    color: #c50000;
+  }
+
+  #boardView .board-reply-list {
+    gap: 7px !important;
+    margin-left: 20px;
+    border-left: 2px solid rgba(0, 237, 100, 0.26);
+    padding-left: 10px;
+  }
+
+  #boardView .board-comments .board-comment-reply {
+    background: #fcfcfc;
+  }
+
+  #boardView .board-comment-form,
+  #boardView .board-comment-edit-form,
+  #boardView .board-reply-form {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 6px;
+  }
+
+  #boardView .board-comment-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 4px;
+  }
+
+  #boardView .board-comment-form .pill.primary,
+  #boardView .board-comment-edit-form .pill.primary,
+  #boardView .board-reply-form .pill.primary {
+    min-height: 40px;
+    border: 1px solid var(--geist-accent);
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    padding: 0 13px;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: none;
+  }
+
+  #boardView .board-comments .empty {
+    border: 1px dashed var(--geist-hairline);
+    border-radius: 8px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    padding: 22px;
+    font-size: 11px;
+    font-weight: 400;
+  }
+}
+
+/* Viewer popup uses the same restrained modal language. */
+.board-viewer-modal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+.board-viewer-modal .board-viewer-card {
+  gap: 16px;
+  width: min(480px, 100%);
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 24px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+.board-viewer-modal .section-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding-bottom: 14px;
+}
+
+.board-viewer-modal .section-head .eyebrow {
+  margin: 0 0 4px;
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.board-viewer-modal .section-head h3 {
+  margin: 0;
+  color: var(--geist-ink);
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.45px;
+}
+
+.board-viewer-modal .section-head .record-control {
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.board-viewer-modal .board-viewer-list {
+  gap: 7px;
+}
+
+.board-viewer-modal .board-viewer-list span {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 7px;
+  background: var(--geist-canvas);
+  color: var(--geist-ink);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.board-viewer-modal .board-viewer-list small {
+  color: var(--geist-mute);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.board-viewer-modal .empty {
+  border: 1px dashed var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-canvas);
+  color: var(--geist-mute);
+  padding: 24px;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* Board notice date picker. */
+body:has(#boardView.active) .date-picker-card {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 16px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+}
+
+body:has(#boardView.active) .date-picker-top strong {
+  color: var(--geist-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+body:has(#boardView.active) .date-picker-top button,
+body:has(#boardView.active) .date-picker-bottom button {
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#boardView.active) .date-picker-top button {
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+}
+
+body:has(#boardView.active) .date-picker-weekdays {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+body:has(#boardView.active) .date-picker-days {
+  gap: 4px;
+}
+
+body:has(#boardView.active) .date-picker-days button {
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#boardView.active) .date-picker-days button:hover,
+body:has(#boardView.active) .date-picker-top button:hover {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+body:has(#boardView.active) .date-picker-days button.muted {
+  color: #c5c5c5;
+}
+
+body:has(#boardView.active) .date-picker-days button.today {
+  box-shadow: 0 0 0 1px #c9c9c9 inset;
+}
+
+body:has(#boardView.active) .date-picker-days button.selected,
+body:has(#boardView.active) .date-picker-bottom [data-date-today] {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+body:has(#boardView.active) .date-picker-bottom {
+  margin-top: 12px;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 12px;
+}
+
+@media (max-width: 1080px) and (min-width: 769px) {
+  #boardView .board-toolbar {
+    grid-template-columns: minmax(220px, 1fr) repeat(3, 120px);
+  }
+
+  #boardView .board-table {
+    overflow-x: auto;
+  }
+
+  #boardView .board-table-head,
+  #boardView .board-table-row {
+    min-width: 900px;
+  }
+
+  #boardView .board-title-line {
+    grid-template-columns: 1fr;
+  }
+
+  #boardView .board-notice-options {
+    justify-self: start;
+  }
+}
+
+@media (max-width: 768px) {
+  .board-viewer-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  .board-viewer-modal .board-viewer-card {
+    width: 100%;
+    max-height: min(80dvh, 640px);
+    border-radius: 16px;
+    padding: 20px 16px;
+  }
+}

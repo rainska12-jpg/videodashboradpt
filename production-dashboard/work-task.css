@@ -74,6 +74,88 @@ body.picker-scroll-locked { overflow: hidden; overscroll-behavior: none; }
 #projectDetail .task-detail-field textarea { min-height: 60px; max-height: 96px; border-radius: 9px; padding: 9px 10px; font-size: 13px; }
 #projectDetail .task-form-footer { gap: 7px; padding-top: 0; }
 #projectDetail .task-form-footer .pill { min-height: 38px; padding: 7px 16px; font-size: 12px; }
+#projectDetail .task-add-card.is-collapsed .project-task-composer { display: none !important; }
+
+@media (min-width: 769px) {
+  #projectDetail .record-composer.task-add-card {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+  }
+
+  #projectDetail .task-add-title { gap: 12px; }
+  #projectDetail .task-add-icon {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  #projectDetail .task-add-title h3 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: -0.4px;
+  }
+  #projectDetail .task-add-title small {
+    margin-top: 3px;
+    color: var(--geist-mute);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #projectDetail .project-task-primary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3.2fr) minmax(220px, 1fr);
+    gap: 8px;
+    align-items: end;
+  }
+
+  #projectDetail .project-task-schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+
+  #projectDetail .project-task-date-stack {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  #projectDetail .task-title-field { padding: 0; }
+  #projectDetail .task-due-field.is-disabled,
+  #projectDetail .task-time-field.is-disabled {
+    display: grid;
+    opacity: 1;
+  }
+  #projectDetail .task-due-field.is-disabled .date-button,
+  #projectDetail .task-time-field.is-disabled .time-button,
+  #projectDetail .task-time-field .time-button:disabled {
+    border-style: solid;
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-faint);
+    box-shadow: none;
+  }
+  #projectDetail .task-time-range {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+  }
+  #projectDetail .task-time-range > div { min-width: 0; }
+  #projectDetail .task-time-range > span {
+    color: var(--geist-mute);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+}
 @media (max-width: 768px) {
   #projectDetail.detail-shell.open,
   #workDetail.detail-shell.open {

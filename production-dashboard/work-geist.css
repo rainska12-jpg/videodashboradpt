@@ -1,0 +1,1528 @@
+/* Geist work surface — presentation only; existing work data bindings stay intact. */
+@media (min-width: 769px) {
+  body:has(#worksView.active) .nav-item:focus-visible,
+  body:has(#worksView.active) .topbar button:focus-visible,
+  #worksView button:focus-visible,
+  #worksView input:focus-visible,
+  #workDetail button:focus-visible,
+  #workDetail input:focus-visible,
+  #workDetail textarea:focus-visible,
+  body:has(#worksView.active) .date-picker-card button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #worksView {
+    width: min(1200px, 100%);
+    margin-inline: auto;
+    color: var(--geist-ink);
+  }
+
+  #worksView .project-board {
+    overflow: visible;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    padding: 0;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+  }
+
+  #worksView .project-board > .section-head {
+    min-height: 112px;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 24px;
+  }
+
+  #worksView .project-board > .section-head h2 {
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  #worksView .project-board-description {
+    margin-top: 4px;
+    color: var(--geist-mute);
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  #worksView .section-head-actions {
+    gap: 8px;
+  }
+
+  #worksView .overview-hide-done {
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #worksView .overview-hide-done:has(input:checked) {
+    color: var(--geist-ink);
+  }
+
+  #worksView .overview-hide-done input {
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border-color: #c9c9c9;
+    background: var(--geist-elevated);
+  }
+
+  #worksView .overview-hide-done input:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+  }
+
+  #worksView #addWorkBtn {
+    min-height: 40px;
+    border: 1px solid var(--geist-accent);
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #worksView .project-tools {
+    grid-template-columns: minmax(240px, 1fr);
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 16px 18px;
+  }
+
+  #worksView .project-search-field {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    width: min(460px, 100%);
+    min-height: 42px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-canvas);
+    padding: 0 12px;
+  }
+
+  #worksView .project-search-field:focus-within {
+    border-color: var(--geist-accent);
+    background: var(--geist-elevated);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.15);
+  }
+
+  #worksView .project-search-field svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: var(--geist-mute);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  #worksView #workSearchInput {
+    min-width: 0;
+    min-height: 40px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--geist-ink);
+    padding: 0;
+    font-size: 13px;
+    box-shadow: none;
+    outline: none;
+  }
+
+  #worksView #workSearchInput::placeholder {
+    color: var(--geist-faint);
+  }
+
+  #worksView .work-head,
+  #worksView .work-row {
+    grid-template-columns: minmax(170px, 1.25fr) minmax(120px, .75fr) minmax(96px, .55fr) minmax(110px, .65fr) minmax(96px, .55fr) minmax(78px, .45fr) minmax(108px, .6fr) minmax(108px, .6fr);
+    gap: 10px;
+    min-width: 1040px;
+  }
+
+  #worksView .project-head {
+    min-height: 44px;
+    border-top: 0;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    padding: 0 18px;
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  #worksView .project-head button {
+    border-radius: 0;
+    color: var(--geist-mute);
+    padding: 0;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #worksView .project-head button.active {
+    color: var(--geist-ink);
+  }
+
+  #worksView .project-head button.active::after {
+    color: var(--geist-accent);
+  }
+
+  #worksView .project-list {
+    overflow-x: auto;
+    border-radius: 0 0 12px 12px;
+  }
+
+  #worksView .work-row {
+    min-height: 64px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 10px 18px;
+    font-size: 12px;
+    font-weight: 400;
+    transition: background 160ms ease;
+  }
+
+  #worksView .work-row:last-child {
+    border-bottom: 0;
+  }
+
+  #worksView .work-row:hover {
+    background: var(--geist-canvas);
+    transform: none;
+  }
+
+  #worksView .project-title-cell {
+    overflow: hidden;
+    color: var(--geist-ink);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 20px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #worksView .work-row .custom-select.compact,
+  #worksView .work-row .date-button.compact {
+    min-height: 32px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #worksView .work-row .custom-select.compact[class*="stage-"],
+  #worksView .work-row .custom-select.compact.outline-cell {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-body);
+    box-shadow: none;
+  }
+
+  #worksView .mini-toggle {
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #worksView .mini-toggle input {
+    appearance: none;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+  }
+
+  #worksView .mini-toggle input:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px no-repeat;
+  }
+
+  #worksView .empty {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    border-radius: 0 0 12px 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    font-size: 12px;
+  }
+
+  body:has(#worksView.active) .dropdown-layer {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 6px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+  }
+
+  body:has(#worksView.active) .dropdown-option {
+    min-height: 38px;
+    border-radius: 6px;
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#worksView.active) .dropdown-option:hover,
+  body:has(#worksView.active) .dropdown-option.selected {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#worksView.active) .dropdown-option.selected i {
+    color: var(--geist-accent);
+  }
+
+  body:has(#worksView.active) .date-picker-card {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 16px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+  }
+
+  body:has(#worksView.active) .date-picker-top strong {
+    color: var(--geist-ink);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+  }
+
+  body:has(#worksView.active) .date-picker-top button {
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  body:has(#worksView.active) .date-picker-top button:hover,
+  body:has(#worksView.active) .date-picker-days button:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#worksView.active) .date-picker-weekdays {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  body:has(#worksView.active) .date-picker-days {
+    gap: 4px;
+  }
+
+  body:has(#worksView.active) .date-picker-days button {
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#worksView.active) .date-picker-days button.muted {
+    color: #c5c5c5;
+  }
+
+  body:has(#worksView.active) .date-picker-days button.today {
+    color: var(--geist-ink);
+    box-shadow: 0 0 0 1px #c9c9c9 inset;
+  }
+
+  body:has(#worksView.active) .date-picker-days button.selected {
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+    font-weight: 600;
+  }
+
+  body:has(#worksView.active) .date-picker-bottom {
+    margin-top: 12px;
+    border-top: 1px solid var(--geist-hairline);
+    padding-top: 12px;
+  }
+
+  body:has(#worksView.active) .date-picker-bottom button {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#worksView.active) .date-picker-bottom [data-date-today] {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+    font-weight: 600;
+  }
+
+  #workDetail.detail-shell.open {
+    display: grid;
+    place-items: start center;
+    overflow: auto;
+    overscroll-behavior: contain;
+    background: rgba(23, 23, 23, 0.42);
+    padding: 24px;
+    backdrop-filter: blur(6px);
+  }
+
+  #workDetail .detail-page {
+    width: min(1080px, calc(100vw - 48px));
+    min-height: min(720px, calc(100vh - 48px));
+    max-height: calc(100vh - 48px);
+    overflow: auto;
+    margin: 0;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 16px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 28px 32px 36px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+    animation: modalIn 180ms ease-out;
+  }
+
+  #workDetail .detail-actions {
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  #workDetail .detail-actions .pill {
+    min-height: 40px;
+    border-radius: 6px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    text-transform: none;
+    box-shadow: none;
+  }
+
+  #workDetail #closeWorkDetailBtn {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+  }
+
+  #workDetail #saveWorkBasicBtn {
+    border: 1px solid var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+
+  #workDetail #saveWorkBasicBtn:disabled {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-mute);
+  }
+
+  #workDetail #deleteWorkDetailBtn {
+    border: 1px solid #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+  }
+
+  #workDetail .detail-title {
+    width: 100%;
+    min-height: 54px;
+    margin: 0 0 18px;
+    border: 0;
+    background: transparent;
+    color: var(--geist-ink);
+    padding: 0;
+    font-size: 36px;
+    font-weight: 600;
+    line-height: 44px;
+    letter-spacing: -1.5px;
+    box-shadow: none;
+  }
+
+  #workDetail .detail-title::placeholder {
+    color: var(--geist-faint);
+  }
+
+  #workDetail .detail-tabs {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    margin: 0 0 20px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-soft);
+    padding: 4px;
+    box-shadow: none;
+  }
+
+  #workDetail .detail-tab {
+    min-height: 40px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-mute);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  #workDetail .detail-tab.active {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  }
+
+  #workDetail .detail-properties {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 24px;
+    margin-top: 0;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    padding: 10px 16px;
+  }
+
+  #workDetail .property-row {
+    min-height: 58px;
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 12px;
+    border-bottom: 1px solid var(--geist-hairline);
+  }
+
+  #workDetail .property-row:nth-last-child(-n + 2) {
+    border-bottom-color: transparent;
+  }
+
+  #workDetail .property-label {
+    gap: 6px;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .property-label span {
+    width: 18px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 11px;
+  }
+
+  #workDetail .property-value {
+    color: var(--geist-ink);
+  }
+
+  #workDetail .custom-select.compact,
+  #workDetail .date-button.compact,
+  #workDetail .notion-input {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #workDetail .custom-select.compact[class*="stage-"] {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-body);
+  }
+
+  #workDetail .date-field-control {
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+
+  #workDetail .calendar-toggle,
+  #workDetail .task-option-row .calendar-toggle {
+    min-height: 36px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #workDetail .calendar-toggle:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #workDetail .calendar-toggle input,
+  #workDetail .task-option-row input[type="checkbox"] {
+    appearance: none;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+    box-shadow: none;
+  }
+
+  #workDetail .calendar-toggle input:checked,
+  #workDetail .task-option-row input[type="checkbox"]:checked {
+    border-color: var(--geist-accent);
+    background-color: var(--geist-accent);
+  }
+
+  #workDetail .owner-chip {
+    border-radius: 6px;
+    background: var(--geist-soft);
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .owner-chip.selected {
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #workDetail .memo-toolbar {
+    gap: 3px;
+    margin-top: 16px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-soft);
+    padding: 5px;
+    box-shadow: none;
+  }
+
+  #workDetail .memo-toolbar button {
+    min-height: 34px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--geist-mute);
+    padding: 0 9px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .memo-toolbar button:hover,
+  #workDetail .memo-toolbar button.active {
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 0 0 1px var(--geist-hairline) inset;
+  }
+
+  #workDetail #workDetailMemo {
+    min-height: 190px;
+    margin-top: 10px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 16px;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.65;
+    box-shadow: none;
+  }
+
+  #workDetail #workDetailMemo:focus {
+    border-color: var(--geist-accent);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+  }
+
+  #workDetail .records-head span {
+    color: var(--geist-accent);
+  }
+
+  #workDetail .records-head h2,
+  #workDetail .task-add-title h3,
+  #workDetail .task-field > span,
+  #workDetail .studio-staff-head h3 {
+    color: var(--geist-ink);
+  }
+
+  #workDetail .record-composer,
+  #workDetail .record-card,
+  #workDetail .task-add-card,
+  #workDetail .studio-reservation-basic,
+  #workDetail .studio-compact-toggle,
+  #workDetail .studio-memo-toggle,
+  #workDetail .studio-staff-table {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+
+  #workDetail .record-input,
+  #workDetail .task-title-input,
+  #workDetail .task-detail-field textarea,
+  #workDetail .task-field .date-button,
+  #workDetail .task-field .time-button,
+  #workDetail .task-field .custom-select,
+  #workDetail .studio-reservation-basic input,
+  #workDetail .studio-reservation-basic .custom-select,
+  #workDetail .studio-reservation-basic .date-button,
+  #workDetail .studio-reservation-basic .time-button,
+  #workDetail .studio-reservation-memo textarea,
+  #workDetail .studio-staff-row input,
+  #workDetail .studio-staff-row .custom-select {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+
+  #workDetail .record-actions span,
+  #workDetail .record-meta time,
+  #workDetail .task-add-title small,
+  #workDetail .studio-compact-toggle span,
+  #workDetail .studio-reservation-basic label {
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .record-card p,
+  #workDetail .task-detail-text {
+    color: var(--geist-body);
+    font-weight: 400;
+  }
+
+  #workDetail .record-control {
+    min-height: 34px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .record-control:hover,
+  #workDetail .record-control.active {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #workDetail .record-control.danger {
+    border-color: #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+  }
+
+  #workDetail .task-add-head:hover {
+    background: var(--geist-canvas);
+  }
+
+  #workDetail .task-add-icon {
+    border-radius: 8px;
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+  }
+
+  #workDetail .project-task-composer.task-composer-expanded {
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+  }
+
+  #workDetail .task-form-grid,
+  #workDetail .task-option-row {
+    border-color: var(--geist-hairline);
+  }
+
+  #workDetail .task-form-column + .task-form-column {
+    border-left-color: var(--geist-hairline);
+  }
+
+  #workDetail .task-type-chip,
+  #workDetail .task-type-chip[class*="type-"] {
+    min-height: 34px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 11px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #workDetail .task-type-chip.active,
+  #workDetail .task-type-chip:hover {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+    box-shadow: none;
+  }
+
+  #workDetail .pill.primary,
+  #workDetail .task-form-footer .pill.primary,
+  #workDetail .work-studio-actions .pill.primary {
+    border: 1px solid var(--geist-accent);
+    border-radius: 6px;
+    background: var(--geist-accent);
+    color: #06140a;
+    box-shadow: none;
+  }
+
+  #workDetail .task-list {
+    gap: 10px;
+  }
+
+  #workDetail .task-row {
+    min-height: 84px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    padding: 14px 16px;
+  }
+
+  #workDetail .task-main h3 {
+    color: var(--geist-ink);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  #workDetail .task-main small {
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  #workDetail .task-row-actions .badge.ok {
+    border-color: #9aebba;
+    background: #dffbea;
+    color: #087231;
+  }
+
+  #workDetail .task-row-actions .badge.warn {
+    border-color: #f1cf70;
+    background: #fff3cd;
+    color: #855b00;
+  }
+
+  #workDetail .task-row-actions .badge.danger {
+    border-color: #ffbcbc;
+    background: #ffe8e8;
+    color: #c50000;
+  }
+
+  #workDetail .records-section .empty {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+  }
+
+  #workDetail .studio-compact-toggle b {
+    background: #d8d8d8;
+  }
+
+  #workDetail .studio-compact-toggle b::after {
+    background: var(--geist-elevated);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  }
+
+  #workDetail .studio-reservation-all-day input {
+    border: 1px solid #c9c9c9;
+    background: var(--geist-elevated);
+  }
+
+  #workDetail .studio-memo-toggle {
+    color: var(--geist-body);
+  }
+
+  #workDetail .studio-staff-table-head {
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #workDetail .studio-staff-row {
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+  }
+
+  #workDetail .studio-row-number,
+  #workDetail .studio-row-drag {
+    color: var(--geist-mute);
+  }
+
+  #workDetail .studio-row-delete {
+    border: 1px solid #ffd7d7;
+    background: #fff5f5;
+    color: #c50000;
+    box-shadow: none;
+  }
+
+  #workDetail .work-studio-actions {
+    background: linear-gradient(transparent, var(--geist-elevated) 32%);
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1100px) {
+  #worksView .project-board > .section-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  #worksView .section-head-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 960px) {
+  #workDetail .detail-properties {
+    grid-template-columns: 1fr;
+  }
+
+  #workDetail .property-row:nth-last-child(-n + 2) {
+    border-bottom-color: var(--geist-hairline);
+  }
+
+  #workDetail .property-row:last-child {
+    border-bottom-color: transparent;
+  }
+}
+
+/* Shared work/video task recurrence controls. */
+:is(#workDetail, #projectDetail) .work-task-recurrence-toggle {
+  justify-self: start;
+  min-height: 34px;
+  border: 0;
+  background: transparent;
+  color: var(--geist-body);
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 17px;
+  text-align: left;
+  cursor: pointer;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence {
+  display: grid;
+  gap: 18px;
+  border: 0;
+  border-top: 1px solid var(--geist-hairline);
+  border-radius: 0;
+  background: transparent;
+  padding: 20px 0 0;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-label,
+:is(#workDetail, #projectDetail) .work-task-custom-panel > strong {
+  color: var(--geist-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-quick-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-type-options,
+:is(#workDetail, #projectDetail) .work-task-custom-frequency,
+:is(#workDetail, #projectDetail) .work-task-month-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+:is(#workDetail, #projectDetail) :is(.work-task-recurrence-type-options, .work-task-custom-frequency, .work-task-month-mode) button {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:is(#workDetail, #projectDetail) :is(.work-task-recurrence-type-options, .work-task-custom-frequency, .work-task-month-mode) button:is(:hover, .is-selected) {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent-soft);
+  color: var(--geist-accent-deep, #087231);
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-inline {
+  display: grid;
+  grid-template-columns: auto 44px auto;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 12px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-inline strong,
+:is(#workDetail, #projectDetail) .work-task-count-inline b {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-inline input {
+  width: 44px;
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  color: var(--geist-ink);
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  text-align: center;
+  outline: 0;
+  box-shadow: none;
+}
+
+:is(#workDetail, #projectDetail) .work-task-custom-panel {
+  display: grid;
+  gap: 18px;
+  border-radius: 12px;
+  background: var(--geist-soft);
+  padding: 22px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-end-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence .task-field {
+  min-width: 0;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence .custom-select,
+:is(#workDetail, #projectDetail) .work-task-recurrence .date-button,
+:is(#workDetail, #projectDetail) .work-task-count-input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  box-shadow: none;
+}
+
+:is(#workDetail, #projectDetail) .work-task-weekdays,
+:is(#workDetail, #projectDetail) .work-task-month-days {
+  display: grid;
+  gap: 8px;
+}
+
+:is(#workDetail, #projectDetail) :is(.work-task-weekdays, .work-task-month-days) > span,
+:is(#workDetail, #projectDetail) .work-task-recurrence-summary > span {
+  color: var(--geist-mute);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+:is(#workDetail, #projectDetail) .work-task-weekdays > div {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+  gap: 8px;
+  justify-content: start;
+}
+
+:is(#workDetail, #projectDetail) .work-task-month-days > div {
+  display: grid;
+  grid-template-columns: repeat(16, minmax(34px, 1fr));
+  gap: 5px;
+}
+
+:is(#workDetail, #projectDetail) :is(.work-task-weekdays, .work-task-month-days) button {
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+:is(#workDetail, #projectDetail) :is(.work-task-weekdays, .work-task-month-days) button.is-selected {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent-soft);
+  color: var(--geist-accent-deep, #087231);
+}
+
+:is(#workDetail, #projectDetail) .work-task-weekdays button {
+  width: 40px;
+  height: 40px;
+  justify-self: start;
+  border-radius: 999px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-weekdays button.is-selected {
+  background: var(--geist-accent);
+  color: #06140a;
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  width: min(160px, 100%);
+  min-height: 38px;
+  justify-self: start;
+  padding: 0 12px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-input input {
+  width: 100%;
+  min-height: 36px;
+  height: 36px;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: 0;
+  box-shadow: none;
+}
+
+:is(#workDetail, #projectDetail) .work-task-count-input b {
+  color: var(--geist-mute);
+  font-size: 12px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-summary,
+:is(#workDetail, #projectDetail) .work-task-recurrence-note {
+  margin: 0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(0, 237, 100, 0.28);
+  background: var(--geist-accent-soft);
+  color: var(--geist-body);
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-summary strong {
+  color: var(--geist-ink);
+  font-weight: 600;
+}
+
+:is(#workDetail, #projectDetail) .work-task-recurrence-note {
+  border: 1px solid var(--geist-hairline);
+  background: var(--geist-soft);
+  color: var(--geist-mute);
+}
+
+.work-task-scope-card {
+  width: min(560px, calc(100vw - 32px));
+}
+
+.work-task-scope-icon {
+  background: var(--geist-accent-soft);
+  color: var(--geist-accent-deep, #087231);
+}
+
+.work-task-scope-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.work-task-scope-actions .pill {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+
+/* Repeating task range dialog follows the same light/dark Geist surface. */
+#workTaskScopeModal.confirm-modal {
+  align-items: center;
+  background: rgba(23, 23, 23, 0.38);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#workTaskScopeModal .work-task-scope-card {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 12px 16px;
+  width: min(500px, 100%);
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 28px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#workTaskScopeModal .work-task-scope-icon {
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(0, 237, 100, 0.34);
+  border-radius: 10px;
+  background: var(--geist-accent-soft);
+  color: var(--geist-accent-deep, #087231);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+#workTaskScopeModal .work-task-scope-card h3 {
+  margin: 0 0 7px;
+  color: var(--geist-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.5px;
+}
+
+#workTaskScopeModal .work-task-scope-card p {
+  margin: 0;
+  color: var(--geist-body);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+}
+
+#workTaskScopeModal .work-task-scope-actions {
+  padding-top: 8px;
+}
+
+#workTaskScopeModal .work-task-scope-actions .pill {
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  box-shadow: none;
+}
+
+#workTaskScopeModal .work-task-scope-actions .danger-pill {
+  border-color: #ee0000;
+  background: #ee0000;
+  color: #ffffff;
+}
+
+/* Figma task composer layout. Presentation only; task values and persistence stay unchanged. */
+@media (min-width: 769px) {
+  #workDetail .record-composer.task-add-card {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+  }
+
+  #workDetail .task-add-head,
+  #workDetail .task-add-card.is-collapsed .task-add-head {
+    min-height: 58px;
+    border: 0;
+    background: var(--geist-elevated);
+    padding: 10px 12px;
+  }
+
+  #workDetail .task-add-title {
+    gap: 12px;
+  }
+
+  #workDetail .task-add-icon {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: 600;
+  }
+
+  #workDetail .task-add-title h3 {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 26px;
+    letter-spacing: -0.4px;
+  }
+
+  #workDetail .task-add-title small {
+    margin-top: 3px;
+    color: var(--geist-mute);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #workDetail .task-add-chevron {
+    color: var(--geist-mute);
+    font-size: 20px;
+  }
+
+  #workDetail .project-task-composer.task-composer-expanded {
+    display: grid;
+    gap: 8px;
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 10px 12px 12px;
+  }
+
+  #workDetail .task-add-card.is-collapsed .project-task-composer {
+    display: none !important;
+  }
+
+  #workDetail .work-task-primary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 3.2fr) minmax(220px, 1fr);
+    gap: 8px;
+    align-items: end;
+  }
+
+  #workDetail .work-task-schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    align-items: start;
+  }
+
+  #workDetail .work-task-date-stack {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  #workDetail .task-title-field {
+    padding: 0;
+  }
+
+  #workDetail .task-field {
+    gap: 3px;
+  }
+
+  #workDetail .task-field > span {
+    color: var(--geist-ink);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 17px;
+  }
+
+  #workDetail .task-title-input,
+  #workDetail .task-detail-field textarea,
+  #workDetail .task-field .date-button,
+  #workDetail .task-field .time-button,
+  #workDetail .task-field .custom-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 9px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 7px 10px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  #workDetail .task-title-input:focus,
+  #workDetail .task-detail-field textarea:focus,
+  #workDetail .task-field :is(.date-button, .time-button, .custom-select):focus-visible {
+    border-color: var(--geist-accent);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+  }
+
+  #workDetail .task-due-field.is-disabled,
+  #workDetail .task-time-field.is-disabled {
+    display: grid;
+    opacity: 1;
+  }
+
+  #workDetail .task-due-field.is-disabled .date-button,
+  #workDetail .task-time-field.is-disabled .time-button,
+  #workDetail .task-time-field .time-button:disabled {
+    border-style: solid;
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-faint, #a1a1a1);
+    box-shadow: none;
+  }
+
+  #workDetail .task-time-range {
+    grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  #workDetail .task-time-range > span {
+    color: var(--geist-mute);
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  #workDetail .task-option-row {
+    display: flex;
+    min-height: 38px;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: nowrap;
+    border: 0;
+    background: transparent;
+    padding: 2px 0;
+  }
+
+  #workDetail .task-option-row .calendar-toggle {
+    min-width: 0;
+    min-height: 20px;
+    gap: 7px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--geist-body);
+    padding: 0;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  #workDetail .task-option-row .calendar-toggle:has(input:checked) {
+    border: 0;
+    background: transparent;
+    color: var(--geist-ink);
+  }
+
+  #workDetail .task-detail-toggle,
+  #workDetail .work-task-recurrence-toggle {
+    min-height: 34px;
+    border: 0;
+    background: transparent;
+    color: var(--geist-body);
+    padding: 0 4px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 17px;
+    cursor: pointer;
+  }
+
+  #workDetail .task-detail-toggle {
+    justify-self: start;
+    text-align: left;
+  }
+
+  #workDetail .work-task-recurrence-toggle {
+    justify-self: start;
+    text-align: left;
+  }
+
+  #workDetail .task-detail-field {
+    padding: 0;
+  }
+
+  #workDetail .task-detail-field textarea {
+    min-height: 60px;
+    max-height: 96px;
+    height: auto;
+    padding: 9px 10px;
+  }
+
+  #workDetail .work-task-recurrence {
+    border-radius: 9px;
+    background: var(--geist-canvas);
+    padding: 12px;
+  }
+
+  #workDetail .task-form-footer {
+    min-height: 38px;
+    gap: 7px;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  #workDetail .task-form-footer .pill {
+    min-height: 38px;
+    border-radius: 9px;
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #workDetail .task-form-footer .pill.ghost {
+    border-color: transparent;
+    border-radius: 100px;
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #workDetail .task-form-footer .pill.primary:disabled {
+    opacity: 0.4;
+  }
+}

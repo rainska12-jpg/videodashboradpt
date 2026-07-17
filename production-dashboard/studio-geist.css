@@ -1,0 +1,1177 @@
+/* Geist studio calendar — presentation only; existing reservation data bindings stay intact. */
+@media (min-width: 769px) {
+  body:has(#studioView.active) .main.studio-mode > .topbar {
+    display: flex;
+  }
+
+  #studioView {
+    width: min(1200px, 100%);
+    margin-inline: auto;
+    color: var(--geist-ink);
+  }
+
+  #studioView button:focus-visible,
+  #studioView input:focus-visible,
+  #staffScheduleModal button:focus-visible,
+  #staffScheduleModal input:focus-visible,
+  #staffScheduleModal textarea:focus-visible,
+  #recurringTrainingModal button:focus-visible,
+  #recurringTrainingModal input:focus-visible,
+  #recurringTrainingModal textarea:focus-visible,
+  #recurringTrainingManageModal button:focus-visible,
+  body:has(#studioView.active) .dropdown-layer button:focus-visible,
+  body:has(#studioView.active) .date-picker-card button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  body:has(#studioView.active) .nav-item:focus-visible,
+  body:has(#studioView.active) .topbar button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #studioView .studio-manage-page {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+  }
+
+  #studioView .studio-manage-head {
+    display: flex;
+    min-height: 112px;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 22px 24px;
+  }
+
+  #studioView .studio-manage-head .eyebrow {
+    margin: 0 0 5px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #studioView .studio-manage-head h2 {
+    margin: 0;
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  #studioView .studio-manage-head p:last-child {
+    margin: 4px 0 0;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #studioView .studio-toolbar {
+    display: flex;
+    min-height: 68px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    padding: 13px 18px;
+  }
+
+  #studioView .studio-week-nav,
+  #studioView .studio-toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #studioView .studio-week-nav .circle,
+  #studioView .studio-week-nav .pill,
+  #studioView .studio-toolbar-actions .record-control,
+  #studioView #studioAddStaffBtn {
+    min-height: 38px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+    box-shadow: none;
+  }
+
+  #studioView .studio-week-nav .circle {
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+    font-size: 20px;
+  }
+
+  #studioView .studio-week-nav .circle:hover,
+  #studioView .studio-week-nav .pill:hover,
+  #studioView .studio-toolbar-actions .record-control:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #studioView .studio-week-nav #studioTodayBtn {
+    order: 3;
+    border-radius: 6px;
+  }
+
+  #studioView .studio-week-nav #studioWeekTitle {
+    order: 4;
+    min-width: 0;
+    margin-left: 8px;
+    color: var(--geist-ink);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: -0.25px;
+  }
+
+  #studioView .studio-toolbar-actions .record-control.active {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #studioView .studio-toolbar-actions #studioAddStaffBtn {
+    margin-left: 4px;
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+    padding-inline: 14px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 248px;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  #studioView .studio-week-card,
+  #studioView .studio-check-panel {
+    border: 0;
+    border-radius: 0;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: none;
+  }
+
+  #studioView .studio-week-card {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  #studioView .studio-legend {
+    display: flex;
+    min-height: 48px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-legend span {
+    color: var(--geist-body);
+  }
+
+  #studioView .studio-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--studio-type-color, var(--geist-accent));
+  }
+
+  #studioView .studio-week-grid {
+    grid-template-columns: 60px repeat(7, minmax(112px, 1fr));
+    max-height: calc(100vh - 316px);
+    overflow: auto;
+    background: var(--geist-hairline);
+    scrollbar-width: thin;
+    scrollbar-color: #d4d4d4 transparent;
+  }
+
+  #studioView .studio-day-head,
+  #studioView .studio-time-label,
+  #studioView .studio-time-cell {
+    border: 0;
+    border-right: 1px solid var(--geist-hairline);
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+  }
+
+  #studioView .studio-day-head {
+    min-height: 54px;
+    color: var(--geist-ink);
+    font-weight: 600;
+  }
+
+  #studioView .studio-day-head span {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-day-head strong {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-day-head.today {
+    background: #f7fff9;
+    color: #087231;
+    box-shadow: 0 -2px 0 var(--geist-accent) inset;
+  }
+
+  #studioView .studio-day-head.today span {
+    color: #087231;
+  }
+
+  #studioView .studio-day-head.sunday,
+  #studioView .studio-day-head.holiday,
+  #studioView .studio-day-head.sunday span,
+  #studioView .studio-day-head.holiday span,
+  #studioView .studio-day-head em {
+    color: #c50000;
+  }
+
+  #studioView .studio-corner {
+    background: var(--geist-canvas);
+  }
+
+  #studioView .studio-time-label,
+  #studioView .studio-time-cell {
+    min-height: 76px;
+  }
+
+  #studioView .studio-time-label {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    padding: 10px 8px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-time-cell:hover {
+    background: #fcfcfc;
+  }
+
+  #studioView .studio-time-cell.drag-selecting::after {
+    border-radius: 6px;
+    background: rgba(0, 237, 100, 0.1);
+    box-shadow: inset 0 0 0 1px rgba(0, 237, 100, 0.38);
+  }
+
+  #studioView .studio-week-event {
+    left: 4px;
+    right: 4px;
+    min-height: 28px;
+    border: 1px solid color-mix(in srgb, var(--studio-type-color) 38%, #d7d7d7);
+    border-left-width: 3px;
+    border-radius: 6px;
+    background: color-mix(in srgb, var(--studio-type-color) 11%, #ffffff);
+    color: var(--geist-ink);
+    padding: 5px 7px;
+    box-shadow: none;
+  }
+
+  #studioView .studio-week-event.typed {
+    background: color-mix(in srgb, var(--studio-type-color) 11%, #ffffff);
+  }
+
+  #studioView .studio-week-event:hover {
+    background: color-mix(in srgb, var(--studio-type-color) 17%, #ffffff);
+  }
+
+  #studioView .studio-week-event span {
+    color: var(--geist-body);
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-week-event strong {
+    color: var(--geist-ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-assignment-badge {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: #ee0000;
+    color: #fff;
+    box-shadow: 0 0 0 2px #fff;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-check-panel {
+    min-width: 0;
+    border-left: 1px solid var(--geist-hairline);
+    padding: 18px;
+  }
+
+  #studioView .studio-check-panel h3 {
+    margin: 0 0 4px;
+    color: var(--geist-ink);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.35px;
+  }
+
+  #studioView .studio-check-panel > p {
+    margin: 0 0 16px;
+    color: var(--geist-mute);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 17px;
+  }
+
+  #studioView .studio-filter-section {
+    border-top: 1px solid var(--geist-hairline);
+    padding: 12px 0;
+  }
+
+  #studioView .studio-filter-section summary {
+    min-height: 28px;
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-filter-section summary::after {
+    color: var(--geist-mute);
+  }
+
+  #studioView .studio-training-type-filters {
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  #studioView .studio-training-filter,
+  #studioView .studio-owner-filters label {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 9px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-training-filter:has(input:checked),
+  #studioView .studio-owner-filters label:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #studioView .studio-training-filter input,
+  #studioView .studio-owner-filters input {
+    appearance: none;
+    width: 15px;
+    min-width: 15px;
+    height: 15px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+  }
+
+  #studioView .studio-training-filter input:checked,
+  #studioView .studio-owner-filters input:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/12px no-repeat;
+  }
+
+  #studioView .studio-recurring-filter {
+    margin-top: 4px;
+  }
+
+  #studioView .studio-unassigned-alert {
+    gap: 8px;
+    margin: 12px 0 0;
+    border: 1px solid #f3d7a5;
+    border-radius: 8px;
+    background: #fff8e8;
+    color: #855b00;
+    padding: 11px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-unassigned-alert b {
+    color: #a34e00;
+  }
+
+  #studioView .studio-unassigned-alert button {
+    min-height: 32px;
+    border: 1px solid #edcc8d;
+    border-radius: 6px;
+    background: #fff;
+    color: #855b00;
+    padding: 0 9px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-week-grid.is-month {
+    grid-template-columns: repeat(7, minmax(110px, 1fr));
+  }
+
+  #studioView .studio-month-head {
+    border-color: var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-month-head.sunday {
+    color: #c50000;
+  }
+
+  #studioView .studio-month-day {
+    min-height: 114px;
+    border-color: var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 8px;
+  }
+
+  #studioView .studio-month-day:hover {
+    background: #fcfcfc;
+  }
+
+  #studioView .studio-month-day.muted {
+    background: #fcfcfc;
+    opacity: 1;
+  }
+
+  #studioView .studio-month-day.muted > span b {
+    color: #c7c7c7;
+  }
+
+  #studioView .studio-month-day.today {
+    background: #f7fff9;
+    box-shadow: inset 0 0 0 2px var(--geist-accent);
+  }
+
+  #studioView .studio-month-day > span {
+    color: var(--geist-body);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #studioView .studio-month-day > span em,
+  #studioView .studio-month-day.sunday > span b,
+  #studioView .studio-month-day.holiday > span b {
+    color: #c50000;
+  }
+
+  #studioView .studio-month-event,
+  #studioView .studio-month-event.typed {
+    border: 1px solid color-mix(in srgb, var(--studio-type-color) 38%, #d7d7d7);
+    border-left-width: 3px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--studio-type-color) 11%, #ffffff);
+    color: var(--geist-ink);
+    padding: 5px 6px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #studioView .studio-month-event:hover {
+    background: color-mix(in srgb, var(--studio-type-color) 17%, #ffffff);
+  }
+}
+
+/* Studio reservation, recurring registration and recurring management dialogs. */
+#staffScheduleModal,
+#recurringTrainingModal,
+#recurringTrainingManageModal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#staffScheduleModal .studio-schedule-modal,
+#recurringTrainingModal .recurring-training-card,
+#recurringTrainingManageModal .recurring-training-manage-card {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#staffScheduleModal .studio-schedule-modal {
+  width: min(1120px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  padding: 26px;
+}
+
+#staffScheduleModal .studio-modal-close {
+  top: 20px;
+  right: 20px;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 21px;
+  box-shadow: none;
+}
+
+#staffScheduleModal .studio-modal-close:hover {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+#staffScheduleModal .studio-modal-title {
+  border-bottom: 1px solid var(--geist-hairline);
+  padding: 0 54px 18px 0;
+}
+
+#staffScheduleModal .studio-modal-title h2 {
+  margin: 0 0 4px;
+  color: var(--geist-ink);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 30px;
+  letter-spacing: -0.65px;
+}
+
+#staffScheduleModal .studio-modal-title p,
+#staffScheduleModal .studio-staff-head p {
+  color: var(--geist-mute);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 17px;
+}
+
+#staffScheduleModal .studio-schedule-layout {
+  grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#staffScheduleModal .studio-schedule-section {
+  min-height: 0;
+  gap: 13px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-canvas);
+  padding: 17px;
+  box-shadow: none;
+}
+
+#staffScheduleModal .studio-schedule-section h3,
+#staffScheduleModal .studio-staff-head h3 {
+  color: var(--geist-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+#staffScheduleModal .studio-section-icon {
+  color: #087231;
+  font-weight: 600;
+}
+
+#staffScheduleModal label,
+#recurringTrainingModal label {
+  gap: 7px;
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .custom-select,
+#staffScheduleModal .date-button,
+#staffScheduleModal .time-button,
+#staffScheduleModal input[type="text"],
+#staffScheduleModal textarea,
+#recurringTrainingModal .custom-select,
+#recurringTrainingModal .date-button,
+#recurringTrainingModal .time-button,
+#recurringTrainingModal input,
+#recurringTrainingModal textarea {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: none;
+}
+
+#staffScheduleModal textarea,
+#recurringTrainingModal textarea {
+  min-height: 76px;
+  padding: 11px 12px;
+  font-weight: 400;
+}
+
+#staffScheduleModal textarea::placeholder,
+#staffScheduleModal input::placeholder,
+#recurringTrainingModal textarea::placeholder,
+#recurringTrainingModal input::placeholder {
+  color: var(--geist-faint);
+}
+
+#staffScheduleModal .custom-select i,
+#recurringTrainingModal .custom-select i {
+  color: var(--geist-mute);
+}
+
+#staffScheduleModal .custom-select:hover,
+#staffScheduleModal .date-button:hover,
+#staffScheduleModal .time-button:hover,
+#recurringTrainingModal .custom-select:hover,
+#recurringTrainingModal .date-button:hover,
+#recurringTrainingModal .time-button:hover {
+  border-color: #d2d2d2;
+  background: #fcfcfc;
+}
+
+#staffScheduleModal .studio-checkbox-line,
+#recurringTrainingModal .check-line {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body) !important;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-checkbox-line input,
+#recurringTrainingModal .check-line input {
+  appearance: none;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  border: 1px solid #c9c9c9;
+  border-radius: 4px;
+  background: var(--geist-elevated);
+}
+
+#staffScheduleModal .studio-checkbox-line input:checked,
+#recurringTrainingModal .check-line input:checked {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px no-repeat;
+}
+
+#staffScheduleModal .studio-field-grid.time > span {
+  color: var(--geist-mute);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-memo-count {
+  color: var(--geist-mute);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-repeat-box {
+  gap: 10px;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 13px;
+}
+
+#staffScheduleModal .studio-repeat-toggle {
+  gap: 10px !important;
+}
+
+#staffScheduleModal .studio-repeat-toggle span,
+#staffScheduleModal .studio-repeat-toggle b {
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#staffScheduleModal .studio-repeat-toggle input {
+  width: 34px;
+  height: 18px;
+  background: #d7d7d7;
+  box-shadow: none;
+}
+
+#staffScheduleModal .studio-repeat-toggle input::after {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+#staffScheduleModal .studio-repeat-toggle input:checked {
+  background: var(--geist-accent);
+}
+
+#staffScheduleModal .studio-repeat-controls {
+  gap: 12px;
+  border: 1px solid rgba(0, 237, 100, 0.22);
+  border-radius: 8px;
+  background: var(--geist-accent-soft);
+  padding: 10px;
+}
+
+#staffScheduleModal .studio-repeat-controls.disabled {
+  border-color: var(--geist-hairline);
+  background: var(--geist-soft);
+  opacity: 0.55;
+  filter: none;
+}
+
+#staffScheduleModal .studio-repeat-days,
+#staffScheduleModal .studio-repeat-count {
+  color: var(--geist-body);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-repeat-days button {
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-repeat-days button.active {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+  font-weight: 600;
+}
+
+#staffScheduleModal .studio-repeat-count input {
+  min-height: 32px;
+  text-align: center;
+}
+
+#staffScheduleModal .pill.small {
+  min-height: 36px;
+  border: 1px solid rgba(0, 237, 100, 0.36);
+  border-radius: 6px;
+  background: var(--geist-accent-soft);
+  color: #087231;
+  padding: 0 11px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#staffScheduleModal .studio-staff-table {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+}
+
+#staffScheduleModal .studio-staff-table-head {
+  background: var(--geist-soft);
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-staff-row {
+  border-color: var(--geist-hairline);
+  background: var(--geist-elevated);
+}
+
+#staffScheduleModal .studio-row-drag {
+  color: var(--geist-faint);
+}
+
+#staffScheduleModal .studio-row-number {
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#staffScheduleModal .studio-row-delete {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffd4d4;
+  border-radius: 6px;
+  background: #fff3f3;
+  color: #c50000;
+  box-shadow: none;
+}
+
+#staffScheduleModal .studio-add-row {
+  border: 1px dashed rgba(0, 181, 69, 0.42);
+  border-radius: 6px;
+  background: #f7fff9;
+  color: #087231;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#staffScheduleModal .studio-modal-actions {
+  grid-template-columns: 120px 140px;
+  gap: 8px;
+  margin-top: 16px;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 16px;
+}
+
+#staffScheduleModal .studio-modal-actions .pill,
+#recurringTrainingModal > form > .pill,
+#recurringTrainingManageModal .training-card .pill {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  box-shadow: none;
+}
+
+#staffScheduleModal .studio-modal-actions .pill.primary,
+#recurringTrainingModal > form > .pill.primary {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+}
+
+#staffScheduleModal .time-button:disabled,
+#recurringTrainingModal .time-button:disabled {
+  border-color: var(--geist-hairline);
+  background: var(--geist-soft);
+  color: var(--geist-faint);
+  opacity: 1;
+}
+
+#recurringTrainingModal .recurring-training-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: min(720px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 26px;
+}
+
+#recurringTrainingModal .section-head,
+#recurringTrainingModal .check-line,
+#recurringTrainingModal .time-row,
+#recurringTrainingModal label:has(textarea),
+#recurringTrainingModal > form > .pill {
+  grid-column: 1 / -1;
+}
+
+#recurringTrainingModal .section-head,
+#recurringTrainingManageModal .section-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding-bottom: 16px;
+}
+
+#recurringTrainingModal .section-head .eyebrow,
+#recurringTrainingManageModal .section-head .eyebrow {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#recurringTrainingModal .section-head h2,
+#recurringTrainingManageModal .section-head h2 {
+  margin-top: 5px;
+  color: var(--geist-ink);
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+}
+
+#recurringTrainingModal .section-head .circle,
+#recurringTrainingManageModal .section-head .circle {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+}
+
+#recurringTrainingModal > form > .pill {
+  justify-self: end;
+  width: auto;
+  min-width: 160px;
+}
+
+#recurringTrainingManageModal .recurring-training-manage-card {
+  gap: 16px;
+  width: min(780px, 100%);
+  max-height: calc(100vh - 48px);
+  padding: 26px;
+}
+
+#recurringTrainingManageModal .training-list {
+  gap: 8px;
+}
+
+#recurringTrainingManageModal .training-card {
+  display: flex;
+  min-height: 78px;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-canvas);
+  padding: 14px;
+}
+
+#recurringTrainingManageModal .training-card > div {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+
+#recurringTrainingManageModal .training-card strong {
+  color: var(--geist-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#recurringTrainingManageModal .training-card span,
+#recurringTrainingManageModal .training-card small {
+  color: var(--geist-mute);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+#recurringTrainingManageModal .training-card .danger-pill {
+  min-width: 72px;
+  border-color: #ffd4d4;
+  background: #fff3f3;
+  color: #c50000;
+}
+
+#recurringTrainingManageModal .empty-state {
+  border: 1px dashed var(--geist-hairline);
+  border-radius: 8px;
+  background: var(--geist-canvas);
+  color: var(--geist-mute);
+  padding: 28px;
+  font-size: 12px;
+  font-weight: 400;
+  text-align: center;
+}
+
+#staffEventDetailModal .event-detail-staff {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+#staffEventDetailModal .event-detail-staff-table-head,
+#staffEventDetailModal .event-detail-staff-row {
+  grid-template-columns: 30px minmax(126px, 1fr) minmax(126px, 1fr) minmax(170px, 1.4fr) 42px;
+}
+
+/* Studio dropdown and date picker layers. */
+body:has(#studioView.active) .dropdown-layer {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 10px;
+  background: var(--geist-elevated);
+  padding: 6px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+}
+
+body:has(#studioView.active) .dropdown-option {
+  min-height: 38px;
+  border-radius: 6px;
+  color: var(--geist-body);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#studioView.active) .dropdown-option:hover,
+body:has(#studioView.active) .dropdown-option.selected {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+body:has(#studioView.active) .dropdown-option.selected i {
+  color: var(--geist-accent);
+}
+
+body:has(#studioView.active) .date-picker-card {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 12px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 16px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 18px 40px -12px rgba(0, 0, 0, 0.28);
+}
+
+body:has(#studioView.active) .date-picker-top strong {
+  color: var(--geist-ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+body:has(#studioView.active) .date-picker-top button,
+body:has(#studioView.active) .date-picker-bottom button {
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#studioView.active) .date-picker-top button {
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+}
+
+body:has(#studioView.active) .date-picker-weekdays {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+body:has(#studioView.active) .date-picker-days {
+  gap: 4px;
+}
+
+body:has(#studioView.active) .date-picker-days button {
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+body:has(#studioView.active) .date-picker-days button:hover,
+body:has(#studioView.active) .date-picker-top button:hover {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+body:has(#studioView.active) .date-picker-days button.muted {
+  color: #c5c5c5;
+}
+
+body:has(#studioView.active) .date-picker-days button.today {
+  box-shadow: 0 0 0 1px #c9c9c9 inset;
+}
+
+body:has(#studioView.active) .date-picker-days button.selected,
+body:has(#studioView.active) .date-picker-bottom [data-date-today] {
+  border-color: var(--geist-accent);
+  background: var(--geist-accent);
+  color: #06140a;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+body:has(#studioView.active) .date-picker-bottom {
+  margin-top: 12px;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 12px;
+}
+
+@media (max-width: 1100px) and (min-width: 769px) {
+  #studioView .studio-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  #studioView .studio-check-panel {
+    border-top: 1px solid var(--geist-hairline);
+    border-left: 0;
+  }
+
+  #studioView .studio-training-type-filters {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #staffScheduleModal .studio-schedule-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  #staffScheduleModal,
+  #recurringTrainingModal,
+  #recurringTrainingManageModal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  #staffScheduleModal .studio-schedule-modal,
+  #recurringTrainingModal .recurring-training-card,
+  #recurringTrainingManageModal .recurring-training-manage-card {
+    width: 100%;
+    max-height: calc(100vh - 24px);
+    border-radius: 16px;
+    padding: 20px 16px;
+  }
+
+  #staffScheduleModal .studio-schedule-layout,
+  #staffScheduleModal .studio-field-grid.two,
+  #staffScheduleModal .studio-date-line,
+  #recurringTrainingModal .recurring-training-card {
+    grid-template-columns: 1fr;
+  }
+
+  #recurringTrainingModal .section-head,
+  #recurringTrainingModal .check-line,
+  #recurringTrainingModal .time-row,
+  #recurringTrainingModal label:has(textarea),
+  #recurringTrainingModal > form > .pill {
+    grid-column: 1;
+  }
+
+  #staffScheduleModal .studio-modal-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+}

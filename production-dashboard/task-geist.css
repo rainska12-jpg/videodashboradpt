@@ -1,0 +1,585 @@
+/* Geist task overview — presentation only; existing task data bindings stay intact. */
+@media (min-width: 769px) {
+  #tasksView {
+    width: min(1200px, 100%);
+    margin-inline: auto;
+    color: var(--geist-ink);
+  }
+
+  #tasksView button:focus-visible,
+  #tasksView input:focus-visible,
+  #tasksView select:focus-visible,
+  #taskOverviewFilterModal button:focus-visible {
+    outline: 2px solid rgba(0, 237, 100, 0.48);
+    outline-offset: 1px;
+  }
+
+  #tasksView .task-overview-shell {
+    gap: 16px;
+  }
+
+  #tasksView .task-overview-hero {
+    align-items: flex-end;
+    min-height: 132px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    padding: 24px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.035);
+  }
+
+  #tasksView .task-overview-hero .eyebrow {
+    margin-bottom: 6px;
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  #tasksView .task-overview-hero h2 {
+    color: var(--geist-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.8px;
+  }
+
+  #tasksView .task-overview-hero p:last-child {
+    margin-top: 4px;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #tasksView .overview-hide-done {
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #tasksView .overview-hide-done:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #tasksView .overview-hide-done input {
+    appearance: none;
+    width: 16px;
+    min-width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border: 1px solid #c9c9c9;
+    border-radius: 4px;
+    background: var(--geist-elevated);
+  }
+
+  #tasksView .overview-hide-done input:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/13px no-repeat;
+  }
+
+  #tasksView .task-overview-stats {
+    gap: 10px;
+  }
+
+  #tasksView .task-stat {
+    min-height: 108px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 16px;
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.025);
+  }
+
+  #tasksView .task-stat span,
+  #tasksView .task-overview-group h3 span {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  #tasksView .task-stat strong {
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #tasksView .task-stat b {
+    margin-top: 14px;
+    color: var(--geist-ink);
+    font-size: 28px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -1px;
+  }
+
+  #tasksView .task-stat.overdue span,
+  #tasksView .task-overview-group.overdue h3 span {
+    background: #ffe8e8;
+    color: #c50000;
+  }
+
+  #tasksView .task-stat.today span,
+  #tasksView .task-overview-group.today h3 span {
+    background: #fff0df;
+    color: #a34e00;
+  }
+
+  #tasksView .task-stat.three span,
+  #tasksView .task-overview-group.three h3 span {
+    background: #fff3cd;
+    color: #855b00;
+  }
+
+  #tasksView .task-stat.week span,
+  #tasksView .task-stat.total span,
+  #tasksView .task-overview-group.week h3 span,
+  #tasksView .task-overview-group.later h3 span,
+  #tasksView .task-overview-group.done h3 span {
+    background: #dffbea;
+    color: #087231;
+  }
+
+  #tasksView .task-overview-controls,
+  #tasksView .task-overview-selects {
+    border: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 12px 14px;
+  }
+
+  #tasksView .task-overview-controls {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+    gap: 12px;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 0;
+  }
+
+  #tasksView .task-overview-selects {
+    grid-template-columns: minmax(200px, 280px) auto;
+    gap: 8px;
+    margin-top: -16px;
+    border-top: 1px solid var(--geist-hairline);
+    border-radius: 0 0 12px 12px;
+  }
+
+  #tasksView .task-overview-filters {
+    gap: 6px;
+  }
+
+  #tasksView .task-overview-filters .record-control {
+    min-height: 38px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #tasksView .task-overview-filters .record-control:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #tasksView .task-overview-filters .record-control.active {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #tasksView .task-overview-search {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-canvas);
+    padding: 0 12px;
+  }
+
+  #tasksView .task-overview-search:focus-within {
+    border-color: var(--geist-accent);
+    background: var(--geist-elevated);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+  }
+
+  #tasksView .task-overview-search svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: var(--geist-mute);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  #tasksView #taskOverviewSearch {
+    min-width: 0;
+    min-height: 38px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--geist-ink);
+    padding: 0;
+    font-size: 12px;
+    box-shadow: none;
+    outline: none;
+  }
+
+  #tasksView #taskOverviewSearch::placeholder {
+    color: var(--geist-faint);
+  }
+
+  #tasksView .task-overview-sort .custom-select,
+  #tasksView .task-filter-trigger {
+    min-height: 40px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 6px;
+    background: var(--geist-elevated);
+    color: var(--geist-body);
+    box-shadow: none;
+    font-family: "Geist", "Inter", Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #tasksView .task-overview-sort,
+  #tasksView .task-overview-sort .custom-select {
+    width: 100%;
+  }
+
+  #tasksView .task-overview-sort .custom-select {
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 12px;
+    text-align: left;
+  }
+
+  #tasksView .task-overview-sort .custom-select i {
+    color: var(--geist-mute);
+    font-size: 14px;
+    font-style: normal;
+  }
+
+  #tasksView .task-filter-trigger {
+    min-width: 94px;
+    padding: 0 13px;
+    text-align: center;
+  }
+
+  #tasksView .task-filter-trigger:hover {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  #tasksView .task-filter-trigger.active {
+    border-color: rgba(0, 237, 100, 0.34);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  body:has(#tasksView.active) .dropdown-layer {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 6px;
+    box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 14px 32px -10px rgba(0, 0, 0, 0.24);
+  }
+
+  body:has(#tasksView.active) .dropdown-option {
+    min-height: 38px;
+    border-radius: 6px;
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-family: "Geist", "Inter", Arial, sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  body:has(#tasksView.active) .dropdown-option:hover,
+  body:has(#tasksView.active) .dropdown-option.selected {
+    background: var(--geist-soft);
+    color: var(--geist-ink);
+  }
+
+  body:has(#tasksView.active) .dropdown-option.selected i {
+    color: var(--geist-accent);
+  }
+
+  #tasksView .task-overview-list {
+    gap: 10px;
+  }
+
+  #tasksView .task-overview-group {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, 0.025);
+  }
+
+  #tasksView .task-overview-group h3 {
+    display: flex;
+    align-items: center;
+    min-height: 52px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  #tasksView .task-overview-group h3 small {
+    margin-left: 4px;
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  #tasksView .overview-task-row {
+    min-height: 72px;
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    color: var(--geist-ink);
+    padding: 12px 16px;
+  }
+
+  #tasksView .overview-task-row:first-child {
+    border-top: 0;
+  }
+
+  #tasksView .overview-task-row:hover {
+    background: var(--geist-canvas);
+  }
+
+  #tasksView .overview-task-row h4 {
+    color: var(--geist-ink);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+  }
+
+  #tasksView .overview-task-row small {
+    color: var(--geist-mute);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 18px;
+  }
+
+  #tasksView .overview-task-row .task-main input[type="checkbox"] {
+    appearance: none;
+    width: 20px;
+    min-width: 20px;
+    height: 20px;
+    min-height: 20px;
+    border: 1px solid #bfbfbf;
+    border-radius: 5px;
+    background: var(--geist-elevated);
+    cursor: pointer;
+  }
+
+  #tasksView .overview-task-row .task-main input[type="checkbox"]:checked {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent) url("data:image/svg+xml,%3Csvg viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M5 10.2 8.4 13.5 15.2 6.5' fill='none' stroke='%2306140a' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center/14px no-repeat;
+  }
+
+  #tasksView .overview-task-meta {
+    color: var(--geist-mute);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  #tasksView .overview-task-meta b {
+    color: var(--geist-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #tasksView .overview-due {
+    min-width: 80px;
+    min-height: 34px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 999px;
+    padding: 0 11px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #tasksView .overview-due.overdue {
+    border-color: #ffbcbc;
+    background: #ffe8e8;
+    color: #c50000;
+  }
+
+  #tasksView .overview-due.today {
+    border-color: #f4ca94;
+    background: #fff0df;
+    color: #a34e00;
+  }
+
+  #tasksView .overview-due.upcoming,
+  #tasksView .overview-due.done {
+    border-color: #9aebba;
+    background: #dffbea;
+    color: #087231;
+  }
+
+  #tasksView .overview-due.none {
+    border-color: var(--geist-hairline);
+    background: var(--geist-soft);
+    color: var(--geist-body);
+  }
+
+  #tasksView .empty {
+    min-height: 180px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 12px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    font-size: 12px;
+  }
+}
+
+#taskOverviewFilterModal.task-filter-modal {
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#taskOverviewFilterModal .task-filter-card {
+  width: min(680px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  gap: 16px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 24px;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.05), 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#taskOverviewFilterModal .task-filter-head .eyebrow {
+  color: var(--geist-mute);
+  font-family: "Geist Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#taskOverviewFilterModal .task-filter-head h3 {
+  margin-top: 3px;
+  color: var(--geist-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 28px;
+  letter-spacing: -0.5px;
+}
+
+#taskOverviewFilterModal #closeTaskOverviewFilterBtn {
+  min-height: 38px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#taskOverviewFilterModal .task-filter-summary {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-canvas);
+  color: var(--geist-mute);
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+#taskOverviewFilterModal .task-filter-options {
+  gap: 18px;
+  padding-top: 2px;
+}
+
+#taskOverviewFilterModal .task-filter-section {
+  gap: 8px;
+}
+
+#taskOverviewFilterModal .task-filter-section h4 {
+  color: var(--geist-body);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+#taskOverviewFilterModal .task-filter-chip-row {
+  gap: 7px;
+}
+
+#taskOverviewFilterModal .task-filter-chip {
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#taskOverviewFilterModal .task-filter-chip:hover {
+  background: var(--geist-soft);
+  color: var(--geist-ink);
+}
+
+#taskOverviewFilterModal .task-filter-chip.active {
+  border-color: rgba(0, 237, 100, 0.34);
+  background: var(--geist-accent-soft);
+  color: #087231;
+}
+
+@media (max-width: 768px) {
+  #taskOverviewFilterModal.task-filter-modal {
+    align-items: flex-end;
+    padding: 12px;
+  }
+
+  #taskOverviewFilterModal .task-filter-card {
+    width: 100%;
+    max-height: min(78dvh, 720px);
+    border-radius: 16px;
+    padding: 20px 16px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 980px) {
+  #tasksView .task-overview-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  #tasksView .task-overview-controls {
+    grid-template-columns: 1fr;
+  }
+}
