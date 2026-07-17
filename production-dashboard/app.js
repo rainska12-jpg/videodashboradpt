@@ -235,8 +235,28 @@ const defaultOptions = {
   positions: ["관리자", "팀장", "PD", "기획", "촬영", "편집", "과원"]
 };
 
+const OPTION_COLOR_PALETTE = {
+  default: { label: "기본", color: "#8f8f8f" },
+  gray: { label: "회색", color: "#858780" },
+  brown: { label: "갈색", color: "#8b684f" },
+  orange: { label: "주황색", color: "#b86432" },
+  yellow: { label: "노란색", color: "#a88028" },
+  green: { label: "초록색", color: "#3e805d" },
+  blue: { label: "파란색", color: "#3977b7" },
+  purple: { label: "보라색", color: "#75568f" },
+  pink: { label: "분홍색", color: "#9b506f" },
+  red: { label: "빨간색", color: "#b5524d" }
+};
+
+const COLORABLE_OPTION_GROUPS = new Set([
+  "types", "statuses", "clients", "projectTaskTypes",
+  "workTaskTypes", "workTypes", "workStatuses", "workClients",
+  "boardPrefixes", "studioRooms", "staffTypes", "trainingTypes"
+]);
+
 const sampleData = {
   options: structuredClone(defaultOptions),
+  optionColors: {},
   users: [
     { id: "user-admin", username: "videoadmin", email: "admin@videowork.io", password: "0314", name: "관리자", position: "관리자", role: "admin", status: "active", approved: true },
     { id: "user-test-admin", username: "1", email: "", password: "1", name: "테스트 관리자", position: "관리자", role: "admin", status: "active", approved: true }
@@ -922,6 +942,42 @@ function normalizeOptions(source = {}) {
   return normalized;
 }
 
+function normalizeOptionColors(source = {}, options = {}) {
+  const normalized = {};
+  COLORABLE_OPTION_GROUPS.forEach((group) => {
+    const values = new Set(Array.isArray(options[group]) ? options[group] : []);
+    const groupColors = source && typeof source[group] === "object" ? source[group] : {};
+    const next = {};
+    Object.entries(groupColors || {}).forEach(([value, colorKey]) => {
+      if (values.has(value) && OPTION_COLOR_PALETTE[colorKey] && colorKey !== "default") next[value] = colorKey;
+    });
+    normalized[group] = next;
+  });
+  return normalized;
+}
+
+function optionColorKey(group, value) {
+  if (!group || !value || !COLORABLE_OPTION_GROUPS.has(group)) return "default";
+  const key = state?.optionColors?.[group]?.[value];
+  return OPTION_COLOR_PALETTE[key] ? key : "default";
+}
+
+function optionColorStyle(group, value) {
+  const key = optionColorKey(group, value);
+  if (key === "default") return "";
+  return `--option-accent:${OPTION_COLOR_PALETTE[key].color}`;
+}
+
+function optionColorAttributes(group, value) {
+  const key = optionColorKey(group, value);
+  if (key === "default") return "";
+  return ` data-option-color="${key}" style="${optionColorStyle(group, value)}"`;
+}
+
+function optionColorClass(group, value) {
+  return optionColorKey(group, value) === "default" ? "" : "has-option-color";
+}
+
 const WORK_TASK_RECURRENCE_TYPES = new Set(["daily", "weekly", "biweekly", "monthly", "custom"]);
 const WORK_TASK_RECURRENCE_END_TYPES = new Set(["none", "date", "count"]);
 
@@ -960,6 +1016,7 @@ function normalizeWorkTaskRecurrence(task = {}) {
 
 function normalizeState(data) {
   const options = normalizeOptions(data.options || {});
+  const optionColors = normalizeOptionColors(data.optionColors || {}, options);
   const projects = Array.isArray(data.projects) ? data.projects : [];
   const normalizedProjects = projects.map((project) => {
     const fallbackStart = project.kickoffDate || project.startDate || dateKey(new Date());
@@ -1024,6 +1081,7 @@ function normalizeState(data) {
   });
   return {
     options,
+    optionColors,
     users: normalizeUsers(data.users),
     currentUser: data.currentUser || null,
     projects: normalizedProjects,
@@ -1589,10 +1647,11 @@ function setView(view) {
   location.hash = targetView;
 }
 
-function renderDropdown({ target, value, options, placeholder, onSelect, compact = false, disabled = false, className = "", formatOptionLabel = (option) => option }) {
+function renderDropdown({ target, value, options, placeholder, onSelect, compact = false, disabled = false, className = "", colorGroup = "", formatOptionLabel = (option) => option }) {
   if (!target) return;
+  const colorClass = optionColorClass(colorGroup, value);
   target.innerHTML = `
-    <button type="button" class="custom-select ${compact ? "compact" : ""} ${className}" ${disabled ? "disabled" : ""}>
+    <button type="button" class="custom-select ${compact ? "compact" : ""} ${className} ${colorClass}"${optionColorAttributes(colorGroup, value)} ${disabled ? "disabled" : ""}>
       <span>${esc(value ? formatOptionLabel(value) : placeholder)}</span>
       <i>⌄</i>
     </button>
@@ -1600,7 +1659,7 @@ function renderDropdown({ target, value, options, placeholder, onSelect, compact
   if (disabled) return;
   target.querySelector("button").addEventListener("click", (event) => {
     event.stopPropagation();
-    openDropdown(event.currentTarget, options, value, onSelect, formatOptionLabel);
+    openDropdown(event.currentTarget, options, value, onSelect, formatOptionLabel, colorGroup);
   });
 }
 
@@ -1621,7 +1680,7 @@ function renderMultiDropdown({ target, values, options, placeholder, onChange, c
   });
 }
 
-function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel = (option) => option) {
+function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel = (option) => option, colorGroup = "") {
   closeDatePicker();
   const layer = $("#dropdownLayer");
   if (layer.classList.contains("open") && activeDropdownAnchor === anchor) {
@@ -1632,7 +1691,7 @@ function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel
   const rect = anchor.getBoundingClientRect();
   layer.innerHTML = options
     .map((option) => `
-      <button type="button" class="dropdown-option ${option === currentValue ? "selected" : ""}" data-value="${esc(option)}">
+      <button type="button" class="dropdown-option ${option === currentValue ? "selected" : ""} ${optionColorClass(colorGroup, option)}" data-value="${esc(option)}"${optionColorAttributes(colorGroup, option)}>
         <span>${esc(formatOptionLabel(option))}</span>
         ${option === currentValue ? "<i>✓</i>" : ""}
       </button>
@@ -1654,8 +1713,54 @@ function openDropdown(anchor, options, currentValue, onSelect, formatOptionLabel
 
 function closeDropdown() {
   activeDropdownAnchor = null;
-  $("#dropdownLayer").classList.remove("open");
+  $("#dropdownLayer").classList.remove("open", "option-color-layer");
   $("#dropdownLayer").innerHTML = "";
+}
+
+function setOptionColor(group, value, colorKey) {
+  if (!COLORABLE_OPTION_GROUPS.has(group) || !state.options[group]?.includes(value) || !OPTION_COLOR_PALETTE[colorKey]) return;
+  if (!state.optionColors[group]) state.optionColors[group] = {};
+  if (colorKey === "default") delete state.optionColors[group][value];
+  else state.optionColors[group][value] = colorKey;
+  saveState();
+  renderAll();
+}
+
+function openOptionColorPicker(anchor, group, value) {
+  closeDatePicker();
+  const layer = $("#dropdownLayer");
+  if (!layer || !COLORABLE_OPTION_GROUPS.has(group)) return;
+  if (layer.classList.contains("open") && activeDropdownAnchor === anchor) {
+    closeDropdown();
+    return;
+  }
+  activeDropdownAnchor = anchor;
+  const currentKey = optionColorKey(group, value);
+  const rect = anchor.getBoundingClientRect();
+  layer.innerHTML = `
+    <div class="option-color-menu" role="menu" aria-label="${esc(value)} 색상 선택">
+      ${Object.entries(OPTION_COLOR_PALETTE).map(([key, item]) => `
+        <button type="button" class="option-color-choice ${key === currentKey ? "selected" : ""}" data-color-key="${key}">
+          <i style="--option-accent:${item.color}"></i>
+          <span>${esc(item.label)}</span>
+          <b>${key === currentKey ? "✓" : ""}</b>
+        </button>
+      `).join("")}
+    </div>
+  `;
+  const width = Math.min(220, Math.max(180, window.innerWidth - 16));
+  layer.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+  layer.style.top = `${Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 360))}px`;
+  layer.style.minWidth = `${width}px`;
+  layer.classList.add("open", "option-color-layer");
+  layer.querySelectorAll("[data-color-key]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      closeDropdown();
+      layer.classList.remove("option-color-layer");
+      setOptionColor(group, value, button.dataset.colorKey);
+    });
+  });
 }
 
 function openMultiDropdown(anchor, options, selected, onChange, formatOptionLabel = (option) => option) {
@@ -2162,6 +2267,7 @@ function renderProjectList() {
     value: projectFilters.type || "전체 분류",
     options: ["전체 분류", ...state.options.types],
     placeholder: "전체 분류",
+    colorGroup: "types",
     onSelect: (value) => {
       projectFilters.type = value === "전체 분류" ? "" : value;
       saveViewPrefs({ projectFilters });
@@ -2173,6 +2279,7 @@ function renderProjectList() {
     value: projectFilters.client || "전체 발주부서",
     options: ["전체 발주부서", ...state.options.clients],
     placeholder: "전체 발주부서",
+    colorGroup: "clients",
     onSelect: (value) => {
       projectFilters.client = value === "전체 발주부서" ? "" : value;
       saveViewPrefs({ projectFilters });
@@ -2184,6 +2291,7 @@ function renderProjectList() {
     value: projectFilters.status || "전체 진행상태",
     options: ["전체 진행상태", ...state.options.statuses],
     placeholder: "전체 진행상태",
+    colorGroup: "statuses",
     onSelect: (value) => {
       projectFilters.status = value === "전체 진행상태" ? "" : value;
       saveViewPrefs({ projectFilters });
@@ -2244,6 +2352,7 @@ function renderProjectList() {
       value: project.type,
       options: state.options.types,
       placeholder: "선택",
+      colorGroup: "types",
       compact: true,
       className: "outline-cell",
       disabled: !canEditProject(project),
@@ -2262,6 +2371,7 @@ function renderProjectList() {
       value: project.client,
       options: state.options.clients,
       placeholder: "선택",
+      colorGroup: "clients",
       compact: true,
       className: "outline-cell",
       disabled: !canEditProject(project),
@@ -2280,6 +2390,7 @@ function renderProjectList() {
       value: project.status,
       options: state.options.statuses,
       placeholder: "선택",
+      colorGroup: "statuses",
       compact: true,
       className: project.status ? statusClass(project.status) : "outline-cell",
       disabled: !canEditProject(project),
@@ -2400,6 +2511,7 @@ function renderWorkList() {
         value: work[field],
         options: state.options[optionKey],
         placeholder,
+        colorGroup: optionKey,
         compact: true,
         className: field === "status" && work.status ? workStatusClass(work.status) : "outline-cell",
         disabled: !canEditWork(work),
@@ -2642,6 +2754,7 @@ function renderWorkDetail() {
       value: field === "status" ? basicDraft.status : work[field],
       options: state.options[optionKey],
       placeholder: "선택",
+      colorGroup: optionKey,
       compact: true,
       className: field === "status" && basicDraft.status ? workStatusClass(basicDraft.status) : "outline-cell",
       disabled: !editable,
@@ -2831,6 +2944,7 @@ function renderWorkStudioRows(work) {
       value: row.type,
       options: staffTypeOptions(),
       placeholder: "스탭 종류",
+      colorGroup: "staffTypes",
       disabled: !editable,
       onSelect: (type) => {
         row.type = type;
@@ -2870,6 +2984,7 @@ function renderWorkStudioControls(work) {
     value: reservation.room,
     options: studioRoomOptions(),
     placeholder: "장소 선택",
+    colorGroup: "studioRooms",
     disabled: !editable,
     onSelect: (room) => {
       reservation.room = room;
@@ -2881,6 +2996,7 @@ function renderWorkStudioControls(work) {
     value: reservation.trainingType,
     options: trainingTypeOptions(),
     placeholder: "교육 유형 선택",
+    colorGroup: "trainingTypes",
     disabled: !editable,
     onSelect: (trainingType) => {
       reservation.trainingType = trainingType;
@@ -3480,7 +3596,7 @@ function renderWorkTasks(work) {
                   <label class="task-main">
                     <input type="checkbox" data-work-task-check="${esc(task.id)}" ${task.done ? "checked" : ""} ${canManageWorkTask(work, task) ? "" : "disabled"} />
                     <span>
-                      <h3>${task.type ? `<span class="task-type-badge ${taskTypeClass(task.type)}">${esc(task.type)}</span>` : ""}${esc(task.text)}</h3>
+                      <h3>${task.type ? `<span class="task-type-badge ${taskTypeClass(task.type)} ${optionColorClass("workTaskTypes", task.type)}"${optionColorAttributes("workTaskTypes", task.type)}>${esc(task.type)}</span>` : ""}${esc(task.text)}</h3>
                       ${task.detail ? `<p class="task-detail-text">${esc(task.detail)}</p>` : ""}
                       <small>담당 ${esc(taskOwnersLabel(task))} · 완료일 ${esc(task.noDueDate || !task.dueDate ? "없음" : task.dueDate)} · ${esc(formatTaskTime(task))}</small>
                     </span>
@@ -3516,6 +3632,7 @@ function renderWorkTasks(work) {
     value: workTaskDraft.type,
     options: workTaskTypeOptions(),
     placeholder: "업무 분류",
+    colorGroup: "workTaskTypes",
     disabled: !editable,
     onSelect: (type) => {
       syncWorkTaskDraftInputs();
@@ -5078,6 +5195,7 @@ function renderProjectDetail() {
       value: field === "status" ? basicDraft.status : project[field],
       options: state.options[optionKey],
       placeholder: "선택",
+      colorGroup: optionKey,
       compact: true,
       className: field === "status" && basicDraft.status ? statusClass(basicDraft.status) : "outline-cell",
       disabled: !editable,
@@ -5351,7 +5469,7 @@ function renderProjectTasks(project) {
                   <label class="task-main">
                     <input type="checkbox" data-project-task-check="${esc(task.id)}" ${task.done ? "checked" : ""} ${canManageTask(task) ? "" : "disabled"} />
                     <span>
-                      <h3>${task.type ? `<span class="task-type-badge ${taskTypeClass(task.type)}">${esc(task.type)}</span>` : ""}${esc(task.text)}</h3>
+                      <h3>${task.type ? `<span class="task-type-badge ${taskTypeClass(task.type)} ${optionColorClass("projectTaskTypes", task.type)}"${optionColorAttributes("projectTaskTypes", task.type)}>${esc(task.type)}</span>` : ""}${esc(task.text)}</h3>
                       ${task.detail ? `<p class="task-detail-text">${esc(task.detail)}</p>` : ""}
                       <small>담당 ${esc(taskOwnersLabel(task))} · 완료일 ${esc(task.noDueDate || !task.dueDate ? "없음" : task.dueDate)} · ${esc(formatTaskTime(task))}</small>
                     </span>
@@ -5387,6 +5505,7 @@ function renderProjectTasks(project) {
     value: detailTaskDraft.type,
     options: projectTaskTypeOptions(),
     placeholder: "업무 분류",
+    colorGroup: "projectTaskTypes",
     disabled: !editable,
     onSelect: (type) => {
       syncProjectTaskDraftInputs();
@@ -6049,6 +6168,7 @@ function renderStaffScheduleRows() {
       value: row.type,
       options: staffTypeOptions(),
       placeholder: "스탭 종류",
+      colorGroup: "staffTypes",
       onSelect: (type) => {
         row.type = type;
         renderStaffScheduleModalControls();
@@ -6076,6 +6196,7 @@ function renderStaffScheduleModalControls() {
     value: staffScheduleDraft.room,
     options: studioRoomOptions(),
     placeholder: "장소 선택",
+    colorGroup: "studioRooms",
     onSelect: (room) => {
       staffScheduleDraft.room = room;
       renderStaffScheduleModalControls();
@@ -6086,6 +6207,7 @@ function renderStaffScheduleModalControls() {
     value: staffScheduleDraft.trainingType,
     options: trainingTypeOptions(),
     placeholder: "교육 유형 선택",
+    colorGroup: "trainingTypes",
     onSelect: (trainingType) => {
       staffScheduleDraft.trainingType = trainingType;
       renderStaffScheduleModalControls();
@@ -6361,6 +6483,7 @@ function renderStaffEventDetailStaffRows(event) {
       value: row.type,
       options: staffTypeOptions(),
       placeholder: "스탭 종류",
+      colorGroup: "staffTypes",
       onSelect: (type) => {
         row.type = type;
         syncStaffEventSummary(event);
@@ -6537,6 +6660,7 @@ function renderRecurringTrainingControls() {
     value: recurringTrainingDraft.room,
     options: studioRoomOptions(),
     placeholder: "장소 선택",
+    colorGroup: "studioRooms",
     onSelect: (room) => {
       recurringTrainingDraft.room = room;
       renderRecurringTrainingControls();
@@ -6547,6 +6671,7 @@ function renderRecurringTrainingControls() {
     value: recurringTrainingDraft.type,
     options: staffTypeOptions(),
     placeholder: "스탭 종류 선택",
+    colorGroup: "staffTypes",
     onSelect: (type) => {
       recurringTrainingDraft.type = type;
       renderRecurringTrainingControls();
@@ -6568,6 +6693,7 @@ function renderRecurringTrainingControls() {
     value: recurringTrainingDraft.trainingType,
     options: trainingTypeOptions(),
     placeholder: "교육 유형 선택",
+    colorGroup: "trainingTypes",
     onSelect: (trainingType) => {
       recurringTrainingDraft.trainingType = trainingType;
       renderRecurringTrainingControls();
@@ -6706,6 +6832,8 @@ function studioWeekRangeLabel() {
 }
 
 function studioTypeColor(type) {
+  const configuredGroup = ["trainingTypes", "staffTypes"].find((group) => optionColorKey(group, type) !== "default");
+  if (configuredGroup) return OPTION_COLOR_PALETTE[optionColorKey(configuredGroup, type)].color;
   const palette = ["#2f8cff", "#ff971c", "#1ed760", "#a78bfa", "#f97373", "#22d3ee", "#facc15", "#fb7185"];
   const options = trainingTypeOptions();
   const index = Math.max(0, options.indexOf(type));
@@ -7368,7 +7496,7 @@ function renderBoardRow(post, mobile = false) {
     return `
       <button class="mobile-board-row ${notice ? "notice" : ""}" data-board-open="${esc(post.id)}" type="button">
         <span class="mobile-board-row-main">
-          ${post.isNotice ? `<span class="board-notice-chip">공지</span>` : `<span class="board-prefix-chip">${esc(post.prefix || "일반")}</span>`}
+          ${post.isNotice ? `<span class="board-notice-chip">공지</span>` : `<span class="board-prefix-chip ${optionColorClass("boardPrefixes", post.prefix)}"${optionColorAttributes("boardPrefixes", post.prefix)}>${esc(post.prefix || "일반")}</span>`}
           <strong>${esc(post.title || "제목 없음")}</strong>
           <i aria-hidden="true">›</i>
         </span>
@@ -7379,7 +7507,7 @@ function renderBoardRow(post, mobile = false) {
   return `
     <button class="board-table-row ${notice ? "notice" : ""}" data-board-open="${esc(post.id)}" type="button">
       <span>${notice ? "공지" : esc(post.number)}</span>
-      <span><i class="board-prefix-chip">${esc(post.prefix || "일반")}</i></span>
+      <span><i class="board-prefix-chip ${optionColorClass("boardPrefixes", post.prefix)}"${optionColorAttributes("boardPrefixes", post.prefix)}>${esc(post.prefix || "일반")}</i></span>
       <strong>${boardNoticeChip(post)}${esc(post.title || "제목 없음")}${post.updatedAt ? `<em>수정됨</em>` : ""}</strong>
       <span>${esc(post.authorName || "사용자")}</span>
       <span>${esc(boardDateText(post.createdAt))}</span>
@@ -7549,7 +7677,7 @@ function renderBoardDetail(postId) {
           </div>
         </div>
         <header>
-          <div class="board-detail-category">${post.isNotice ? boardNoticeChip(post) : `<span>${esc(post.prefix || "일반")}</span>`}</div>
+          <div class="board-detail-category">${post.isNotice ? boardNoticeChip(post) : `<span class="${optionColorClass("boardPrefixes", post.prefix)}"${optionColorAttributes("boardPrefixes", post.prefix)}>${esc(post.prefix || "일반")}</span>`}</div>
           <h2>${esc(post.title || "제목 없음")}</h2>
           <p class="board-detail-meta">
             <span>${esc(post.authorName || "사용자")}</span>
@@ -7911,6 +8039,7 @@ function renderAdmin() {
             .map((option, index) => `
               <span class="admin-chip" draggable="true" data-option-index="${index}" data-option-value="${esc(option)}">
                 <i class="drag-handle">☰</i>
+                ${COLORABLE_OPTION_GROUPS.has(key) ? `<button class="admin-option-color" data-option-color-group="${key}" data-option-color-value="${esc(option)}" type="button" title="${esc(OPTION_COLOR_PALETTE[optionColorKey(key, option)].label)}" aria-label="${esc(option)} 색상 설정"><i style="--option-accent:${OPTION_COLOR_PALETTE[optionColorKey(key, option)].color}"></i></button>` : ""}
                 <input class="admin-option-input" data-option-edit-value value="${esc(option)}" aria-label="${esc(option)} 이름 수정" readonly />
                 <button data-edit-option="${esc(option)}" type="button">수정</button>
                 <button data-delete-option="${esc(option)}" aria-label="${esc(option)} 삭제">×</button>
@@ -8190,6 +8319,10 @@ function renameOption(group, oldValue, nextValue) {
   const clean = nextValue.trim();
   if (!clean || oldValue === clean || state.options[group].includes(clean)) return;
   state.options[group] = state.options[group].map((option) => option === oldValue ? clean : option);
+  if (COLORABLE_OPTION_GROUPS.has(group) && state.optionColors[group]?.[oldValue]) {
+    state.optionColors[group][clean] = state.optionColors[group][oldValue];
+    delete state.optionColors[group][oldValue];
+  }
   if (group === "owners") {
     state.options.workOwners = [...state.options.owners];
     state.options.studioStaffOwners = [...state.options.owners];
@@ -8243,6 +8376,7 @@ function renameOption(group, oldValue, nextValue) {
 
 function deleteOption(group, value) {
   state.options[group] = state.options[group].filter((option) => option !== value);
+  if (COLORABLE_OPTION_GROUPS.has(group) && state.optionColors[group]) delete state.optionColors[group][value];
   if (group === "owners") {
     state.options.workOwners = [...state.options.owners];
     state.options.studioStaffOwners = [...state.options.owners];
@@ -8872,7 +9006,7 @@ function renderMobileProjectCards() {
             <div class="mobile-project-main">
               <strong>${esc(project.title || "제목 없음")}</strong>
               <div class="mobile-project-compact-meta">
-                <span class="mobile-project-status ${statusClassName}">${esc(mobileStatusText(project.status))}</span>
+                <span class="mobile-project-status ${statusClassName} ${optionColorClass("statuses", project.status)}"${optionColorAttributes("statuses", project.status)}>${esc(mobileStatusText(project.status))}</span>
                 <span title="${esc(mobileOwnersText(projectOwners(project)))}">${esc(mobileOwnersText(projectOwners(project)))}</span>
                 <span title="${esc(project.client || "-")}">${esc(project.client || "-")}</span>
                 <span class="mobile-project-deadline ${esc(due.className)}">${project.finalDate ? esc(formatDate(project.finalDate)) : "마감 없음"}</span>
@@ -8992,7 +9126,7 @@ function renderMobileWorkCards() {
             <div class="mobile-work-main">
               <strong>${esc(work.title || "제목 없음")}</strong>
               <div class="mobile-work-compact-meta">
-                <span class="mobile-work-status ${statusClassName}">${esc(mobileStatusText(work.status))}</span>
+                <span class="mobile-work-status ${statusClassName} ${optionColorClass("workStatuses", work.status)}"${optionColorAttributes("workStatuses", work.status)}>${esc(mobileStatusText(work.status))}</span>
                 <span title="${esc(mobileOwnersText(workOwners(work)))}">${esc(mobileOwnersText(workOwners(work)))}</span>
                 <span title="${esc(work.client || "-")}">${esc(work.client || "-")}</span>
                 <span class="mobile-work-deadline ${esc(due.className)}">${work.noSchedule || !work.finalDate ? "일정 없음" : esc(formatDate(work.finalDate))}</span>
@@ -9786,7 +9920,10 @@ function validateMobileStudioBasic() {
 
 function renderMobileStudioBasicStep(draft) {
   const error = (key) => mobileStudioFormErrors[key] ? `<small class="mobile-studio-error">${esc(mobileStudioFormErrors[key])}</small>` : "";
-  const selectTrigger = (key, value, placeholder) => `<button class="mobile-studio-select-trigger" data-mobile-studio-select="${key}" type="button"><span>${esc(value || placeholder)}</span><i aria-hidden="true">⌄</i></button>`;
+  const selectTrigger = (key, value, placeholder) => {
+    const colorGroup = key === "room" ? "studioRooms" : "trainingTypes";
+    return `<button class="mobile-studio-select-trigger ${optionColorClass(colorGroup, value)}"${optionColorAttributes(colorGroup, value)} data-mobile-studio-select="${key}" type="button"><span>${esc(value || placeholder)}</span><i aria-hidden="true">⌄</i></button>`;
+  };
   const timeTrigger = (key, value) => `<button class="mobile-studio-time-trigger" data-mobile-studio-time-picker="${key}" type="button" ${draft.allDay ? "disabled aria-disabled=\"true\"" : ""}><span>${esc(formatTimeButton(value))}</span><i aria-hidden="true">⌄</i></button>`;
   return `
     <section class="mobile-studio-form-step">
@@ -10252,7 +10389,7 @@ function renderMobileAdminUserDetail(userId) {
 }
 
 function renderMobileOptionGroup(group, label) {
-  return `<details class="mobile-admin-option-group" open data-mobile-option-group="${esc(group)}"><summary><span>${esc(label)}</span><b>${state.options[group].length}</b></summary><form data-mobile-option-add="${esc(group)}"><input name="option" placeholder="새 항목" /><button type="submit">추가</button></form><div>${state.options[group].map((option, index) => `<span data-mobile-option-index="${index}"><button class="mobile-option-drag" data-mobile-option-drag type="button" aria-label="${esc(option)} 순서 이동">☰</button><input value="${esc(option)}" data-mobile-option-value="${esc(option)}" /><button data-mobile-option-save="${esc(option)}" type="button" aria-label="${esc(option)} 수정">저장</button><button data-mobile-option-delete="${esc(option)}" type="button" aria-label="${esc(option)} 삭제">×</button></span>`).join("")}</div></details>`;
+  return `<details class="mobile-admin-option-group" open data-mobile-option-group="${esc(group)}"><summary><span>${esc(label)}</span><b>${state.options[group].length}</b></summary><form data-mobile-option-add="${esc(group)}"><input name="option" placeholder="새 항목" /><button type="submit">추가</button></form><div>${state.options[group].map((option, index) => `<span data-mobile-option-index="${index}"><button class="mobile-option-drag" data-mobile-option-drag type="button" aria-label="${esc(option)} 순서 이동">☰</button>${COLORABLE_OPTION_GROUPS.has(group) ? `<button class="mobile-option-color" data-option-color-group="${group}" data-option-color-value="${esc(option)}" type="button" title="${esc(OPTION_COLOR_PALETTE[optionColorKey(group, option)].label)}" aria-label="${esc(option)} 색상 설정"><i style="--option-accent:${OPTION_COLOR_PALETTE[optionColorKey(group, option)].color}"></i></button>` : ""}<input value="${esc(option)}" data-mobile-option-value="${esc(option)}" /><button data-mobile-option-save="${esc(option)}" type="button" aria-label="${esc(option)} 수정">저장</button><button data-mobile-option-delete="${esc(option)}" type="button" aria-label="${esc(option)} 삭제">×</button></span>`).join("")}</div></details>`;
 }
 
 function renderMobileAdminDropdowns() {
@@ -10563,7 +10700,7 @@ function bindMobileCoreActions(app) {
       if (!mobileStudioFormDraft) return;
       mobileStudioFormDraft[key] = value;
       renderMobileDashboard();
-    });
+    }, (option) => option, key === "room" ? "studioRooms" : "trainingTypes");
   });
   bind("[data-mobile-studio-date-picker]", (button) => {
     if (!mobileStudioFormDraft) return;
@@ -11881,6 +12018,12 @@ $("#mobileApp")?.addEventListener("change", (event) => {
   renderAll();
 });
 $("#mobileApp")?.addEventListener("click", (event) => {
+  const optionColorButton = event.target.closest("[data-option-color-group]");
+  if (optionColorButton) {
+    event.stopPropagation();
+    openOptionColorPicker(optionColorButton, optionColorButton.dataset.optionColorGroup, optionColorButton.dataset.optionColorValue);
+    return;
+  }
   if (event.target.closest("[data-mobile-notifications-close]")) {
     openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection);
     return;
@@ -13588,6 +13731,12 @@ $("#adminContent").addEventListener("submit", (event) => {
 });
 
 $("#adminContent").addEventListener("click", (event) => {
+  const colorButton = event.target.closest("[data-option-color-group]");
+  if (colorButton) {
+    event.stopPropagation();
+    openOptionColorPicker(colorButton, colorButton.dataset.optionColorGroup, colorButton.dataset.optionColorValue);
+    return;
+  }
   const sectionButton = event.target.closest("[data-admin-section]");
   if (sectionButton) {
     adminSection = sectionButton.dataset.adminSection;

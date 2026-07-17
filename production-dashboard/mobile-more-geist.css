@@ -531,3 +531,143 @@
     font-size: 9px;
   }
 }
+
+/* Mobile admin uses the same light/dark Geist surfaces as the rest of More. */
+@media (max-width: 768px) {
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-open {
+    min-height: 54px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 9px;
+    background: var(--mobile-video-soft);
+    color: var(--mobile-video-ink);
+    padding: 6px 9px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-open strong {
+    color: var(--mobile-video-ink);
+    font-size: 14px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-open small,
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article > label {
+    color: var(--mobile-video-body);
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) :is(.mobile-admin-user-list select, .mobile-owner-links select) {
+    border-color: var(--mobile-video-line);
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: none;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article button {
+    min-height: 36px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    font-size: 11px;
+    box-shadow: none;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article button.active,
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article button.primary {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-user-list article button.danger {
+    border-color: #ffd4d4;
+    background: #fff3f3;
+    color: #c50000;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group {
+    border-color: var(--mobile-video-line);
+    border-radius: 10px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group summary {
+    min-height: 48px;
+    color: var(--mobile-video-ink);
+    padding: 0 12px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group summary b {
+    color: var(--mobile-video-accent-deep);
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group > form {
+    grid-template-columns: minmax(0, 1fr) 56px;
+    gap: 6px;
+    padding: 0 10px 10px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group :is(input, form button) {
+    min-height: 38px;
+    border-color: var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    box-shadow: none;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group form button {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent);
+    color: #06140a;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group > div:not(.mobile-owner-links) > span {
+    grid-template-columns: 22px minmax(0, 1fr) 44px 36px;
+    min-height: 50px;
+    border-top-color: var(--mobile-video-line);
+    padding: 6px 9px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group > div:not(.mobile-owner-links) > span:has(.mobile-option-color) {
+    grid-template-columns: 22px 34px minmax(0, 1fr) 44px 36px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group > div > span > button {
+    min-height: 34px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-soft);
+    color: var(--mobile-video-body);
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group .mobile-option-color {
+    width: 34px;
+    padding: 6px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="settings"]) .mobile-admin-option-group .mobile-option-color > i {
+    width: 20px;
+    height: 20px;
+  }
+
+  body[data-theme="dark"] .option-color-layer.dropdown-layer {
+    border-color: #29302c;
+    background: #111512;
+  }
+
+  body[data-theme="dark"] .option-color-choice {
+    color: #f2f5f3;
+  }
+
+  body[data-theme="dark"] .option-color-choice:hover,
+  body[data-theme="dark"] .option-color-choice.selected {
+    background: #191e1b;
+  }
+}

@@ -429,6 +429,21 @@
     cursor: grab;
   }
 
+  #adminView .admin-chip:has(.admin-option-color) {
+    grid-template-columns: 20px 28px minmax(0, 1fr) auto 28px;
+  }
+
+  #adminView .admin-chip .admin-option-color {
+    width: 28px;
+    min-width: 28px;
+    padding: 3px;
+  }
+
+  #adminView .admin-chip .admin-option-color > i {
+    width: 18px;
+    height: 18px;
+  }
+
   #adminView .admin-chip:active {
     cursor: grabbing;
   }

@@ -11935,3 +11935,82 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Per-option colors configured in Admin > Dropdown management. */
+body .custom-select.has-option-color,
+body .task-type-badge.has-option-color,
+body .mobile-project-status.has-option-color,
+body .mobile-work-status.has-option-color,
+body .board-prefix-chip.has-option-color,
+body .board-detail-category .has-option-color,
+body .mobile-studio-select-trigger.has-option-color {
+  border-color: color-mix(in srgb, var(--option-accent) 58%, transparent) !important;
+  background: color-mix(in srgb, var(--option-accent) 14%, var(--geist-elevated, #fff)) !important;
+  color: color-mix(in srgb, var(--option-accent) 82%, #171717) !important;
+}
+
+body[data-theme="dark"] :is(.custom-select, .task-type-badge, .mobile-project-status, .mobile-work-status, .board-prefix-chip, .mobile-studio-select-trigger).has-option-color {
+  border-color: color-mix(in srgb, var(--option-accent) 68%, #29302c) !important;
+  background: color-mix(in srgb, var(--option-accent) 22%, #111512) !important;
+  color: color-mix(in srgb, var(--option-accent) 35%, #fff) !important;
+}
+
+body .dropdown-option.has-option-color {
+  border: 1px solid color-mix(in srgb, var(--option-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--option-accent) 10%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, var(--option-accent) 82%, #171717);
+}
+
+body .dropdown-option.has-option-color:hover,
+body .dropdown-option.has-option-color.selected {
+  background: color-mix(in srgb, var(--option-accent) 18%, var(--geist-elevated, #fff));
+}
+
+.option-color-layer.dropdown-layer {
+  max-height: min(430px, calc(100vh - 24px));
+  overflow: auto;
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  background: var(--geist-elevated, #fff);
+  padding: 6px;
+}
+
+.option-color-menu {
+  display: grid;
+  gap: 2px;
+}
+
+.option-color-choice {
+  width: 100%;
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-ink, #171717);
+  padding: 5px 9px;
+  text-align: left;
+}
+
+.option-color-choice:hover,
+.option-color-choice.selected {
+  background: var(--geist-soft, #f2f2f2);
+}
+
+.option-color-choice > i,
+.admin-option-color > i,
+.mobile-option-color > i {
+  width: 20px;
+  height: 20px;
+  display: block;
+  border: 1px solid color-mix(in srgb, var(--option-accent) 72%, #fff);
+  border-radius: 5px;
+  background: var(--option-accent);
+}
+
+.option-color-choice > b {
+  color: var(--geist-accent, #00ed64);
+  font-size: 13px;
+}
