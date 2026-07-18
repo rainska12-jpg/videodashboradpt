@@ -220,6 +220,7 @@ const defaultTelegramDigestSettings = {
   },
   additionalMessage: ""
 };
+const defaultStudioTelegramSettings = { rules: [] };
 const visibleDetailCalendarFields = ["kickoffDate", "finalDate"];
 const visibleWorkDetailCalendarFields = ["kickoffDate", "finalDate"];
 const defaultOwnerNames = ["김연아", "오상민", "주햇빛", "변명근", "조준호", "유희수"];
@@ -242,7 +243,7 @@ const defaultOptions = {
   workOwners: [...defaultOwnerNames],
   workClients: ["내부", "공공기관", "기업", "교회"],
   studioRooms: ["방송실 A", "방송실 B", "스튜디오", "편집실", "장비실"],
-  staffTypes: ["정기교육", "비정기교육", "방송실 스탭", "장비 점검", "외부 지원", "촬영 지원"],
+  staffTypes: ["정기교육", "비정기교육", "방송실 일정", "장비 점검", "외부 지원", "촬영 지원"],
   studioStaffOwners: [...defaultOwnerNames],
   trainingTypes: ["자막 송출 교육", "카메라 기초 교육", "라이브 스위처 교육", "장비 점검 교육", "현장 실습"],
   boardPrefixes: ["일반"],
@@ -286,7 +287,8 @@ const sampleData = {
   recurringTrainings: [],
   boardPosts: [],
   boardComments: [],
-  telegramDigest: structuredClone(defaultTelegramDigestSettings)
+  telegramDigest: structuredClone(defaultTelegramDigestSettings),
+  studioTelegram: structuredClone(defaultStudioTelegramSettings)
 };
 
 function normalizeTelegramDigestSettings(value = {}) {
@@ -298,6 +300,26 @@ function normalizeTelegramDigestSettings(value = {}) {
     deliveryTime: `${String(hour).padStart(2, "0")}:00`,
     include: Object.fromEntries(Object.keys(defaultTelegramDigestSettings.include).map((key) => [key, include[key] !== false])),
     additionalMessage: String(value.additionalMessage || "").slice(0, 1000)
+  };
+}
+
+function normalizeStudioTelegramSettings(value = {}) {
+  const rules = Array.isArray(value?.rules) ? value.rules : [];
+  return {
+    rules: rules.slice(0, 30).map((rule, index) => {
+      const rawHour = Number(String(rule.deliveryTime || "09:00").split(":")[0]);
+      const hour = Math.max(0, Math.min(23, Number.isFinite(rawHour) ? rawHour : 9));
+      return {
+        id: String(rule.id || `studio-rule-${index + 1}`),
+        name: String(rule.name || `공지 규칙 ${index + 1}`).slice(0, 80),
+        enabled: rule.enabled !== false,
+        trainingType: String(rule.trainingType || "all").slice(0, 120),
+        mode: rule.mode === "weekly" ? "weekly" : "previous-day",
+        weekday: Math.max(0, Math.min(6, Number(rule.weekday) || 0)),
+        deliveryTime: `${String(hour).padStart(2, "0")}:00`,
+        includeCallTime: rule.includeCallTime !== false
+      };
+    })
   };
 }
 
@@ -431,6 +453,7 @@ let mobileBoardFilterOpen = false;
 let adminSection = viewPref("adminSection", "dropdowns");
 let telegramDigestRuntimeStatus = null;
 let telegramDigestStatusLoading = false;
+let studioTelegramDraft = null;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -968,6 +991,8 @@ function normalizeOptions(source = {}) {
   const legacyTaskTypes = Array.isArray(source.taskTypes) && source.taskTypes.length ? source.taskTypes.filter(Boolean) : null;
   if (legacyTaskTypes && !Array.isArray(source.projectTaskTypes)) normalized.projectTaskTypes = [...legacyTaskTypes];
   if (legacyTaskTypes && !Array.isArray(source.workTaskTypes)) normalized.workTaskTypes = [...legacyTaskTypes];
+  normalized.staffTypes = normalized.staffTypes.map((value) => ["방송실 스탭", "스탭 배정"].includes(value) ? "방송실 일정" : value);
+  normalized.staffTypes = [...new Set(normalized.staffTypes)];
   return normalized;
 }
 
@@ -1134,7 +1159,7 @@ function normalizeState(data) {
       : [],
     schedules: Array.isArray(data.schedules) ? data.schedules.map((schedule) => ({ allDay: true, startTime: "09:00", endTime: "10:00", ...schedule })) : [],
     staffEvents: Array.isArray(data.staffEvents) ? data.staffEvents.map((event) => {
-      const legacyType = event.type === "단발성 교육" ? "비정기교육" : event.type === "스탭 배정" ? "방송실 스탭" : event.type;
+      const legacyType = event.type === "단발성 교육" ? "비정기교육" : ["스탭 배정", "방송실 스탭"].includes(event.type) ? "방송실 일정" : event.type;
       const type = options.staffTypes.includes(legacyType) ? legacyType : (legacyType || options.staffTypes[0] || "");
       const rawOwner = Array.isArray(event.owners) ? event.owners[0] || event.owner : event.owner;
       const owner = rawOwner || "";
@@ -1150,11 +1175,13 @@ function normalizeState(data) {
         owner,
         owners: [owner].filter(Boolean),
         trainingType,
-        title: displayStudioTerminology(event.title || trainingType)
+        title: displayStudioTerminology(event.title || trainingType),
+        telegramCallTimeEnabled: event.telegramCallTimeEnabled !== false,
+        telegramNote: String(event.telegramNote || "").slice(0, 1000)
       };
     }) : [],
     recurringTrainings: Array.isArray(data.recurringTrainings) ? data.recurringTrainings.map((series) => {
-      const legacyType = series.type === "단발성 교육" ? "비정기교육" : series.type === "스탭 배정" ? "방송실 스탭" : series.type;
+      const legacyType = series.type === "단발성 교육" ? "비정기교육" : ["스탭 배정", "방송실 스탭"].includes(series.type) ? "방송실 일정" : series.type;
       const type = options.staffTypes.includes(legacyType) ? legacyType : (legacyType || "정기교육");
       const rawOwner = Array.isArray(series.owners) ? series.owners[0] || series.owner : series.owner;
       const owner = rawOwner || "";
@@ -1209,6 +1236,7 @@ function normalizeState(data) {
       message: displayStudioTerminology(item.message)
     })) : [],
     telegramDigest: normalizeTelegramDigestSettings(data.telegramDigest || {}),
+    studioTelegram: normalizeStudioTelegramSettings(data.studioTelegram || {}),
     ownerDefaultsVersion: data.ownerDefaultsVersion || 2
   };
 }
@@ -1240,17 +1268,17 @@ function staffEventTitle(event) {
 }
 
 function staffReservationTitle(event) {
-  return displayStudioTerminology(event?.title || event?.trainingType || "방송실 스탭");
+  return displayStudioTerminology(event?.title || event?.trainingType || "방송실 일정");
 }
 
 function displayStudioTerminology(value) {
-  return typeof value === "string" ? value.replaceAll(["방송실", "예약"].join(" "), "방송실 스탭") : value;
+  return typeof value === "string" ? value.replaceAll(["방송실", "예약"].join(" "), "방송실 일정").replaceAll("방송실 스탭", "방송실 일정") : value;
 }
 
 function staffEventTypeColor(type) {
   if (type === "정기교육") return "training";
   if (["비정기교육", "단발성 교육"].includes(type)) return "lesson";
-  if (["방송실 스탭", "스탭 배정"].includes(type)) return "staff";
+  if (["방송실 일정", "방송실 스탭", "스탭 배정"].includes(type)) return "staff";
   return "staff";
 }
 
@@ -1664,7 +1692,7 @@ function projectName(projectId) {
 }
 
 function setView(view) {
-  const titles = { overview: "개요", projects: "영상", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 스탭", board: "게시판", admin: "관리자 모드" };
+  const titles = { overview: "개요", projects: "영상", works: "업무", tasks: "할 일", calendar: "일정 캘린더", studio: "방송실 일정", board: "게시판", admin: "관리자 모드" };
   const eyebrows = { projects: "VIDEO", works: "WORK", tasks: "TASK", calendar: "CALENDAR", studio: "STUDIO", board: "BOARD", admin: "ADMIN" };
   $$(".view").forEach((section) => section.classList.remove("active"));
   const targetView = $(`#${view}View`) ? view : "overview";
@@ -2885,12 +2913,12 @@ function ensureWorkStudioReservation(work) {
 function removeWorkStudioReservation(work) {
   const event = state.staffEvents.find((item) => item.id === work.studioReservationId);
   const recipientOwners = uniqueValues([...workOwners(work), ...(event?.owners || [])]);
-  notifyOwners(recipientOwners, `${notificationActor().name}님이 ‘${work.title}’의 방송실 스탭을 삭제했습니다.`, {
+  notifyOwners(recipientOwners, `${notificationActor().name}님이 ‘${work.title}’의 방송실 일정을 삭제했습니다.`, {
     type: "work-studio",
     workId: work.id,
     staffEventId: work.studioReservationId,
     actionType: "studio_reservation_deleted",
-    title: "방송실 스탭 삭제",
+    title: "방송실 일정 삭제",
     targetTab: "studio"
   });
   if (work.studioReservationId) {
@@ -2913,7 +2941,7 @@ function syncWorkStudioReservation(work) {
   }));
   const owners = [...new Set(staffRows.map((row) => row.owner).filter((owner) => !isUnassignedStudioOwner(owner)))];
   const eventData = {
-    title: reservation.title || work.title || "방송실 스탭",
+    title: reservation.title || work.title || "방송실 일정",
     source: "work",
     workId: work.id,
     room: reservation.room || "",
@@ -2938,19 +2966,19 @@ function syncWorkStudioReservation(work) {
     work.studioReservationId = id;
     state.staffEvents.push({ id, ...eventData });
   }
-  notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${work.title}’의 방송실 스탭을 ${wasExisting ? "수정" : "생성"}했습니다.`, {
+  notifyOwners(uniqueValues([...workOwners(work), ...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${work.title}’의 방송실 일정을 ${wasExisting ? "수정" : "생성"}했습니다.`, {
     type: "work-studio",
     workId: work.id,
     staffEventId: work.studioReservationId,
     actionType: wasExisting ? "studio_reservation_updated" : "studio_reservation_created",
-    title: wasExisting ? "방송실 스탭 수정" : "방송실 스탭 생성",
+    title: wasExisting ? "방송실 일정 수정" : "방송실 일정 생성",
     targetTab: "studio"
   });
   saveState();
   queueRemoteSave();
   renderAll();
   renderWorkDetail();
-  showToast("방송실 스탭이 저장되었습니다.");
+  showToast("방송실 일정이 저장되었습니다.");
 }
 
 function renderWorkStudioRows(work) {
@@ -3056,7 +3084,7 @@ function renderWorkStudioReservation(work) {
   target.innerHTML = `
     <div class="work-studio-panel">
       <label class="work-studio-toggle studio-compact-toggle">
-        <strong>방송실 스탭</strong>
+        <strong>방송실 일정</strong>
         <span>${work.studioReservationEnabled ? "사용" : "사용 안함"}</span>
         <input id="workStudioEnabled" type="checkbox" ${work.studioReservationEnabled ? "checked" : ""} ${editable ? "" : "disabled"} />
         <b></b>
@@ -6136,7 +6164,7 @@ function openStaffScheduleModal(date, preset = {}) {
   };
   $("#staffScheduleTitle").value = "";
   $("#staffScheduleMemo").value = "";
-  $("#staffScheduleForm button[type='submit']").textContent = "스탭 등록";
+  $("#staffScheduleForm button[type='submit']").textContent = "일정 등록";
   ensureStaffScheduleRows();
   renderStaffScheduleModalControls();
   $("#staffScheduleModal").classList.add("open");
@@ -6351,6 +6379,7 @@ function openScheduleEventDetail(scheduleId) {
   $("#staffEventDetailEyebrow").textContent = "SCHEDULE DETAIL";
   $("#staffEventDetailTitle").textContent = "일정 상세";
   $("#editScheduleEventBtn").hidden = false;
+  $("#sendStaffEventTelegramBtn").hidden = true;
   $("#deleteStaffEventBtn").textContent = "일정 삭제";
   $("#staffEventDetailContent").innerHTML = `
     <div class="event-detail-row">
@@ -6395,7 +6424,7 @@ function addStaffSchedule() {
     memo: row.memo || ""
   }));
   const owners = [...new Set(staffRows.map((row) => row.owner).filter((owner) => !isUnassignedStudioOwner(owner)))];
-  const title = $("#staffScheduleTitle").value.trim() || staffScheduleDraft.trainingType || "방송실 스탭";
+  const title = $("#staffScheduleTitle").value.trim() || staffScheduleDraft.trainingType || "방송실 일정";
   const eventData = {
     title,
     room: staffScheduleDraft.room || "",
@@ -6416,11 +6445,11 @@ function addStaffSchedule() {
       const previousOwners = event.owners || [];
       Object.assign(event, eventData, { date: staffScheduleDraft.date || event.date });
       if (previous !== JSON.stringify(event)) {
-        notifyOwners(uniqueValues([...previousOwners, ...event.owners]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 수정했습니다.`, {
+        notifyOwners(uniqueValues([...previousOwners, ...event.owners]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 일정을 수정했습니다.`, {
           type: "staff",
           staffEventId: event.id,
           actionType: "studio_reservation_updated",
-          title: "방송실 스탭 수정",
+          title: "방송실 일정 수정",
           eventDate: event.date,
           targetView: "studio"
         });
@@ -6460,11 +6489,11 @@ function addStaffSchedule() {
       date: dateKey(nextDate),
     });
   });
-  notifyOwners(owners, `${notificationActor().name}님이 ‘${title}’ 방송실 스탭${staffScheduleDraft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, {
+  notifyOwners(owners, `${notificationActor().name}님이 ‘${title}’ 방송실 일정${staffScheduleDraft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, {
     type: "staff",
     staffEventId: firstEventId,
     actionType: staffScheduleDraft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created",
-    title: staffScheduleDraft.repeatEnabled ? "반복 일정 생성" : "방송실 스탭 생성",
+    title: staffScheduleDraft.repeatEnabled ? "반복 일정 생성" : "방송실 일정 생성",
     eventDate: staffScheduleDraft.date,
     targetView: "studio"
   });
@@ -6546,9 +6575,10 @@ function openStaffEventDetail(staffEventId) {
   activeStaffEventId = staffEventId;
   activeScheduleEventId = null;
   $("#staffEventDetailEyebrow").textContent = "STUDIO SCHEDULE";
-  $("#staffEventDetailTitle").textContent = "방송실 스탭 상세";
+  $("#staffEventDetailTitle").textContent = "방송실 일정 상세";
   $("#editScheduleEventBtn").hidden = false;
-  $("#deleteStaffEventBtn").textContent = "스탭 삭제";
+  $("#sendStaffEventTelegramBtn").hidden = !isAdminUser();
+  $("#deleteStaffEventBtn").textContent = "일정 삭제";
   $("#staffEventDetailContent").innerHTML = `
     <div class="event-detail-row">
       <span>일정 제목</span>
@@ -6584,6 +6614,21 @@ function openStaffEventDetail(staffEventId) {
       <span>메모</span>
       <p>${esc(event.memo || "등록된 메모가 없습니다.")}</p>
     </div>
+    ${isAdminUser() ? `<section class="studio-event-telegram">
+      <div>
+        <strong>텔레그램 공지 설정</strong>
+        <small>이 일정만 바로 보낼 때 적용됩니다.</small>
+      </div>
+      <label class="studio-telegram-check">
+        <input data-studio-event-call-time type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} />
+        <span>콜타임 포함 (시작 1시간 전)</span>
+      </label>
+      <label>
+        특이사항
+        <textarea data-studio-event-telegram-note maxlength="1000" placeholder="공지에 함께 보낼 준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea>
+      </label>
+      <small class="studio-event-telegram-message" data-studio-event-telegram-message></small>
+    </section>` : ""}
   `;
   renderStaffEventDetailStaffRows(event);
   $("#staffEventDetailModal").classList.add("open");
@@ -6595,6 +6640,30 @@ function closeStaffEventDetail() {
   activeScheduleEventId = null;
   $("#staffEventDetailModal").classList.remove("open");
   $("#staffEventDetailModal").setAttribute("aria-hidden", "true");
+}
+
+async function sendStudioEventTelegram(eventId, button) {
+  const event = state.staffEvents.find((item) => item.id === eventId);
+  if (!event || !button) return;
+  const originalText = button.textContent;
+  const messageTarget = $("[data-studio-event-telegram-message]");
+  button.disabled = true;
+  button.textContent = "전송 중…";
+  if (messageTarget) messageTarget.textContent = "";
+  try {
+    saveState();
+    const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
+    if (SUPABASE_ENABLED && !remoteSaved) throw new Error("최신 일정 내용을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    await telegramDigestApi("studio-send", { eventId });
+    if (messageTarget) messageTarget.textContent = "텔레그램 그룹으로 전송했습니다.";
+    showToast("방송실 일정을 텔레그램으로 전송했습니다.");
+  } catch (error) {
+    if (messageTarget) messageTarget.textContent = error.message || "전송하지 못했습니다.";
+    showToast(error.message || "텔레그램 전송에 실패했습니다.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
 }
 
 function deleteScheduleEvent(scheduleId) {
@@ -6618,11 +6687,11 @@ function deleteScheduleEvent(scheduleId) {
 function deleteStaffEvent(staffEventId) {
   const event = state.staffEvents.find((item) => item.id === staffEventId);
   if (event) {
-    notifyOwners(event.owners || [event.owner], `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 삭제했습니다.`, {
+    notifyOwners(event.owners || [event.owner], `${notificationActor().name}님이 ‘${event.title}’ 방송실 일정을 삭제했습니다.`, {
       type: "staff",
       staffEventId: event.id,
       actionType: "studio_reservation_deleted",
-      title: "방송실 스탭 삭제",
+      title: "방송실 일정 삭제",
       eventDate: event.date,
       targetView: "studio"
     });
@@ -6941,7 +7010,7 @@ function renderStudioUnassignedNotice() {
   if (!target) return;
   const count = state.staffEvents.filter(needsStudioStaffAssignment).length;
   target.innerHTML = count
-    ? `<div class="studio-unassigned-alert"><span>스탭 배정이 안된 방송실 스탭 건이 있습니다! <b>${count}건</b></span><button type="button" data-open-nearest-unassigned>가까운 날짜 배정하기</button></div>`
+    ? `<div class="studio-unassigned-alert"><span>스탭 배정이 안된 방송실 일정이 있습니다! <b>${count}건</b></span><button type="button" data-open-nearest-unassigned>가까운 날짜 배정하기</button></div>`
     : "";
 }
 
@@ -7057,6 +7126,8 @@ function scrollStudioGridToDefaultHour() {
 function renderStudioManage({ preserveScroll = false } = {}) {
   const title = $("#studioWeekTitle");
   if (title) title.textContent = studioWeekRangeLabel();
+  const telegramButton = $("#studioTelegramManageBtn");
+  if (telegramButton) telegramButton.hidden = !isAdminUser();
   $$("[data-studio-view-mode]").forEach((button) => {
     button.classList.toggle("active", button.dataset.studioViewMode === studioViewMode);
   });
@@ -7156,7 +7227,7 @@ function moveStudioEventToCell(eventId, cell, pointerEvent) {
   if (nextEnd % 60) event.endTime = timeFromMinutes(Math.min(23 * 60 + 59, nextEnd));
   saveState();
   renderAll();
-  showToast("방송실 스탭 시간이 변경되었습니다.");
+  showToast("방송실 일정 시간이 변경되었습니다.");
 }
 
 function moveStudioEventToDate(eventId, date) {
@@ -7165,7 +7236,7 @@ function moveStudioEventToDate(eventId, date) {
   event.date = date;
   saveState();
   renderAll();
-  showToast("방송실 스탭 날짜가 변경되었습니다.");
+  showToast("방송실 일정 날짜가 변경되었습니다.");
 }
 
 function boardPrefixes() {
@@ -8168,7 +8239,7 @@ async function saveTelegramDigestSettings(form, { notify = true } = {}) {
   return !SUPABASE_ENABLED || remoteSaved;
 }
 
-async function telegramDigestApi(action = "status") {
+async function telegramDigestApi(action = "status", payload = {}) {
   const client = getSupabaseClient();
   if (!client) throw new Error("배포된 대시보드에서 로그인한 뒤 사용할 수 있습니다.");
   const { data } = await client.auth.getSession();
@@ -8180,7 +8251,7 @@ async function telegramDigestApi(action = "status") {
       Authorization: `Bearer ${accessToken}`,
       ...(action === "status" ? {} : { "Content-Type": "application/json" })
     },
-    ...(action === "status" ? {} : { body: JSON.stringify({ action }) })
+    ...(action === "status" ? {} : { body: JSON.stringify({ action, ...payload }) })
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok || !result.ok) throw new Error(result.error || "텔레그램 요청을 처리하지 못했습니다.");
@@ -8247,6 +8318,116 @@ async function runTelegramDigestAction(action, button) {
   }
 }
 
+function createStudioTelegramRule(index = 0) {
+  return {
+    id: `studio-rule-${makeId()}`,
+    name: `방송실 공지 ${index + 1}`,
+    enabled: true,
+    trainingType: "all",
+    mode: "previous-day",
+    weekday: 0,
+    deliveryTime: "09:00",
+    includeCallTime: true
+  };
+}
+
+function studioTelegramStatusText() {
+  const status = telegramDigestRuntimeStatus?.studioStatus;
+  if (!status) return "아직 전송 기록이 없습니다.";
+  const time = status.sentAt ? new Date(status.sentAt).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" }) : "시간 미확인";
+  if (status.status === "failed") return `최근 예약 전송 실패 · ${status.error || time}`;
+  return `최근 ${status.type === "scheduled" ? "예약" : "수동"} 전송 · ${time}${status.ruleName ? ` · ${status.ruleName}` : ""}`;
+}
+
+function renderStudioTelegramRules() {
+  const target = $("#studioTelegramRules");
+  if (!target || !studioTelegramDraft) return;
+  const types = [["all", "전체 유형"], ...trainingTypeOptions().map((type) => [type, type])];
+  const weekdays = [[0, "일요일"], [1, "월요일"], [2, "화요일"], [3, "수요일"], [4, "목요일"], [5, "금요일"], [6, "토요일"]];
+  const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
+  target.innerHTML = studioTelegramDraft.rules.length ? studioTelegramDraft.rules.map((rule, index) => `
+    <article class="studio-telegram-rule" data-studio-telegram-rule="${esc(rule.id)}">
+      <header>
+        <div>
+          <span>예약 규칙 ${index + 1}</span>
+          <strong>${esc(rule.name || `방송실 공지 ${index + 1}`)}</strong>
+        </div>
+        <label class="studio-rule-enabled">
+          <input data-studio-rule-field="enabled" type="checkbox" ${rule.enabled !== false ? "checked" : ""} />
+          <span>사용</span>
+        </label>
+        <button class="studio-rule-delete" data-delete-studio-rule="${esc(rule.id)}" type="button" aria-label="예약 규칙 삭제">×</button>
+      </header>
+      <div class="studio-rule-grid">
+        <label class="studio-rule-name">공지 제목
+          <input data-studio-rule-field="name" maxlength="80" value="${esc(rule.name)}" placeholder="예: 교육 주간 공지" />
+        </label>
+        <label>일정 유형
+          <select data-studio-rule-field="trainingType">${types.map(([value, label]) => `<option value="${esc(value)}" ${rule.trainingType === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>
+        </label>
+        <label>공지 방식
+          <select data-studio-rule-field="mode">
+            <option value="previous-day" ${rule.mode === "previous-day" ? "selected" : ""}>전날 공지</option>
+            <option value="weekly" ${rule.mode === "weekly" ? "selected" : ""}>1주일치 공지</option>
+          </select>
+        </label>
+        ${rule.mode === "weekly" ? `<label>전송 요일
+          <select data-studio-rule-field="weekday">${weekdays.map(([value, label]) => `<option value="${value}" ${Number(rule.weekday) === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+        </label>` : `<div class="studio-rule-everyday"><span>전송일</span><strong>일정 하루 전</strong></div>`}
+        <label>전송 시간
+          <select data-studio-rule-field="deliveryTime">${hours.map((value) => `<option value="${value}" ${rule.deliveryTime === value ? "selected" : ""}>${value}</option>`).join("")}</select>
+        </label>
+        <label class="studio-telegram-check studio-rule-calltime">
+          <input data-studio-rule-field="includeCallTime" type="checkbox" ${rule.includeCallTime !== false ? "checked" : ""} />
+          <span>콜타임 포함</span>
+        </label>
+      </div>
+      <p>${rule.mode === "weekly" ? `${weekdays.find(([value]) => value === Number(rule.weekday))?.[1] || "일요일"} ${esc(rule.deliveryTime)}에 다음 7일 일정을 한 번에 전송` : `각 일정 전날 ${esc(rule.deliveryTime)}에 전송`}</p>
+    </article>
+  `).join("") : `
+    <div class="studio-telegram-empty">
+      <span>✈</span>
+      <strong>등록된 예약 규칙이 없습니다.</strong>
+      <small>예배 전날 공지, 교육 주간 공지처럼 필요한 규칙을 추가하세요.</small>
+    </div>
+  `;
+  const message = $("#studioTelegramMessage");
+  if (message && !message.textContent) message.textContent = studioTelegramStatusText();
+}
+
+function openStudioTelegramModal() {
+  if (!isAdminUser()) return showToast("관리자만 텔레그램 공지를 설정할 수 있습니다.");
+  studioTelegramDraft = structuredClone(normalizeStudioTelegramSettings(state.studioTelegram || {}));
+  $("#studioTelegramMessage").textContent = "";
+  renderStudioTelegramRules();
+  $("#studioTelegramModal").classList.add("open");
+  $("#studioTelegramModal").setAttribute("aria-hidden", "false");
+  refreshTelegramDigestStatus().then(() => {
+    const message = $("#studioTelegramMessage");
+    if (message) message.textContent = studioTelegramStatusText();
+  });
+}
+
+function closeStudioTelegramModal() {
+  studioTelegramDraft = null;
+  $("#studioTelegramModal").classList.remove("open");
+  $("#studioTelegramModal").setAttribute("aria-hidden", "true");
+}
+
+async function saveStudioTelegramSettings() {
+  if (!studioTelegramDraft) return;
+  const message = $("#studioTelegramMessage");
+  state.studioTelegram = normalizeStudioTelegramSettings(studioTelegramDraft);
+  saveState();
+  const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
+  if (SUPABASE_ENABLED && !remoteSaved) {
+    if (message) message.textContent = "서버 저장을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    return;
+  }
+  showToast("방송실 텔레그램 예약 설정을 저장했습니다.");
+  closeStudioTelegramModal();
+}
+
 function renderAdmin() {
   if (SUPABASE_ENABLED && isAdminUser() && !adminProfilesRefreshing) {
     adminProfilesRefreshing = true;
@@ -8278,9 +8459,9 @@ function renderAdmin() {
     ["workStatuses", "업무", "진행"],
     ["workClients", "업무", "발주 부서"],
     ["boardPrefixes", "게시판", "게시판 말머리"],
-    ["studioRooms", "방송실 스탭 드롭다운", "장소 관리"],
-    ["staffTypes", "방송실 스탭 드롭다운", "스탭 종류 관리"],
-    ["trainingTypes", "방송실 스탭 드롭다운", "교육 유형 관리"]
+    ["studioRooms", "방송실 일정 드롭다운", "장소 관리"],
+    ["staffTypes", "방송실 일정 드롭다운", "스탭 종류 관리"],
+    ["trainingTypes", "방송실 일정 드롭다운", "교육 유형 관리"]
   ];
   const renderOptionManager = ([key, section, label]) => `
       <article class="option-manager" data-option-group="${key}">
@@ -8776,7 +8957,7 @@ function isMobileViewport() {
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 스탭", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
+  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 일정", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -8863,7 +9044,7 @@ function renderNotificationSettings() {
     record: "관리기록 추가·수정·삭제",
     task: "할 일 추가·수정·완료·삭제",
     work: "업무 상태 및 내용 변경",
-    studio: "방송실 스탭 변경",
+    studio: "방송실 일정 변경",
     schedule: "일정 변경",
     system: "기타 시스템 알림"
   };
@@ -10066,7 +10247,7 @@ function renderMobileStudioEventCard(event) {
 }
 
 function renderMobileStudioEmpty() {
-  return `<div class="mobile-studio-empty"><span>▣</span><strong>등록된 방송실 스탭이 없습니다.</strong><small>선택한 날짜에 새 스탭을 등록할 수 있습니다.</small><button data-mobile-studio-create type="button">＋ 스탭 등록</button></div>`;
+  return `<div class="mobile-studio-empty"><span>▣</span><strong>등록된 방송실 일정이 없습니다.</strong><small>선택한 날짜에 새 일정을 등록할 수 있습니다.</small><button data-mobile-studio-create type="button">＋ 일정 등록</button></div>`;
 }
 
 function renderMobileStudioDateStrip() {
@@ -10123,7 +10304,7 @@ function renderMobileStudioFilterSheet() {
   const draft = mobileStudioFilterDraft || cloneMobileStudioFilters();
   const types = trainingTypeOptions();
   const owners = ownerFilterKeys().filter((key) => !mobileStudioOwnerQuery || ownerFilterLabel(key).toLowerCase().includes(mobileStudioOwnerQuery.toLowerCase()));
-  return `<div class="mobile-studio-filter open" role="dialog" aria-modal="true" aria-label="방송실 스탭 필터"><button class="mobile-studio-filter-backdrop" data-mobile-studio-filter-close type="button" aria-label="필터 닫기"></button><section><i></i><header><h2>필터</h2><button data-mobile-studio-filter-close type="button" aria-label="닫기">×</button></header><div class="mobile-studio-filter-scroll"><fieldset><legend>스탭 유형</legend><div class="mobile-studio-filter-chips"><button class="${types.every((type) => mobileCalendarFilterEnabled(draft.types, type)) ? "selected" : ""}" data-mobile-studio-filter-type="all" type="button">전체</button>${types.map((type) => `<button class="${mobileCalendarFilterEnabled(draft.types, type) ? "selected" : ""}" data-mobile-studio-filter-type="${esc(type)}" type="button">${esc(type)}</button>`).join("")}</div></fieldset><fieldset><legend>담당자</legend><input data-mobile-studio-owner-search placeholder="담당자 검색" value="${esc(mobileStudioOwnerQuery)}" /><div class="mobile-studio-filter-chips" data-mobile-studio-owner-options><button class="${ownerFilterKeys().every((owner) => ownerFilterEnabled(draft.owners, owner)) ? "selected" : ""}" data-mobile-studio-filter-owner="all" type="button">전체</button>${owners.map((owner) => `<button class="${ownerFilterEnabled(draft.owners, owner) ? "selected" : ""}" data-mobile-studio-filter-owner="${esc(owner)}" data-owner-label="${esc(ownerFilterLabel(owner))}" type="button">${esc(ownerFilterLabel(owner))}</button>`).join("")}</div></fieldset><fieldset><legend>기타</legend><label class="mobile-studio-check"><input data-mobile-studio-filter-recurring type="checkbox" ${draft.hideRecurring ? "checked" : ""} /><span>반복 일정 표시 제외</span></label><label class="mobile-studio-check"><input data-mobile-studio-filter-unassigned type="checkbox" ${draft.unassignedOnly ? "checked" : ""} /><span>미배정 일정만 보기</span></label></fieldset></div><footer><button data-mobile-studio-filter-reset type="button">초기화</button><button data-mobile-studio-filter-apply type="button">적용하기</button></footer></section></div>`;
+  return `<div class="mobile-studio-filter open" role="dialog" aria-modal="true" aria-label="방송실 일정 필터"><button class="mobile-studio-filter-backdrop" data-mobile-studio-filter-close type="button" aria-label="필터 닫기"></button><section><i></i><header><h2>필터</h2><button data-mobile-studio-filter-close type="button" aria-label="닫기">×</button></header><div class="mobile-studio-filter-scroll"><fieldset><legend>스탭 유형</legend><div class="mobile-studio-filter-chips"><button class="${types.every((type) => mobileCalendarFilterEnabled(draft.types, type)) ? "selected" : ""}" data-mobile-studio-filter-type="all" type="button">전체</button>${types.map((type) => `<button class="${mobileCalendarFilterEnabled(draft.types, type) ? "selected" : ""}" data-mobile-studio-filter-type="${esc(type)}" type="button">${esc(type)}</button>`).join("")}</div></fieldset><fieldset><legend>담당자</legend><input data-mobile-studio-owner-search placeholder="담당자 검색" value="${esc(mobileStudioOwnerQuery)}" /><div class="mobile-studio-filter-chips" data-mobile-studio-owner-options><button class="${ownerFilterKeys().every((owner) => ownerFilterEnabled(draft.owners, owner)) ? "selected" : ""}" data-mobile-studio-filter-owner="all" type="button">전체</button>${owners.map((owner) => `<button class="${ownerFilterEnabled(draft.owners, owner) ? "selected" : ""}" data-mobile-studio-filter-owner="${esc(owner)}" data-owner-label="${esc(ownerFilterLabel(owner))}" type="button">${esc(ownerFilterLabel(owner))}</button>`).join("")}</div></fieldset><fieldset><legend>기타</legend><label class="mobile-studio-check"><input data-mobile-studio-filter-recurring type="checkbox" ${draft.hideRecurring ? "checked" : ""} /><span>반복 일정 표시 제외</span></label><label class="mobile-studio-check"><input data-mobile-studio-filter-unassigned type="checkbox" ${draft.unassignedOnly ? "checked" : ""} /><span>미배정 일정만 보기</span></label></fieldset></div><footer><button data-mobile-studio-filter-reset type="button">초기화</button><button data-mobile-studio-filter-apply type="button">적용하기</button></footer></section></div>`;
 }
 
 function mobileStudioSelectOptions(options, selected, placeholder) {
@@ -10241,8 +10422,8 @@ function renderMobileStudioStaffStep(draft) {
 function renderMobileStudioForm() {
   if (!mobileStudioFormOpen || !mobileStudioFormDraft) return "";
   const draft = mobileStudioFormDraft;
-  const title = mobileStudioFormMode === "edit" ? "방송실 스탭 수정" : "방송실 스탭 등록";
-  return `<div class="mobile-studio-fullscreen" role="dialog" aria-modal="true" aria-label="${title}"><header><button data-mobile-studio-form-close type="button" aria-label="닫기">×</button><strong>${title}</strong><span>${mobileStudioFormStep} / 2</span></header><div class="mobile-studio-step-indicator"><i class="active"></i><b></b><i class="${mobileStudioFormStep === 2 ? "active" : ""}"></i></div><main>${mobileStudioFormStep === 1 ? renderMobileStudioBasicStep(draft) : renderMobileStudioStaffStep(draft)}</main><footer>${mobileStudioFormStep === 1 ? `<button data-mobile-studio-form-close type="button">취소</button><button class="primary" data-mobile-studio-form-next type="button">다음</button>` : `<button data-mobile-studio-form-prev type="button">이전</button><button class="primary" data-mobile-studio-form-save type="button">${mobileStudioFormMode === "edit" ? "수정 완료" : "스탭 등록"}</button>`}</footer></div>`;
+  const title = mobileStudioFormMode === "edit" ? "방송실 일정 수정" : "방송실 일정 등록";
+  return `<div class="mobile-studio-fullscreen" role="dialog" aria-modal="true" aria-label="${title}"><header><button data-mobile-studio-form-close type="button" aria-label="닫기">×</button><strong>${title}</strong><span>${mobileStudioFormStep} / 2</span></header><div class="mobile-studio-step-indicator"><i class="active"></i><b></b><i class="${mobileStudioFormStep === 2 ? "active" : ""}"></i></div><main>${mobileStudioFormStep === 1 ? renderMobileStudioBasicStep(draft) : renderMobileStudioStaffStep(draft)}</main><footer>${mobileStudioFormStep === 1 ? `<button data-mobile-studio-form-close type="button">취소</button><button class="primary" data-mobile-studio-form-next type="button">다음</button>` : `<button data-mobile-studio-form-prev type="button">이전</button><button class="primary" data-mobile-studio-form-save type="button">${mobileStudioFormMode === "edit" ? "수정 완료" : "일정 등록"}</button>`}</footer></div>`;
 }
 
 function mobileStudioFormRows() {
@@ -10275,7 +10456,7 @@ function saveMobileStudioReservation() {
     if (!event) return;
     const previousOwners = event.owners || [event.owner].filter(Boolean);
     Object.assign(event, eventData);
-    notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 스탭을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 스탭 수정", eventDate: event.date, targetView: "studio" });
+    notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 일정을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 일정 수정", eventDate: event.date, targetView: "studio" });
     mobileStudioDetailId = event.id;
   } else {
     const base = mobileStudioDateObject(draft.date);
@@ -10295,13 +10476,13 @@ function saveMobileStudioReservation() {
       if (!firstId) firstId = id;
       state.staffEvents.push({ id, ...eventData, date: dateKey(date), seriesId });
     });
-    notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 스탭${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 스탭 생성", eventDate: draft.date, targetView: "studio" });
+    notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 일정${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 일정 생성", eventDate: draft.date, targetView: "studio" });
     mobileStudioDate = draft.date;
   }
   saveState();
   mobileStudioFormOpen = false;
   mobileStudioFormDraft = null;
-  showToast(mobileStudioFormMode === "edit" ? "방송실 스탭이 수정되었습니다." : "방송실 스탭이 등록되었습니다.");
+  showToast(mobileStudioFormMode === "edit" ? "방송실 일정이 수정되었습니다." : "방송실 일정이 등록되었습니다.");
   renderAll();
 }
 
@@ -10337,7 +10518,7 @@ function saveMobileStudioStaffOnly() {
   const previousOwners = event.owners || [event.owner].filter(Boolean);
   event.staffRows = mobileStudioDetailDraft.staffRows.slice(0, 6).map((row) => ({ type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
   syncStaffEventSummary(event);
-  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 스탭을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 스탭 변경", eventDate: event.date, targetView: "studio" });
+  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 일정을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 일정 변경", eventDate: event.date, targetView: "studio" });
   saveState();
   mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
   mobileStudioDetailDirty = false;
@@ -10349,7 +10530,42 @@ function renderMobileStudioDetail() {
   const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
   if (!event || !mobileStudioDetailDraft) return "";
   const time = event.allDay !== false ? "종일 일정" : `${event.startTime || "09:00"} ~ ${event.endTime || "10:00"}`;
-  return `<div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 스탭 상세"><header><button data-mobile-studio-detail-close type="button" aria-label="뒤로가기">‹</button><strong>방송실 스탭 상세</strong><button data-mobile-studio-edit="${esc(event.id)}" type="button">수정</button></header><main><section class="mobile-studio-summary" ${studioTypeStyle(event.trainingType || event.type)}><i></i><h2>${esc(staffReservationTitle(event))}</h2><p>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</p><p>${esc(formatDate(event.date))} · ${esc(time)}</p><p>${esc(mobileStudioSeriesSummary(event))}</p>${event.memo ? `<small>${esc(event.memo)}</small>` : ""}</section><section class="mobile-studio-detail-staff"><header><div><h2>스탭 목록</h2><p>상세 화면에서 바로 수정할 수 있습니다. 최대 6명</p></div><button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button></header>${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}<button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button></section><button class="mobile-studio-delete" data-mobile-studio-delete-open type="button">스탭 삭제</button></main>${mobileStudioDeleteConfirm ? `<div class="mobile-studio-confirm"><section><h3>이 방송실 스탭을 삭제하시겠습니까?</h3><p>삭제한 스탭은 복구할 수 없습니다.</p><button data-mobile-studio-delete-cancel type="button">취소</button><button class="danger" data-mobile-studio-delete-one type="button">이 일정만 삭제</button>${event.seriesId ? `<button class="danger" data-mobile-studio-delete-series type="button">전체 반복 일정 삭제</button>` : ""}</section></div>` : ""}</div>`;
+  return `
+    <div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 일정 상세">
+      <header>
+        <button data-mobile-studio-detail-close type="button" aria-label="뒤로가기">‹</button>
+        <strong>방송실 일정 상세</strong>
+        <button data-mobile-studio-edit="${esc(event.id)}" type="button">수정</button>
+      </header>
+      <main>
+        <section class="mobile-studio-summary" ${studioTypeStyle(event.trainingType || event.type)}>
+          <i></i>
+          <h2>${esc(staffReservationTitle(event))}</h2>
+          <p>${esc(event.trainingType || "기타")} · ${esc(event.room || "장소 미지정")}</p>
+          <p>${esc(formatDate(event.date))} · ${esc(time)}</p>
+          <p>${esc(mobileStudioSeriesSummary(event))}</p>
+          ${event.memo ? `<small>${esc(event.memo)}</small>` : ""}
+        </section>
+        <section class="mobile-studio-detail-staff">
+          <header>
+            <div><h2>스탭 목록</h2><p>상세 화면에서 바로 수정할 수 있습니다. 최대 6명</p></div>
+            <button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button>
+          </header>
+          ${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}
+          <button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button>
+        </section>
+        ${isAdminUser() ? `<section class="mobile-studio-telegram-panel">
+          <div><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></div>
+          <label class="mobile-studio-check"><input data-mobile-studio-telegram-calltime type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><span>콜타임 포함 (시작 1시간 전)</span></label>
+          <label>특이사항<textarea data-mobile-studio-telegram-note maxlength="1000" placeholder="준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea></label>
+          <small data-studio-event-telegram-message></small>
+          <button class="mobile-studio-telegram-send" data-mobile-studio-telegram-send="${esc(event.id)}" type="button">텔레그램 푸쉬</button>
+        </section>` : ""}
+        <button class="mobile-studio-delete" data-mobile-studio-delete-open type="button">일정 삭제</button>
+      </main>
+      ${mobileStudioDeleteConfirm ? `<div class="mobile-studio-confirm"><section><h3>이 방송실 일정을 삭제하시겠습니까?</h3><p>삭제한 일정은 복구할 수 없습니다.</p><button data-mobile-studio-delete-cancel type="button">취소</button><button class="danger" data-mobile-studio-delete-one type="button">이 일정만 삭제</button>${event.seriesId ? `<button class="danger" data-mobile-studio-delete-series type="button">전체 반복 일정 삭제</button>` : ""}</section></div>` : ""}
+    </div>
+  `;
 }
 
 function renderMobileStudio() {
@@ -10357,7 +10573,7 @@ function renderMobileStudio() {
   const selected = mobileStudioDateObject();
   const period = mobileStudioViewMode === "month" ? `${selected.getFullYear()}년 ${selected.getMonth() + 1}월` : mobileStudioViewMode === "week" ? (() => { const start = mobileStudioWeekStartDate(); const end = new Date(start); end.setDate(start.getDate() + 6); return `${start.getMonth() + 1}월 ${start.getDate()}일 ~ ${end.getMonth() + 1}월 ${end.getDate()}일`; })() : mobileStudioDateText(mobileStudioDate, { short: true });
   const content = mobileStudioViewMode === "month" ? renderMobileStudioMonthly() : mobileStudioViewMode === "week" ? renderMobileStudioWeekly() : renderMobileStudioDaily();
-  return `<div class="mobile-studio-page"><header class="mobile-studio-toolbar"><div><button data-mobile-studio-prev type="button" aria-label="이전 날짜">‹</button><strong>${esc(period)}</strong><button data-mobile-studio-next type="button" aria-label="다음 날짜">›</button><button data-mobile-studio-today type="button">오늘</button></div><button class="mobile-studio-filter-button ${filterCount ? "active" : ""}" data-mobile-studio-filter-open type="button">필터${filterCount ? ` ${filterCount}` : ""}</button></header><div class="mobile-studio-view-switch">${[["day","일간"],["week","주간"],["month","월간"]].map(([key,label]) => `<button class="${mobileStudioViewMode === key ? "active" : ""}" data-mobile-studio-view="${key}" type="button">${label}</button>`).join("")}</div>${content}<button class="mobile-studio-fab" data-mobile-studio-create type="button">＋ 예약</button>${renderMobileStudioFilterSheet()}${renderMobileStudioDetail()}${renderMobileStudioForm()}</div>`;
+  return `<div class="mobile-studio-page"><header class="mobile-studio-toolbar"><div><button data-mobile-studio-prev type="button" aria-label="이전 날짜">‹</button><strong>${esc(period)}</strong><button data-mobile-studio-next type="button" aria-label="다음 날짜">›</button><button data-mobile-studio-today type="button">오늘</button></div><div class="mobile-studio-toolbar-actions">${isAdminUser() ? `<button class="mobile-studio-telegram-manage" data-mobile-studio-telegram-manage type="button">공지 관리</button>` : ""}<button class="mobile-studio-filter-button ${filterCount ? "active" : ""}" data-mobile-studio-filter-open type="button">필터${filterCount ? ` ${filterCount}` : ""}</button></div></header><div class="mobile-studio-view-switch">${[["day","일간"],["week","주간"],["month","월간"]].map(([key,label]) => `<button class="${mobileStudioViewMode === key ? "active" : ""}" data-mobile-studio-view="${key}" type="button">${label}</button>`).join("")}</div>${content}<button class="mobile-studio-fab" data-mobile-studio-create type="button">＋ 일정</button>${renderMobileStudioFilterSheet()}${renderMobileStudioDetail()}${renderMobileStudioForm()}</div>`;
 }
 
 function mobileAvatarMarkup(user, className = "") {
@@ -10576,7 +10792,7 @@ function renderMobileMemberDetail(userId) {
 function renderMobilePreferences() {
   const user = currentUser();
   const settings = notificationSettingsForUser(user?.id || "");
-  const notificationLabels = { all: "전체 알림", projectStatus: "프로젝트 상태 변경", projectContent: "프로젝트 내용 수정", ownerChange: "담당자 변경", record: "관리기록 변경", task: "할 일 변경", work: "업무 변경", studio: "방송실 스탭 변경", schedule: "일정 변경", system: "기타 알림" };
+  const notificationLabels = { all: "전체 알림", projectStatus: "프로젝트 상태 변경", projectContent: "프로젝트 내용 수정", ownerChange: "담당자 변경", record: "관리기록 변경", task: "할 일 변경", work: "업무 변경", studio: "방송실 일정 변경", schedule: "일정 변경", system: "기타 알림" };
   return mobileSubpage("설정", `
     <section class="mobile-settings-section"><h3>계정 및 프로필</h3><div>${mobileMoreRow({ icon: "♙", label: "프로필 관리", route: "profile" })}<div class="mobile-info-row"><span>로그인 계정</span><b>${esc(user?.email || user?.username || "-")}</b></div></div></section>
     <section class="mobile-settings-section"><h3>화면 설정</h3><div><label class="mobile-setting-toggle"><span>다크 모드</span><input data-theme-setting type="checkbox" ${settings.darkMode ? "checked" : ""} /><i></i></label></div></section>
@@ -10949,6 +11165,7 @@ function bindMobileCoreActions(app) {
   });
   bind("[data-mobile-studio-event]", (button) => openMobileStudioDetail(button.dataset.mobileStudioEvent));
   bind("[data-mobile-studio-create]", () => openMobileStudioForm("create"));
+  bind("[data-mobile-studio-telegram-manage]", () => openStudioTelegramModal());
   bind("[data-mobile-studio-filter-open]", () => {
     mobileStudioFilterDraft = cloneMobileStudioFilters();
     mobileStudioFilterOpen = true;
@@ -11075,6 +11292,7 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-studio-detail-close]", () => closeMobileStudioDetail());
   bind("[data-mobile-studio-edit]", (button) => openMobileStudioForm("edit", button.dataset.mobileStudioEdit));
   bind("[data-mobile-studio-staff-save]", () => saveMobileStudioStaffOnly());
+  bind("[data-mobile-studio-telegram-send]", (button) => sendStudioEventTelegram(button.dataset.mobileStudioTelegramSend, button));
   bind("[data-mobile-studio-delete-open]", () => { mobileStudioDeleteConfirm = true; renderMobileDashboard(); });
   bind("[data-mobile-studio-delete-cancel]", () => { mobileStudioDeleteConfirm = false; renderMobileDashboard(); });
   bind("[data-mobile-studio-delete-one]", () => {
@@ -11130,6 +11348,18 @@ function bindMobileCoreActions(app) {
     if (!mobileStudioFormDraft) return;
     mobileStudioFormDraft[input.dataset.mobileStudioFormToggle] = input.checked;
     renderMobileDashboard();
+  }));
+  app.querySelectorAll("[data-mobile-studio-telegram-calltime]").forEach((input) => input.addEventListener("change", () => {
+    const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
+    if (!event) return;
+    event.telegramCallTimeEnabled = input.checked;
+    saveState();
+  }));
+  app.querySelectorAll("[data-mobile-studio-telegram-note]").forEach((input) => input.addEventListener("input", () => {
+    const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
+    if (!event) return;
+    event.telegramNote = input.value.slice(0, 1000);
+    saveState();
   }));
   app.querySelectorAll("[data-mobile-studio-row-field]").forEach((input) => {
     const update = () => {
@@ -11358,6 +11588,7 @@ function closeTopMobileLayer() {
   if (mobileLayerIsOpen("#scheduleModal")) { closeScheduleModal(); return true; }
   if (mobileLayerIsOpen("#staffScheduleModal")) { closeStaffScheduleModal(); return true; }
   if (mobileLayerIsOpen("#staffEventDetailModal")) { closeStaffEventDetail(); return true; }
+  if (mobileLayerIsOpen("#studioTelegramModal")) { closeStudioTelegramModal(); return true; }
   if (mobileLayerIsOpen("#recurringTrainingModal")) { closeRecurringTrainingModal(); return true; }
   if (mobileLayerIsOpen("#recurringTrainingManageModal")) { closeRecurringTrainingManageModal(); return true; }
   if (mobileLayerIsOpen("#notificationCenterModal")) { openNotificationCenter(false); return true; }
@@ -12976,6 +13207,7 @@ document.addEventListener("keydown", (event) => {
   toggleDesktopAccountMenu(false);
   openDesktopOrganization(false);
   openDesktopProfile(false);
+  if ($("#studioTelegramModal")?.classList.contains("open")) closeStudioTelegramModal();
 });
 
 $("#logoutBtn").addEventListener("click", () => {
@@ -13054,6 +13286,10 @@ $("#studioView").addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("#studioAddStaffBtn")) openStaffScheduleModal(dateKey(studioWeekDate));
+  if (event.target.closest("#studioTelegramManageBtn")) {
+    openStudioTelegramModal();
+    return;
+  }
   if (event.target.closest("[data-open-nearest-unassigned]")) {
     openNearestUnassignedStudioEvent();
     return;
@@ -13962,6 +14198,9 @@ $("#staffScheduleForm").addEventListener("submit", (event) => {
 });
 
 $("#closeStaffEventDetailBtn").addEventListener("click", closeStaffEventDetail);
+$("#sendStaffEventTelegramBtn").addEventListener("click", (event) => {
+  if (activeStaffEventId) sendStudioEventTelegram(activeStaffEventId, event.currentTarget);
+});
 $("#staffEventDetailModal").addEventListener("click", (event) => {
   if (event.target.id === "staffEventDetailModal") closeStaffEventDetail();
   const activeEvent = state.staffEvents.find((item) => item.id === activeStaffEventId);
@@ -13990,13 +14229,26 @@ $("#staffEventDetailModal").addEventListener("click", (event) => {
   }
 });
 $("#staffEventDetailContent").addEventListener("input", (event) => {
-  const memoInput = event.target.closest("[data-detail-staff-row-memo]");
-  if (!memoInput) return;
   const activeEvent = state.staffEvents.find((item) => item.id === activeStaffEventId);
   if (!activeEvent) return;
+  const telegramNote = event.target.closest("[data-studio-event-telegram-note]");
+  if (telegramNote) {
+    activeEvent.telegramNote = telegramNote.value.slice(0, 1000);
+    saveState();
+    return;
+  }
+  const memoInput = event.target.closest("[data-detail-staff-row-memo]");
+  if (!memoInput) return;
   const row = normalizeStaffEventRows(activeEvent).find((item) => item.id === memoInput.dataset.detailStaffRowMemo);
   if (!row) return;
   row.memo = memoInput.value;
+  saveState();
+});
+$("#staffEventDetailContent").addEventListener("change", (event) => {
+  if (!event.target.matches("[data-studio-event-call-time]")) return;
+  const activeEvent = state.staffEvents.find((item) => item.id === activeStaffEventId);
+  if (!activeEvent) return;
+  activeEvent.telegramCallTimeEnabled = event.target.checked;
   saveState();
 });
 $("#deleteStaffEventBtn").addEventListener("click", () => {
@@ -14018,6 +14270,41 @@ $("#repeatDeleteAllBtn").addEventListener("click", () => {
 });
 $("#repeatDeleteModal").addEventListener("click", (event) => {
   if (event.target.id === "repeatDeleteModal") closeRepeatDeleteModal();
+});
+
+$("#closeStudioTelegramBtn").addEventListener("click", closeStudioTelegramModal);
+$("#cancelStudioTelegramBtn").addEventListener("click", closeStudioTelegramModal);
+$("#studioTelegramModal").addEventListener("click", (event) => {
+  if (event.target.id === "studioTelegramModal") closeStudioTelegramModal();
+  if (!studioTelegramDraft) return;
+  if (event.target.closest("#studioTelegramAddRuleBtn")) {
+    if (studioTelegramDraft.rules.length >= 30) return showToast("예약 규칙은 최대 30개까지 만들 수 있습니다.");
+    studioTelegramDraft.rules.push(createStudioTelegramRule(studioTelegramDraft.rules.length));
+    renderStudioTelegramRules();
+    return;
+  }
+  const deleteButton = event.target.closest("[data-delete-studio-rule]");
+  if (deleteButton) {
+    studioTelegramDraft.rules = studioTelegramDraft.rules.filter((rule) => rule.id !== deleteButton.dataset.deleteStudioRule);
+    renderStudioTelegramRules();
+  }
+});
+function updateStudioTelegramDraftField(target) {
+  const article = target.closest("[data-studio-telegram-rule]");
+  const field = target.dataset.studioRuleField;
+  const rule = studioTelegramDraft?.rules.find((item) => item.id === article?.dataset.studioTelegramRule);
+  if (!rule || !field) return false;
+  rule[field] = target.type === "checkbox" ? target.checked : field === "weekday" ? Number(target.value) : target.value;
+  return true;
+}
+$("#studioTelegramRules").addEventListener("input", (event) => updateStudioTelegramDraftField(event.target));
+$("#studioTelegramRules").addEventListener("change", (event) => {
+  if (!updateStudioTelegramDraftField(event.target)) return;
+  if (["mode", "weekday", "deliveryTime"].includes(event.target.dataset.studioRuleField)) renderStudioTelegramRules();
+});
+$("#studioTelegramForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveStudioTelegramSettings();
 });
 
 $("#closeRecurringTrainingBtn").addEventListener("click", closeRecurringTrainingModal);

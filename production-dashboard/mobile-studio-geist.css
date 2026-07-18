@@ -110,6 +110,19 @@
     color: var(--mobile-video-accent-deep);
   }
 
+  .mobile-studio-toolbar > .mobile-studio-toolbar-actions {
+    display: flex;
+    grid-template-columns: none;
+    gap: 4px;
+  }
+
+  .mobile-studio-telegram-manage {
+    min-width: 60px !important;
+    border-color: color-mix(in srgb, var(--mobile-video-accent) 48%, var(--mobile-video-line)) !important;
+    background: var(--mobile-video-accent-soft) !important;
+    color: var(--mobile-video-accent-deep) !important;
+  }
+
   .mobile-studio-view-switch {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1123,6 +1136,67 @@
     border-color: var(--mobile-video-line);
     background: var(--mobile-video-soft);
     color: var(--mobile-video-faint);
+  }
+
+  .mobile-studio-telegram-panel {
+    display: grid;
+    gap: 10px;
+    margin-top: 14px;
+    border: 1px solid color-mix(in srgb, var(--mobile-video-accent) 45%, var(--mobile-video-line));
+    border-radius: 12px;
+    background: var(--mobile-video-accent-soft);
+    padding: 13px;
+  }
+
+  .mobile-studio-telegram-panel h2,
+  .mobile-studio-telegram-panel p {
+    margin: 0;
+  }
+
+  .mobile-studio-telegram-panel h2 {
+    color: var(--mobile-video-ink);
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .mobile-studio-telegram-panel p,
+  .mobile-studio-telegram-panel small {
+    margin-top: 3px;
+    color: var(--mobile-video-mute);
+    font-size: 9px;
+  }
+
+  .mobile-studio-telegram-panel > label:not(.mobile-studio-check) {
+    display: grid;
+    gap: 5px;
+    color: var(--mobile-video-body);
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  .mobile-studio-telegram-panel textarea {
+    width: 100%;
+    min-height: 82px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-ink);
+    padding: 10px;
+    font: inherit;
+    font-size: 12px;
+    line-height: 18px;
+    resize: vertical;
+  }
+
+  .mobile-studio-telegram-send {
+    width: 100%;
+    min-height: 46px;
+    border: 1px solid var(--mobile-video-accent);
+    border-radius: 6px;
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 12px;
+    font-weight: 600;
   }
 
   .mobile-studio-delete {

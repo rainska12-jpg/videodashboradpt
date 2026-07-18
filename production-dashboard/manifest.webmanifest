@@ -1,7 +1,7 @@
 {
   "name": "영상 업무 대시보드",
   "short_name": "영상대시보드",
-  "description": "영상 프로젝트, 업무, 할 일, 일정, 방송실 스탭을 관리하는 대시보드",
+  "description": "영상 프로젝트, 업무, 할 일, 일정, 방송실 일정을 관리하는 대시보드",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

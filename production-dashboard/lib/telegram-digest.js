@@ -1,6 +1,7 @@
 const SEOUL_TIME_ZONE = "Asia/Seoul";
 const DASHBOARD_STATE_ROW_ID = "main";
 const TELEGRAM_STATUS_ROW_ID = "telegram-digest-status";
+const TELEGRAM_STUDIO_STATUS_ROW_ID = "telegram-studio-status";
 
 export const TELEGRAM_DIGEST_DEFAULTS = {
   deliveryMode: "manual",
@@ -17,6 +18,10 @@ export const TELEGRAM_DIGEST_DEFAULTS = {
   additionalMessage: ""
 };
 
+export const STUDIO_TELEGRAM_DEFAULTS = {
+  rules: []
+};
+
 function cleanText(value, maxLength = 500) {
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, maxLength);
 }
@@ -29,6 +34,26 @@ export function normalizeTelegramDigestSettings(value = {}) {
     deliveryTime: `${String(hour).padStart(2, "0")}:00`,
     include: Object.fromEntries(Object.keys(TELEGRAM_DIGEST_DEFAULTS.include).map((key) => [key, include[key] !== false])),
     additionalMessage: cleanText(value.additionalMessage, 1000)
+  };
+}
+
+export function normalizeStudioTelegramSettings(value = {}) {
+  const rules = Array.isArray(value?.rules) ? value.rules : [];
+  return {
+    rules: rules.slice(0, 30).map((rule, index) => {
+      const rawHour = Number(String(rule.deliveryTime || "09:00").split(":")[0]);
+      const hour = Math.max(0, Math.min(23, Number.isFinite(rawHour) ? rawHour : 9));
+      return {
+        id: cleanText(rule.id || `studio-rule-${index + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, "-") || `studio-rule-${index + 1}`,
+        name: cleanText(rule.name || `공지 규칙 ${index + 1}`, 80),
+        enabled: rule.enabled !== false,
+        trainingType: cleanText(rule.trainingType || "all", 120) || "all",
+        mode: rule.mode === "weekly" ? "weekly" : "previous-day",
+        weekday: Math.max(0, Math.min(6, Number(rule.weekday) || 0)),
+        deliveryTime: `${String(hour).padStart(2, "0")}:00`,
+        includeCallTime: rule.includeCallTime !== false
+      };
+    })
   };
 }
 
@@ -167,6 +192,72 @@ export function buildTelegramDigest(state = {}, rawSettings = {}, options = {}) 
   return `${message.slice(0, 3940).trimEnd()}\n\n…일부 항목은 대시보드에서 확인해 주세요.`;
 }
 
+function offsetDateKey(value, days) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return date.toISOString().slice(0, 10);
+}
+
+function dateWeekday(value) {
+  return new Date(`${value}T00:00:00Z`).getUTCDay();
+}
+
+function callTimeLabel(startTime) {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(String(startTime || ""));
+  if (!match) return "";
+  const minutes = Number(match[1]) * 60 + Number(match[2]) - 60;
+  const wrapped = (minutes + 1440) % 1440;
+  const label = `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
+  return minutes < 0 ? `${label} (전날)` : label;
+}
+
+function studioOwnerLabel(ownerId, owners) {
+  return cleanText(owners.get(ownerId) || ownerId || "미배정", 80);
+}
+
+function studioEventBlock(event, owners, { includeCallTime = true } = {}) {
+  const rows = Array.isArray(event.staffRows) && event.staffRows.length
+    ? event.staffRows
+    : [{ type: event.type || "스탭", owner: event.owner || "" }];
+  const time = `${cleanText(event.startTime || "09:00", 10)}~${cleanText(event.endTime || "10:00", 10)}`;
+  const lines = [
+    `[${koreanDateLabel(event.date)}][${time}]`
+  ];
+  const callTime = callTimeLabel(event.startTime);
+  if (includeCallTime && callTime) lines.push(`[콜타임 ${callTime}]`);
+  lines.push(`[${cleanText(event.title || event.trainingType || "방송실 일정", 120)}][${cleanText(event.room || "장소 미정", 120)}]`);
+  rows.slice(0, 12).forEach((row) => {
+    lines.push(`[${cleanText(row.type || "스탭", 80)}] : [${studioOwnerLabel(row.owner, owners)}]`);
+  });
+  const note = cleanText(event.telegramNote, 1000);
+  if (note) lines.push(`특이사항\n${note}`);
+  return lines.join("\n");
+}
+
+export function buildStudioTelegramMessage(state = {}, events = [], options = {}) {
+  const owners = ownerNameMap(state);
+  const sorted = [...events].sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
+  const title = cleanText(options.title || (sorted.length > 1 ? "방송실 주간 일정 안내" : "방송실 일정 안내"), 120);
+  const blocks = sorted.map((event) => studioEventBlock(event, owners, { includeCallTime: options.includeCallTime !== false }));
+  const message = `📡 ${title}\n\n${blocks.join("\n\n──────────\n\n")}`;
+  if (message.length <= 4000) return message;
+  return `${message.slice(0, 3940).trimEnd()}\n\n…나머지 일정은 대시보드에서 확인해 주세요.`;
+}
+
+function studioEventsForRule(state, rule, todayKey) {
+  const events = Array.isArray(state.staffEvents) ? state.staffEvents : [];
+  const matchesType = (event) => rule.trainingType === "all" || event.trainingType === rule.trainingType;
+  if (rule.mode === "previous-day") {
+    const tomorrow = offsetDateKey(todayKey, 1);
+    return events.filter((event) => event.date === tomorrow && matchesType(event));
+  }
+  if (dateWeekday(todayKey) !== rule.weekday) return [];
+  return events.filter((event) => {
+    const diff = dateDiff(event.date, todayKey);
+    return diff >= 1 && diff <= 7 && matchesType(event);
+  });
+}
+
 function envValue(...keys) {
   return keys.map((key) => process.env[key]).find(Boolean) || "";
 }
@@ -213,17 +304,16 @@ async function upsertDashboardRow(id, data, { accessToken = "", privileged = fal
   if (!response.ok) throw new Error(`Supabase 상태를 저장하지 못했습니다. (${response.status})`);
 }
 
-async function acquireDailyRunLock(dateKey) {
+async function acquireRunLock(id, data = {}) {
   const config = supabaseConfig({ privileged: true });
   if (!config.url || !config.key) throw new Error("SUPABASE_SECRET_KEY가 설정되지 않았습니다.");
-  const id = `telegram-digest-run-${dateKey}`;
   const response = await fetch(`${config.url}/rest/v1/dashboard_state`, {
     method: "POST",
     headers: {
       ...restHeaders(config.key),
       Prefer: "return=minimal"
     },
-    body: JSON.stringify({ id, data: { status: "sending", date: dateKey, startedAt: new Date().toISOString() } })
+    body: JSON.stringify({ id, data: { status: "sending", startedAt: new Date().toISOString(), ...data } })
   });
   if (response.status === 409) return { acquired: false, id };
   if (!response.ok) throw new Error(`예약 전송 잠금을 만들지 못했습니다. (${response.status})`);
@@ -255,7 +345,7 @@ function escapeTelegramHtml(value) {
 export function formatTelegramMessageHtml(text) {
   return String(text || "").split("\n").map((line) => {
     const escapedLine = escapeTelegramHtml(line);
-    if (/^\[.+ · \d+건\]$/.test(line) || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
+    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
     return escapedLine;
   }).join("\n");
 }
@@ -301,18 +391,43 @@ export async function handleTelegramDigestRequest(req, res) {
 
   try {
     if (req.method === "GET") {
-      const status = await readDashboardRow(TELEGRAM_STATUS_ROW_ID, { accessToken }).catch(() => null);
+      const [status, studioStatus] = await Promise.all([
+        readDashboardRow(TELEGRAM_STATUS_ROW_ID, { accessToken }).catch(() => null),
+        readDashboardRow(TELEGRAM_STUDIO_STATUS_ROW_ID, { accessToken }).catch(() => null)
+      ]);
       return res.status(200).json({
         ok: true,
         configured: Boolean(envValue("TELEGRAM_BOT_TOKEN") && envValue("TELEGRAM_CHAT_ID")),
         schedulerConfigured: Boolean(envValue("CRON_SECRET") && envValue("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY")),
-        status: status?.data || null
+        status: status?.data || null,
+        studioStatus: studioStatus?.data || null
       });
     }
 
-    const action = req.body?.action === "preview" ? "preview" : "send";
+    const action = String(req.body?.action || "send");
     const row = await readDashboardRow(DASHBOARD_STATE_ROW_ID, { accessToken });
     const state = row?.data || {};
+    if (action === "studio-preview" || action === "studio-send") {
+      const eventId = cleanText(req.body?.eventId, 120);
+      const studioEvent = (state.staffEvents || []).find((event) => event.id === eventId);
+      if (!studioEvent) return res.status(404).json({ ok: false, error: "방송실 일정을 찾을 수 없습니다." });
+      const message = buildStudioTelegramMessage(state, [studioEvent], {
+        title: "방송실 일정 안내",
+        includeCallTime: studioEvent.telegramCallTimeEnabled !== false
+      });
+      if (action === "studio-preview") return res.status(200).json({ ok: true, message });
+      const telegramResult = await sendTelegramMessage(message);
+      const studioStatus = {
+        type: "manual",
+        status: "sent",
+        sentAt: new Date().toISOString(),
+        eventId,
+        messageId: telegramResult.message_id || null
+      };
+      await upsertDashboardRow(TELEGRAM_STUDIO_STATUS_ROW_ID, studioStatus, { accessToken });
+      return res.status(200).json({ ok: true, message, status: studioStatus });
+    }
+
     const settings = normalizeTelegramDigestSettings(state.telegramDigest || {});
     const message = buildTelegramDigest(state, settings, { dashboardUrl: requestOrigin(req) });
     if (action === "preview") return res.status(200).json({ ok: true, message });
@@ -340,36 +455,75 @@ export async function handleScheduledTelegramDigest(req, res, scheduledHour) {
   try {
     const row = await readDashboardRow(DASHBOARD_STATE_ROW_ID, { privileged: true });
     const state = row?.data || {};
-    const settings = normalizeTelegramDigestSettings(state.telegramDigest || {});
-    const expectedHour = Number(String(settings.deliveryTime).slice(0, 2));
-    if (settings.deliveryMode !== "daily") return res.status(200).json({ ok: true, skipped: "manual-mode" });
-    if (Number(scheduledHour) !== expectedHour) return res.status(200).json({ ok: true, skipped: "different-hour" });
-
     const now = new Date();
     const { key: todayKey } = seoulDateParts(now);
-    const lock = await acquireDailyRunLock(todayKey);
-    if (!lock.acquired) return res.status(200).json({ ok: true, skipped: "already-sent" });
+    const results = [];
+    const failures = [];
 
-    try {
-      const message = buildTelegramDigest(state, settings, { now, todayKey, dashboardUrl: requestOrigin(req) });
-      const telegramResult = await sendTelegramMessage(message);
-      const status = {
-        type: "scheduled",
-        status: "sent",
-        sentAt: new Date().toISOString(),
-        date: todayKey,
-        deliveryTime: settings.deliveryTime,
-        messageId: telegramResult.message_id || null
-      };
-      await upsertDashboardRow(lock.id, status, { privileged: true });
-      await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true });
-      return res.status(200).json({ ok: true, status });
-    } catch (error) {
-      const status = { type: "scheduled", status: "failed", failedAt: new Date().toISOString(), date: todayKey, error: publicError(error) };
-      await upsertDashboardRow(lock.id, status, { privileged: true }).catch(() => {});
-      await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true }).catch(() => {});
-      throw error;
+    const digestSettings = normalizeTelegramDigestSettings(state.telegramDigest || {});
+    const digestHour = Number(String(digestSettings.deliveryTime).slice(0, 2));
+    if (digestSettings.deliveryMode === "daily" && Number(scheduledHour) === digestHour) {
+      const lock = await acquireRunLock(`telegram-digest-run-${todayKey}`, { date: todayKey, kind: "digest" });
+      if (!lock.acquired) {
+        results.push({ kind: "digest", skipped: "already-sent" });
+      } else {
+        try {
+          const message = buildTelegramDigest(state, digestSettings, { now, todayKey, dashboardUrl: requestOrigin(req) });
+          const telegramResult = await sendTelegramMessage(message);
+          const status = { type: "scheduled", status: "sent", sentAt: new Date().toISOString(), date: todayKey, deliveryTime: digestSettings.deliveryTime, messageId: telegramResult.message_id || null };
+          await upsertDashboardRow(lock.id, status, { privileged: true });
+          await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true });
+          results.push({ kind: "digest", status });
+        } catch (error) {
+          const status = { type: "scheduled", status: "failed", failedAt: new Date().toISOString(), date: todayKey, error: publicError(error) };
+          await upsertDashboardRow(lock.id, status, { privileged: true }).catch(() => {});
+          await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true }).catch(() => {});
+          failures.push({ kind: "digest", error: status.error });
+        }
+      }
     }
+
+    const studioSettings = normalizeStudioTelegramSettings(state.studioTelegram || {});
+    for (const rule of studioSettings.rules) {
+      const ruleHour = Number(String(rule.deliveryTime).slice(0, 2));
+      if (!rule.enabled || Number(scheduledHour) !== ruleHour) continue;
+      const events = studioEventsForRule(state, rule, todayKey);
+      if (!events.length) {
+        results.push({ kind: "studio", ruleId: rule.id, skipped: "no-events" });
+        continue;
+      }
+      const lock = await acquireRunLock(`telegram-studio-run-${rule.id}-${todayKey}`, { date: todayKey, kind: "studio", ruleId: rule.id });
+      if (!lock.acquired) {
+        results.push({ kind: "studio", ruleId: rule.id, skipped: "already-sent" });
+        continue;
+      }
+      try {
+        const message = buildStudioTelegramMessage(state, events, { title: rule.name, includeCallTime: rule.includeCallTime });
+        const telegramResult = await sendTelegramMessage(message);
+        const status = {
+          type: "scheduled",
+          status: "sent",
+          sentAt: new Date().toISOString(),
+          date: todayKey,
+          ruleId: rule.id,
+          ruleName: rule.name,
+          eventCount: events.length,
+          deliveryTime: rule.deliveryTime,
+          messageId: telegramResult.message_id || null
+        };
+        await upsertDashboardRow(lock.id, status, { privileged: true });
+        await upsertDashboardRow(TELEGRAM_STUDIO_STATUS_ROW_ID, status, { privileged: true });
+        results.push({ kind: "studio", ruleId: rule.id, status });
+      } catch (error) {
+        const status = { type: "scheduled", status: "failed", failedAt: new Date().toISOString(), date: todayKey, ruleId: rule.id, ruleName: rule.name, error: publicError(error) };
+        await upsertDashboardRow(lock.id, status, { privileged: true }).catch(() => {});
+        await upsertDashboardRow(TELEGRAM_STUDIO_STATUS_ROW_ID, status, { privileged: true }).catch(() => {});
+        failures.push({ kind: "studio", ruleId: rule.id, error: status.error });
+      }
+    }
+
+    if (failures.length) return res.status(500).json({ ok: false, results, failures });
+    return res.status(200).json({ ok: true, results, skipped: results.length ? undefined : "no-matching-schedule" });
   } catch (error) {
     return res.status(500).json({ ok: false, error: publicError(error) });
   }

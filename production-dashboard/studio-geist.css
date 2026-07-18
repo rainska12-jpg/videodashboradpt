@@ -1120,7 +1120,7 @@ body:has(#studioView.active) .date-picker-bottom {
   padding-top: 12px;
 }
 
-@media (max-width: 1100px) and (min-width: 769px) {
+@media (max-width: 1280px) and (min-width: 769px) {
   #studioView .studio-workspace {
     grid-template-columns: 1fr;
   }
@@ -1173,5 +1173,338 @@ body:has(#studioView.active) .date-picker-bottom {
 
   #staffScheduleModal .studio-modal-actions {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Studio Telegram notice manager */
+#studioTelegramModal {
+  background: rgba(23, 23, 23, 0.42);
+  padding: 24px;
+  backdrop-filter: blur(6px);
+}
+
+#studioTelegramModal .studio-telegram-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
+  width: min(920px, 100%);
+  max-height: calc(100dvh - 48px);
+  gap: 14px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 16px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 24px;
+  box-shadow: 0 28px 72px -24px rgba(0, 0, 0, 0.45);
+}
+
+#studioTelegramModal .section-head {
+  margin: 0;
+  border-bottom: 1px solid var(--geist-hairline);
+  padding-bottom: 14px;
+}
+
+#studioTelegramModal .studio-telegram-intro {
+  margin: 0;
+  color: var(--geist-mute);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#studioTelegramModal .studio-telegram-rules {
+  min-height: 0;
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+#studioTelegramModal .studio-telegram-rule {
+  border: 1px solid var(--geist-hairline);
+  border-radius: 10px;
+  background: var(--geist-canvas);
+  padding: 14px;
+}
+
+#studioTelegramModal .studio-telegram-rule > header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+#studioTelegramModal .studio-telegram-rule > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+#studioTelegramModal .studio-telegram-rule > header span,
+#studioTelegramModal .studio-rule-grid > label,
+#studioTelegramModal .studio-rule-everyday > span {
+  color: var(--geist-mute);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+#studioTelegramModal .studio-telegram-rule > header strong {
+  color: var(--geist-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#studioTelegramModal .studio-rule-enabled,
+#studioTelegramModal .studio-telegram-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+#studioTelegramModal input[type="checkbox"],
+#staffEventDetailModal .studio-event-telegram input[type="checkbox"] {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  accent-color: #00ed64;
+}
+
+#studioTelegramModal .studio-rule-delete {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #ffd2d2;
+  border-radius: 6px;
+  background: #fff1f1;
+  color: #c50000;
+  font-size: 18px;
+}
+
+#studioTelegramModal .studio-rule-grid {
+  display: grid;
+  grid-template-columns: 1.3fr repeat(4, minmax(110px, 1fr));
+  align-items: end;
+  gap: 8px;
+}
+
+#studioTelegramModal .studio-rule-grid > label,
+#studioTelegramModal .studio-rule-everyday {
+  display: grid;
+  gap: 5px;
+}
+
+#studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
+#staffEventDetailModal .studio-event-telegram textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+}
+
+#studioTelegramModal .studio-rule-everyday strong {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#studioTelegramModal .studio-rule-calltime {
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  padding: 0 10px;
+}
+
+#studioTelegramModal .studio-telegram-rule > p {
+  margin: 10px 0 0;
+  color: var(--geist-mute);
+  font-size: 10px;
+}
+
+#studioTelegramModal .studio-telegram-empty {
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 5px;
+  border: 1px dashed var(--geist-hairline);
+  border-radius: 10px;
+  color: var(--geist-mute);
+  text-align: center;
+}
+
+#studioTelegramModal .studio-telegram-empty span {
+  font-size: 28px;
+}
+
+#studioTelegramModal .studio-telegram-empty strong {
+  color: var(--geist-ink);
+  font-size: 14px;
+}
+
+#studioTelegramModal .studio-telegram-empty small,
+#studioTelegramModal .studio-telegram-message {
+  color: var(--geist-mute);
+  font-size: 11px;
+}
+
+#studioTelegramModal .studio-telegram-add {
+  justify-self: start;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  box-shadow: none;
+}
+
+#studioTelegramModal .studio-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0;
+  border-top: 1px solid var(--geist-hairline);
+  padding-top: 14px;
+}
+
+#studioTelegramModal .studio-modal-actions .pill {
+  min-width: 112px;
+  min-height: 40px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  box-shadow: none;
+}
+
+#studioTelegramModal .studio-modal-actions .pill.primary {
+  border-color: #00c95b;
+  background: #00ed64;
+  color: #06140a;
+}
+
+#staffEventDetailModal .event-detail-card:has(.studio-event-telegram) .event-detail {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+#staffEventDetailModal .studio-event-telegram {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 18px;
+  border: 1px solid #b8eacb;
+  border-radius: 10px;
+  background: #f3fff7;
+  padding: 14px;
+}
+
+#staffEventDetailModal .studio-event-telegram > div,
+#staffEventDetailModal .studio-event-telegram > label:last-of-type,
+#staffEventDetailModal .studio-event-telegram-message {
+  grid-column: 1 / -1;
+}
+
+#staffEventDetailModal .studio-event-telegram > div {
+  display: grid;
+  gap: 2px;
+}
+
+#staffEventDetailModal .studio-event-telegram strong {
+  color: var(--geist-ink);
+  font-size: 13px;
+}
+
+#staffEventDetailModal .studio-event-telegram small,
+#staffEventDetailModal .studio-event-telegram label {
+  color: var(--geist-mute);
+  font-size: 11px;
+}
+
+#staffEventDetailModal .studio-event-telegram label:last-of-type {
+  display: grid;
+  gap: 6px;
+}
+
+#staffEventDetailModal .studio-event-telegram textarea {
+  min-height: 74px;
+  padding: 9px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+#staffEventDetailModal .event-detail-actions .telegram-pill {
+  border-color: #00c95b;
+  background: #00ed64;
+  color: #06140a;
+}
+
+body[data-theme="dark"] #studioTelegramModal .studio-rule-delete {
+  border-color: rgba(255, 92, 92, 0.35);
+  background: rgba(255, 92, 92, 0.12);
+  color: #ff8a8a;
+}
+
+body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
+  border-color: rgba(0, 237, 100, 0.28);
+  background: rgba(0, 237, 100, 0.08);
+}
+
+@media (max-width: 900px) {
+  #studioTelegramModal .studio-rule-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #studioTelegramModal .studio-rule-name {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  #studioTelegramModal {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  #studioTelegramModal .studio-telegram-card {
+    width: 100%;
+    max-height: 94dvh;
+    border-radius: 16px 16px 0 0;
+    padding: 18px 14px max(14px, env(safe-area-inset-bottom));
+  }
+
+  #studioTelegramModal .studio-rule-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #studioTelegramModal .studio-rule-name {
+    grid-column: auto;
+  }
+
+  #studioTelegramModal .studio-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #studioTelegramModal .studio-modal-actions .pill {
+    min-height: 44px;
+  }
+
+  #staffEventDetailModal .studio-event-telegram {
+    grid-template-columns: 1fr;
+  }
+
+  #staffEventDetailModal .event-detail-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="./work-geist.css?v=10" />
     <link rel="stylesheet" href="./task-geist.css?v=2" />
     <link rel="stylesheet" href="./calendar-geist.css?v=2" />
-    <link rel="stylesheet" href="./studio-geist.css?v=2" />
+    <link rel="stylesheet" href="./studio-geist.css?v=3" />
     <link rel="stylesheet" href="./board-geist.css?v=2" />
     <link rel="stylesheet" href="./admin-geist.css?v=3" />
     <link rel="stylesheet" href="./account-geist.css?v=8" />
@@ -34,7 +34,7 @@
     <link rel="stylesheet" href="./mobile-notification-geist.css?v=3" />
     <link rel="stylesheet" href="./mobile-more-geist.css?v=6" />
     <link rel="stylesheet" href="./mobile-board-geist.css?v=4" />
-    <link rel="stylesheet" href="./mobile-studio-geist.css?v=3" />
+    <link rel="stylesheet" href="./mobile-studio-geist.css?v=4" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -100,7 +100,7 @@
           <button class="nav-item" data-view="works"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v1"/><rect x="4" y="6" width="16" height="14" rx="2"/><path d="M4 11h16"/></svg></span><span>업무</span></button>
           <button class="nav-item" data-view="tasks"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 7v6c0 5-3.5 7.5-8 8-4.5-.5-8-3-8-8V7l8-4Z"/><path d="m8.5 12 2.2 2.2L15.8 9"/></svg></span><span>할 일</span></button>
           <button class="nav-item" data-view="calendar"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg></span><span>일정 캘린더</span></button>
-          <button class="nav-item" data-view="studio"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M9 14h6M12 11v6"/></svg></span><span>방송실 스탭</span></button>
+          <button class="nav-item" data-view="studio"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M9 14h6M12 11v6"/></svg></span><span>방송실 일정</span></button>
           <button class="nav-item" data-view="board"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5M6 19l3-3"/></svg></span><span>게시판</span></button>
           <button class="nav-item" data-view="admin"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2 3.4-.2-.1a1.7 1.7 0 0 0-2 .1 7 7 0 0 1-1.7.7 1.7 1.7 0 0 0-1.2 1.6V23H9.3v-.3A1.7 1.7 0 0 0 8.1 21a7 7 0 0 1-1.7-.7 1.7 1.7 0 0 0-2-.1l-.2.1-2-3.4.1-.1A1.7 1.7 0 0 0 2.6 15a7 7 0 0 1 0-2 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2-3.4.2.1a1.7 1.7 0 0 0 2-.1A7 7 0 0 1 8.1 7a1.7 1.7 0 0 0 1.2-1.6V5h3.4v.3A1.7 1.7 0 0 0 13.9 7a7 7 0 0 1 1.7.7 1.7 1.7 0 0 0 2 .1l.2-.1 2 3.4-.1.1a1.7 1.7 0 0 0-.3 1.9 7 7 0 0 1 0 2Z"/></svg></span><span>관리자 모드</span></button>
         </nav>
@@ -418,7 +418,7 @@
           </div>
         </section>
 
-        <section id="studioView" class="view" aria-label="방송실 스탭">
+        <section id="studioView" class="view" aria-label="방송실 일정">
           <div class="studio-manage-page">
             <div class="studio-manage-head">
               <div>
@@ -438,7 +438,8 @@
               <div class="studio-toolbar-actions">
                 <button class="record-control active" data-studio-view-mode="week" type="button">주</button>
                 <button class="record-control" data-studio-view-mode="month" type="button">월</button>
-                <button id="studioAddStaffBtn" class="pill primary" type="button">+ 방송실 스탭</button>
+                <button id="studioTelegramManageBtn" class="pill ghost" type="button">텔레그램 공지 관리</button>
+                <button id="studioAddStaffBtn" class="pill primary" type="button">+ 방송실 일정</button>
               </div>
             </div>
 
@@ -450,7 +451,7 @@
 
               <aside class="studio-check-panel">
                 <h3>표시 필터</h3>
-                <p>유형과 담당자를 선택해 방송실 스탭 일정을 확인합니다.</p>
+                <p>유형과 담당자를 선택해 방송실 일정을 확인합니다.</p>
                 <details class="studio-filter-section" open>
                   <summary>유형별 보기</summary>
                   <div id="studioTrainingTypeFilters" class="studio-training-type-filters"></div>
@@ -543,7 +544,7 @@
           <button class="detail-tab active" data-work-detail-tab="basic" type="button">기본정보</button>
           <button class="detail-tab" data-work-detail-tab="tasks" type="button">할 일</button>
           <button class="detail-tab" data-work-detail-tab="records" type="button">관리기록</button>
-          <button class="detail-tab" data-work-detail-tab="studio" type="button">방송실 스탭</button>
+          <button class="detail-tab" data-work-detail-tab="studio" type="button">방송실 일정</button>
         </div>
         <div id="workDetailBasicTab" class="detail-tab-panel active">
           <div id="workDetailProperties" class="detail-properties"></div>
@@ -579,7 +580,7 @@
         <section id="workDetailStudioTab" class="detail-tab-panel records-section">
           <div class="records-head">
             <span>▣</span>
-            <h2>방송실 스탭</h2>
+            <h2>방송실 일정</h2>
           </div>
           <div id="workStudioReservationPanel"></div>
         </section>
@@ -639,7 +640,7 @@
       <form id="staffScheduleForm" class="modal-card studio-schedule-modal">
         <button id="closeStaffScheduleBtn" class="studio-modal-close" type="button" aria-label="닫기">×</button>
         <header class="studio-modal-title">
-          <h2>방송실 스탭</h2>
+          <h2>방송실 일정</h2>
           <p>방송실 사용 일정과 등록할 스탭을 설정해주세요.</p>
         </header>
 
@@ -755,9 +756,30 @@
         <div id="staffEventDetailContent" class="event-detail"></div>
         <div class="modal-actions event-detail-actions">
           <button id="editScheduleEventBtn" class="pill ghost" type="button">수정</button>
-          <button id="deleteStaffEventBtn" class="pill danger-pill" type="button">스탭 삭제</button>
+          <button id="sendStaffEventTelegramBtn" class="pill telegram-pill" type="button">텔레그램 푸쉬</button>
+          <button id="deleteStaffEventBtn" class="pill danger-pill" type="button">일정 삭제</button>
         </div>
       </div>
+    </div>
+
+    <div id="studioTelegramModal" class="modal-shell studio-telegram-modal" aria-hidden="true">
+      <form id="studioTelegramForm" class="modal-card studio-telegram-card" role="dialog" aria-modal="true" aria-labelledby="studioTelegramTitle">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Telegram Schedule</p>
+            <h2 id="studioTelegramTitle">텔레그램 공지 관리</h2>
+          </div>
+          <button id="closeStudioTelegramBtn" class="circle" type="button" aria-label="닫기">×</button>
+        </div>
+        <p class="studio-telegram-intro">교육 유형별로 전날 공지 또는 1주일치 공지를 예약할 수 있습니다. 예약은 한국 시간 기준 선택한 시간대 안에 전송됩니다.</p>
+        <div id="studioTelegramRules" class="studio-telegram-rules"></div>
+        <button id="studioTelegramAddRuleBtn" class="pill ghost studio-telegram-add" type="button">+ 예약 규칙 추가</button>
+        <div id="studioTelegramMessage" class="studio-telegram-message" aria-live="polite"></div>
+        <footer class="studio-modal-actions">
+          <button id="cancelStudioTelegramBtn" class="pill ghost" type="button">취소</button>
+          <button class="pill primary" type="submit">예약 설정 저장</button>
+        </footer>
+      </form>
     </div>
 
     <div id="recurringTrainingModal" class="modal-shell recurring-training-modal" aria-hidden="true">
@@ -988,6 +1010,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=132"></script>
+    <script src="./app.js?v=133"></script>
   </body>
 </html>

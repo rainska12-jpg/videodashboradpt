@@ -1,4 +1,4 @@
-/* 업무 상세 > 방송실 스탭 compact UI */
+/* 업무 상세 > 방송실 일정 compact UI */
 .calendar-filter-checks { display: grid; gap: 10px; }
 .calendar-filter-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .calendar-filter-group > strong { min-width: 54px; color: var(--muted); font-size: 12px; }
