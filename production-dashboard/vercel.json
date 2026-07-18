@@ -12,6 +12,32 @@
       ]
     }
   ],
+  "rewrites": [
+    { "source": "/api/telegram-digest-cron-00", "destination": "/api/telegram-digest-cron?scheduledHour=0" },
+    { "source": "/api/telegram-digest-cron-01", "destination": "/api/telegram-digest-cron?scheduledHour=1" },
+    { "source": "/api/telegram-digest-cron-02", "destination": "/api/telegram-digest-cron?scheduledHour=2" },
+    { "source": "/api/telegram-digest-cron-03", "destination": "/api/telegram-digest-cron?scheduledHour=3" },
+    { "source": "/api/telegram-digest-cron-04", "destination": "/api/telegram-digest-cron?scheduledHour=4" },
+    { "source": "/api/telegram-digest-cron-05", "destination": "/api/telegram-digest-cron?scheduledHour=5" },
+    { "source": "/api/telegram-digest-cron-06", "destination": "/api/telegram-digest-cron?scheduledHour=6" },
+    { "source": "/api/telegram-digest-cron-07", "destination": "/api/telegram-digest-cron?scheduledHour=7" },
+    { "source": "/api/telegram-digest-cron-08", "destination": "/api/telegram-digest-cron?scheduledHour=8" },
+    { "source": "/api/telegram-digest-cron-09", "destination": "/api/telegram-digest-cron?scheduledHour=9" },
+    { "source": "/api/telegram-digest-cron-10", "destination": "/api/telegram-digest-cron?scheduledHour=10" },
+    { "source": "/api/telegram-digest-cron-11", "destination": "/api/telegram-digest-cron?scheduledHour=11" },
+    { "source": "/api/telegram-digest-cron-12", "destination": "/api/telegram-digest-cron?scheduledHour=12" },
+    { "source": "/api/telegram-digest-cron-13", "destination": "/api/telegram-digest-cron?scheduledHour=13" },
+    { "source": "/api/telegram-digest-cron-14", "destination": "/api/telegram-digest-cron?scheduledHour=14" },
+    { "source": "/api/telegram-digest-cron-15", "destination": "/api/telegram-digest-cron?scheduledHour=15" },
+    { "source": "/api/telegram-digest-cron-16", "destination": "/api/telegram-digest-cron?scheduledHour=16" },
+    { "source": "/api/telegram-digest-cron-17", "destination": "/api/telegram-digest-cron?scheduledHour=17" },
+    { "source": "/api/telegram-digest-cron-18", "destination": "/api/telegram-digest-cron?scheduledHour=18" },
+    { "source": "/api/telegram-digest-cron-19", "destination": "/api/telegram-digest-cron?scheduledHour=19" },
+    { "source": "/api/telegram-digest-cron-20", "destination": "/api/telegram-digest-cron?scheduledHour=20" },
+    { "source": "/api/telegram-digest-cron-21", "destination": "/api/telegram-digest-cron?scheduledHour=21" },
+    { "source": "/api/telegram-digest-cron-22", "destination": "/api/telegram-digest-cron?scheduledHour=22" },
+    { "source": "/api/telegram-digest-cron-23", "destination": "/api/telegram-digest-cron?scheduledHour=23" }
+  ],
   "crons": [
     { "path": "/api/telegram-digest-cron-00", "schedule": "0 15 * * *" },
     { "path": "/api/telegram-digest-cron-01", "schedule": "0 16 * * *" },
