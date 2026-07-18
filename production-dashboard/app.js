@@ -6617,14 +6617,16 @@ function openStaffEventDetail(staffEventId) {
       <p>${esc(event.memo || "등록된 메모가 없습니다.")}</p>
     </div>
     ${isAdminUser() ? `<section class="studio-event-telegram">
-      <div>
-        <strong>텔레그램 공지 설정</strong>
-        <small>이 일정만 바로 보낼 때 적용됩니다.</small>
+      <div class="studio-event-telegram-head">
+        <span class="studio-event-telegram-copy">
+          <strong>텔레그램 공지 설정</strong>
+          <small>이 일정만 바로 보낼 때 적용됩니다.</small>
+        </span>
+        <label class="studio-inline-calltime" title="일정 시작 1시간 전을 도착 시간으로 표시합니다.">
+          <span>콜타임 포함</span>
+          <span class="studio-switch"><input data-studio-event-call-time type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span>
+        </label>
       </div>
-      <label class="studio-switch-row studio-event-calltime-row">
-        <span><strong>콜타임 포함</strong><small>일정 시작 1시간 전을 도착 시간으로 표시합니다.</small></span>
-        <span class="studio-switch"><input data-studio-event-call-time type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span>
-      </label>
       <label>
         특이사항
         <textarea data-studio-event-telegram-note maxlength="1000" placeholder="공지에 함께 보낼 준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea>
@@ -10617,8 +10619,7 @@ function renderMobileStudioDetail() {
           <button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button>
         </section>
         ${isAdminUser() ? `<section class="mobile-studio-telegram-panel">
-          <div><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></div>
-          <label class="studio-switch-row mobile-studio-calltime-row"><span><strong>콜타임 포함</strong><small>시작 1시간 전을 도착 시간으로 표시</small></span><span class="studio-switch"><input data-mobile-studio-telegram-calltime type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span></label>
+          <div class="mobile-studio-telegram-head"><span><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></span><label class="mobile-studio-inline-calltime" title="시작 1시간 전을 도착 시간으로 표시합니다."><span>콜타임 포함</span><span class="studio-switch"><input data-mobile-studio-telegram-calltime type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span></label></div>
           <label>특이사항<textarea data-mobile-studio-telegram-note maxlength="1000" placeholder="준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea></label>
           <small data-studio-event-telegram-message></small>
           <button class="mobile-studio-telegram-send" data-mobile-studio-telegram-send="${esc(event.id)}" type="button">텔레그램 푸쉬</button>

@@ -1589,31 +1589,40 @@ body:has(#studioView.active) .date-picker-bottom {
 #staffEventDetailModal .studio-event-telegram {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px 18px;
+  grid-template-columns: 1fr;
+  gap: 10px;
   border: 1px solid #b8eacb;
   border-radius: 10px;
   background: #f3fff7;
   padding: 14px;
 }
 
-#staffEventDetailModal .studio-event-telegram > div,
 #staffEventDetailModal .studio-event-telegram > label:last-of-type,
 #staffEventDetailModal .studio-event-telegram-message {
   grid-column: 1 / -1;
 }
 
-#staffEventDetailModal .studio-event-telegram > div {
+#staffEventDetailModal .studio-event-telegram-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+#staffEventDetailModal .studio-event-telegram-copy {
   display: grid;
   gap: 2px;
 }
 
-#staffEventDetailModal .studio-event-calltime-row {
-  min-width: 290px;
-  border: 1px solid rgba(0, 201, 91, 0.22);
-  border-radius: 8px;
-  background: var(--geist-elevated);
-  padding: 9px 10px;
+#staffEventDetailModal .studio-inline-calltime {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
 
 #staffEventDetailModal .studio-event-telegram strong {
@@ -1723,8 +1732,8 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
     grid-template-columns: 1fr;
   }
 
-  #staffEventDetailModal .studio-event-calltime-row {
-    min-width: 0;
+  #staffEventDetailModal .studio-event-telegram-head {
+    gap: 10px;
   }
 
   #staffEventDetailModal .event-detail-actions {
