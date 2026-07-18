@@ -248,6 +248,18 @@ async function verifyAdminAccess(accessToken) {
   return profile?.role === "admin" && profile?.approved === true && ["approved", "active"].includes(profile?.status);
 }
 
+function escapeTelegramHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function formatTelegramMessageHtml(text) {
+  return String(text || "").split("\n").map((line) => {
+    const escapedLine = escapeTelegramHtml(line);
+    if (/^\[.+ · \d+건\]$/.test(line) || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
+    return escapedLine;
+  }).join("\n");
+}
+
 async function sendTelegramMessage(text) {
   const token = envValue("TELEGRAM_BOT_TOKEN");
   const chatId = envValue("TELEGRAM_CHAT_ID");
@@ -255,7 +267,7 @@ async function sendTelegramMessage(text) {
   const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text })
+    body: JSON.stringify({ chat_id: chatId, text: formatTelegramMessageHtml(text), parse_mode: "HTML" })
   });
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok === false) throw new Error(result.description || `텔레그램 전송에 실패했습니다. (${response.status})`);
