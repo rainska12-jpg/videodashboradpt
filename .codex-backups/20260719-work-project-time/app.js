@@ -1135,9 +1135,6 @@ function normalizeState(data) {
       memo: "",
       ...work,
       noSchedule: Boolean(work.noSchedule),
-      allDay: work.allDay !== false,
-      startTime: work.startTime || "09:00",
-      endTime: work.endTime || "10:00",
       kickoffDate: fallbackStart,
       finalDate: fallbackFinal,
       calendarFields: { ...defaultWorkCalendarFields, ...(work.calendarFields || {}) },
@@ -2646,9 +2643,6 @@ function addWork() {
     client: "",
     status: "",
     noSchedule: false,
-    allDay: true,
-    startTime: "09:00",
-    endTime: "10:00",
     kickoffDate: today,
     finalDate: today,
     calendarFields: { ...defaultWorkCalendarFields },
@@ -2665,56 +2659,16 @@ function addWork() {
   openWorkDetail(work.id);
 }
 
-function workStartDateFieldControl() {
+function workDateFieldControl(field) {
   return `
-    <div class="date-field-control work-start-date-control">
-      <div id="work-detail-kickoffDate"></div>
+    <div class="date-field-control">
+      <div id="work-detail-${field}"></div>
+      <label class="calendar-toggle">
+        <input type="checkbox" data-work-calendar-field="${field}" />
+        <span>캘린더 등록</span>
+      </label>
     </div>
   `;
-}
-
-function workFinalScheduleFieldControl() {
-  return `
-    <div class="work-schedule-control">
-      <div class="work-schedule-date" id="work-detail-finalDate"></div>
-      <div class="work-schedule-time-range">
-        <div id="work-detail-startTime"></div>
-        <span aria-hidden="true">~</span>
-        <div id="work-detail-endTime"></div>
-      </div>
-      <div class="work-schedule-options">
-        <label class="calendar-toggle">
-          <input id="workDetailAllDay" type="checkbox" />
-          <span>종일</span>
-        </label>
-        <label class="calendar-toggle">
-          <input id="workDetailNoSchedule" type="checkbox" />
-          <span>일정 없음</span>
-        </label>
-        <label class="calendar-toggle">
-          <input type="checkbox" data-work-calendar-field="finalDate" />
-          <span>캘린더 등록</span>
-        </label>
-      </div>
-    </div>
-  `;
-}
-
-function setActiveWorkScheduleTime(field, value) {
-  const work = state.works.find((item) => item.id === activeWorkId);
-  if (!work || !canEditWork(work) || work.noSchedule || work.allDay !== false) return;
-  let nextValue = String(value || (field === "startTime" ? "09:00" : "10:00"));
-  if (field === "endTime" && minutesFromTime(nextValue) <= minutesFromTime(work.startTime || "09:00")) {
-    showToast("종료 시간은 시작 시간보다 늦어야 합니다.");
-    return;
-  }
-  if (field === "startTime" && minutesFromTime(work.endTime || "10:00") <= minutesFromTime(nextValue)) {
-    const normalized = { startTime: nextValue, endTime: work.endTime || "10:00" };
-    normalizeTaskTimeRange(normalized);
-    nextValue = normalized.startTime;
-    work.endTime = normalized.endTime;
-  }
-  updateActiveWork(field, nextValue);
 }
 
 function createProjectBasicDraft(project) {
@@ -2871,9 +2825,10 @@ function renderWorkDetail() {
     ${propertyRow("▾", "담당자", '<div id="workDetailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="workDetailClient"></div>')}
     ${propertyRow("▾", "진행", '<div id="workDetailStatus"></div>')}
+    ${propertyRow("-", "일정 없음", '<label class="calendar-toggle"><input id="workDetailNoSchedule" type="checkbox" /><span>일정 없이 관리</span></label>')}
     <div class="property-break"></div>
-    ${propertyRow("↦", "시작일", workStartDateFieldControl(), "work-schedule-row work-schedule-start-row")}
-    ${propertyRow("✓", "마감일", workFinalScheduleFieldControl(), "work-schedule-row work-schedule-final-row")}
+    ${propertyRow("↦", "시작일", workDateFieldControl("kickoffDate"))}
+    ${propertyRow("✓", "완료일", workDateFieldControl("finalDate"))}
   `;
   setRichMemoContent("workDetailMemo", basicDraft.memo, editable);
 
@@ -2910,10 +2865,6 @@ function renderWorkDetail() {
   $("#workDetailNoSchedule").disabled = !editable;
   $("#workDetailNoSchedule").addEventListener("change", (event) => updateActiveWork("noSchedule", event.target.checked));
 
-  $("#workDetailAllDay").checked = work.allDay !== false;
-  $("#workDetailAllDay").disabled = work.noSchedule || !editable;
-  $("#workDetailAllDay").addEventListener("change", (event) => updateActiveWork("allDay", event.target.checked));
-
   [
     ["#work-detail-kickoffDate", "kickoffDate"],
     ["#work-detail-finalDate", "finalDate"]
@@ -2925,19 +2876,6 @@ function renderWorkDetail() {
       disabled: work.noSchedule || !editable,
       onSelect: (date) => updateActiveWork(field, date || work[field])
     });
-  });
-
-  renderTimeButton({
-    target: $("#work-detail-startTime"),
-    value: work.startTime || "09:00",
-    disabled: work.noSchedule || work.allDay !== false || !editable,
-    onSelect: (time) => setActiveWorkScheduleTime("startTime", time)
-  });
-  renderTimeButton({
-    target: $("#work-detail-endTime"),
-    value: work.endTime || "10:00",
-    disabled: work.noSchedule || work.allDay !== false || !editable,
-    onSelect: (time) => setActiveWorkScheduleTime("endTime", time)
   });
 
   $("#workDetailProperties").querySelectorAll("[data-work-calendar-field]").forEach((checkbox) => {
@@ -4898,9 +4836,7 @@ function allCalendarEventsForDate(key) {
             field,
             label: label.includes("완료") ? work.title : `${label} · ${work.title}`,
             type: label.includes("완료") ? "due" : "start",
-            allDay: field === "finalDate" ? work.allDay !== false : true,
-            startTime: field === "finalDate" ? work.startTime || "09:00" : "09:00",
-            endTime: field === "finalDate" ? work.endTime || "10:00" : "10:00",
+            allDay: true,
             owners: workOwners(work),
             category: work.type || label,
             parentTitle: work.title,
@@ -5195,9 +5131,9 @@ function showToast(message) {
   }, 1800);
 }
 
-function propertyRow(icon, label, content, className = "") {
+function propertyRow(icon, label, content) {
   return `
-    <div class="property-row ${className}">
+    <div class="property-row">
       <div class="property-label"><span>${icon}</span>${label}</div>
       <div class="property-value">${content}</div>
     </div>
@@ -12254,29 +12190,6 @@ function mobileScheduleTimePicker(name, value, label, disabled = false) {
   `;
 }
 
-function syncMobileWorkScheduleControls(section) {
-  if (!section) return;
-  const noScheduleInput = section.querySelector('input[name="noSchedule"]');
-  const allDayInput = section.querySelector('input[name="allDay"]');
-  const calendarInput = section.querySelector('input[name="calendar"]');
-  const noSchedule = Boolean(noScheduleInput?.checked);
-  const allDay = Boolean(allDayInput?.checked);
-  const timeDisabled = noSchedule || allDay;
-
-  section.classList.toggle("is-no-schedule", noSchedule);
-  section.querySelectorAll("[data-mobile-task-date-toggle]").forEach((button) => {
-    button.disabled = noSchedule;
-    button.setAttribute("aria-disabled", String(noSchedule));
-  });
-  section.querySelectorAll("[data-mobile-schedule-time-toggle]").forEach((button) => {
-    button.disabled = timeDisabled;
-    button.setAttribute("aria-disabled", String(timeDisabled));
-    button.closest(".mobile-schedule-time-field")?.classList.toggle("is-disabled", timeDisabled);
-  });
-  if (allDayInput) allDayInput.disabled = noSchedule;
-  if (calendarInput) calendarInput.disabled = noSchedule;
-}
-
 function renderMobileAddForm(mode) {
   const today = mode === "schedule" && selectedCalendarDate ? selectedCalendarDate : dateKey(new Date());
   const configs = {
@@ -12298,7 +12211,7 @@ function renderMobileAddForm(mode) {
     body = `
       <section><h3>기본정보</h3><input name="title" placeholder="업무명" required />${mobileSelect("type", state.options.workTypes, "분류 선택")}${mobileSelect("client", state.options.workClients, "발주부서 선택")}</section>
       <section><h3>담당/상태</h3>${mobileOwnerCheckboxes("owners")}${mobileSelect("status", state.options.workStatuses, "진행상태 선택")}</section>
-      <section class="mobile-work-schedule-form"><h3>일정</h3><div class="mobile-work-date-fields">${mobileTaskDatePicker("kickoffDate", today, "시작일")}${mobileTaskDatePicker("finalDate", today, "마감일")}</div><div class="mobile-work-time-fields">${mobileScheduleTimePicker("startTime", "09:00", "시작 시간", true)}<span aria-hidden="true">~</span>${mobileScheduleTimePicker("endTime", "10:00", "종료 시간", true)}</div><div class="mobile-work-schedule-options"><label class="mobile-toggle-line"><input name="allDay" type="checkbox" checked /> 종일</label><label class="mobile-toggle-line"><input name="noSchedule" type="checkbox" /> 일정 없음</label><label class="mobile-toggle-line"><input name="calendar" type="checkbox" checked /> 캘린더 등록</label></div></section>
+      <section><h3>일정</h3><label class="mobile-toggle-line"><input name="noSchedule" type="checkbox" /> 일정 없음</label><label>시작일<input name="kickoffDate" type="date" value="${today}" /></label><label>완료일<input name="finalDate" type="date" value="${today}" /></label></section>
       <section><h3>메모</h3><textarea name="memo" placeholder="메모"></textarea></section>
     `;
   } else if (mode === "task") {
@@ -12390,14 +12303,6 @@ function submitMobileAddForm(form) {
     return;
   }
   if (mobileAddMode === "work") {
-    const noSchedule = Boolean(data.get("noSchedule"));
-    const allDay = Boolean(data.get("allDay"));
-    const startTime = String(data.get("startTime") || "09:00");
-    const endTime = String(data.get("endTime") || "10:00");
-    if (!noSchedule && !allDay && minutesFromTime(endTime) <= minutesFromTime(startTime)) {
-      showToast("종료 시간은 시작 시간보다 늦어야 합니다.");
-      return;
-    }
     const work = {
       id: makeId(),
       title: String(data.get("title") || "").trim() || "새 업무",
@@ -12405,13 +12310,10 @@ function submitMobileAddForm(form) {
       owners: mobileFormOwners(form),
       client: String(data.get("client") || ""),
       status: String(data.get("status") || ""),
-      noSchedule,
-      allDay,
-      startTime,
-      endTime,
+      noSchedule: Boolean(data.get("noSchedule")),
       kickoffDate: String(data.get("kickoffDate") || today),
       finalDate: String(data.get("finalDate") || today),
-      calendarFields: { ...defaultWorkCalendarFields, finalDate: Boolean(data.get("calendar")) },
+      calendarFields: { ...defaultWorkCalendarFields },
       studioReservationEnabled: false,
       studioReservationId: "",
       studioReservation: null,
@@ -12792,10 +12694,6 @@ $("#mobileAddSheet")?.addEventListener("click", (event) => {
   });
 });
 $("#mobileAddSheet")?.addEventListener("change", (event) => {
-  if (event.target.matches('#mobileAddForm[data-mode="work"] input[name="allDay"], #mobileAddForm[data-mode="work"] input[name="noSchedule"]')) {
-    syncMobileWorkScheduleControls(event.target.closest(".mobile-work-schedule-form"));
-    return;
-  }
   if (event.target.matches('#mobileAddForm[data-mode="schedule"] input[name="allDay"]')) {
     const disabled = event.target.checked;
     event.target.closest("section")?.querySelectorAll("[data-mobile-schedule-time-toggle]").forEach((button) => {
