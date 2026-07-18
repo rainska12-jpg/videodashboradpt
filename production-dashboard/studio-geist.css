@@ -1446,6 +1446,41 @@ body:has(#studioView.active) .date-picker-bottom {
   font-size: 12px;
 }
 
+#studioTelegramModal .studio-telegram-dropdown {
+  min-width: 0;
+}
+
+#studioTelegramModal .custom-select.studio-telegram-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-ink);
+  padding: 0 11px;
+  font-family: "Geist", "Inter", Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+#studioTelegramModal .custom-select.studio-telegram-select:hover {
+  border-color: color-mix(in srgb, var(--geist-ink) 24%, var(--geist-hairline));
+}
+
+#studioTelegramModal .custom-select.studio-telegram-select:focus-visible {
+  border-color: var(--geist-accent);
+  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
+}
+
+#studioTelegramModal .custom-select.studio-telegram-select span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 #studioTelegramModal .studio-rule-everyday strong {
   min-height: 40px;
   display: flex;
@@ -1866,8 +1901,10 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   background: var(--geist-elevated);
   color: var(--geist-ink);
   padding: 9px 10px;
-  font: inherit;
+  font-family: inherit;
   font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
   line-height: 1.5;
   resize: vertical;
   outline: none;
@@ -2010,7 +2047,12 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   line-height: 1.45;
 }
 
-#studioTelegramModal .studio-calltime-option select,
+#studioTelegramModal .studio-calltime-option .studio-telegram-dropdown {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+}
+
 #staffEventDetailModal .studio-inline-calltime select {
   width: 100%;
   min-width: 0;
@@ -2027,7 +2069,6 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   outline: none;
 }
 
-#studioTelegramModal .studio-calltime-option select:focus,
 #staffEventDetailModal .studio-inline-calltime select:focus {
   border-color: var(--geist-accent);
   box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
@@ -2170,7 +2211,7 @@ body[data-theme="dark"] #studioTelegramModal .studio-rule-editor {
 body[data-theme="dark"] #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
 body[data-theme="dark"] #studioTelegramModal .studio-rule-notice textarea,
 body[data-theme="dark"] #studioTelegramModal .studio-global-fixed-notice textarea,
-body[data-theme="dark"] #studioTelegramModal .studio-calltime-option select,
+body[data-theme="dark"] #studioTelegramModal .custom-select.studio-telegram-select,
 body[data-theme="dark"] #staffEventDetailModal .studio-inline-calltime select,
 body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram textarea {
   border-color: #29302c;

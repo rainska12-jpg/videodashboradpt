@@ -303,11 +303,11 @@ export function buildStudioTelegramMessage(state = {}, events = [], options = {}
 function studioEventsForRule(state, rule, todayKey) {
   const events = Array.isArray(state.staffEvents) ? state.staffEvents : [];
   const matchesType = (event) => rule.trainingType === "all" || event.trainingType === rule.trainingType;
+  if (dateWeekday(todayKey) !== rule.weekday) return [];
   if (rule.mode === "previous-day") {
     const tomorrow = offsetDateKey(todayKey, 1);
     return events.filter((event) => event.date === tomorrow && matchesType(event));
   }
-  if (dateWeekday(todayKey) !== rule.weekday) return [];
   return events.filter((event) => {
     const diff = dateDiff(event.date, todayKey);
     return diff >= 1 && diff <= 7 && matchesType(event);

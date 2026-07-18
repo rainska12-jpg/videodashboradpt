@@ -8421,6 +8421,65 @@ function studioTelegramStatusText() {
   return `최근 ${status.type === "scheduled" ? "예약" : "수동"} 전송 · ${time}${status.ruleName ? ` · ${status.ruleName}` : ""}`;
 }
 
+function renderStudioTelegramEditorDropdowns(editor, types, weekdays, hours) {
+  if (!editor || !studioTelegramRuleEditor) return;
+  const typeLabels = new Map(types.map(([value, label]) => [String(value), label]));
+  const weekdayLabels = new Map(weekdays.map(([value, label]) => [String(value), label]));
+  const renderField = ({ field, value, options, formatOptionLabel, numeric = false }) => {
+    renderDropdown({
+      target: document.querySelector(`[data-studio-rule-editor-dropdown="${field}"]`),
+      value: String(value),
+      options: options.map(String),
+      placeholder: "선택",
+      className: "studio-telegram-select",
+      formatOptionLabel,
+      onSelect: (selected) => {
+        if (!studioTelegramRuleEditor) return;
+        studioTelegramRuleEditor.rule[field] = numeric ? Number(selected) : selected;
+        renderStudioTelegramRules();
+      }
+    });
+  };
+  renderField({
+    field: "trainingType",
+    value: editor.trainingType,
+    options: types.map(([value]) => value),
+    formatOptionLabel: (value) => typeLabels.get(String(value)) || value
+  });
+  renderField({
+    field: "mode",
+    value: editor.mode,
+    options: ["previous-day", "weekly"],
+    formatOptionLabel: (value) => value === "weekly" ? "1주일치 공지" : "전날 공지"
+  });
+  renderField({
+    field: "weekday",
+    value: editor.weekday,
+    options: weekdays.map(([value]) => value),
+    numeric: true,
+    formatOptionLabel: (value) => {
+      const day = Number(value);
+      const label = weekdayLabels.get(String(day)) || "일요일";
+      if (editor.mode !== "previous-day") return label;
+      const nextDayLabel = weekdayLabels.get(String((day + 1) % 7)) || "다음 날";
+      return `${label} (${nextDayLabel} 일정)`;
+    }
+  });
+  renderField({
+    field: "deliveryTime",
+    value: editor.deliveryTime,
+    options: hours,
+    formatOptionLabel: (value) => value
+  });
+  renderField({
+    field: "callTimeOffsetMinutes",
+    value: editor.callTimeOffsetMinutes,
+    options: STUDIO_CALL_TIME_OPTIONS,
+    numeric: true,
+    formatOptionLabel: (value) => studioCallTimeOffsetLabel(Number(value))
+  });
+}
+
 function renderStudioTelegramRules() {
   const target = $("#studioTelegramRules");
   if (!target || !studioTelegramDraft) return;
@@ -8429,9 +8488,10 @@ function renderStudioTelegramRules() {
   const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
   const summaryRows = studioTelegramDraft.rules.map((rule, index) => {
     const typeLabel = rule.trainingType === "all" ? "전체 유형" : rule.trainingType;
+    const weekdayLabel = weekdays.find(([value]) => value === Number(rule.weekday))?.[1] || "일요일";
     const scheduleLabel = rule.mode === "weekly"
-      ? `${weekdays.find(([value]) => value === Number(rule.weekday))?.[1] || "일요일"} · 1주일치 · ${rule.deliveryTime}`
-      : `전날 · ${rule.deliveryTime}`;
+      ? `${weekdayLabel} · 1주일치 · ${rule.deliveryTime}`
+      : `${weekdayLabel} 전송 · 다음 날 일정 · ${rule.deliveryTime}`;
     return `
       <article class="studio-rule-summary ${rule.enabled === false ? "is-disabled" : ""}" data-studio-telegram-rule="${esc(rule.id)}">
         <label class="studio-switch studio-summary-switch" title="예약 사용 여부">
@@ -8465,25 +8525,22 @@ function renderStudioTelegramRules() {
           <input data-studio-rule-editor-field="name" maxlength="80" value="${esc(editor.name)}" placeholder="예: 예배 전날 공지" />
         </label>
         <label>일정 유형
-          <select data-studio-rule-editor-field="trainingType">${types.map(([value, label]) => `<option value="${esc(value)}" ${editor.trainingType === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>
+          <div class="studio-telegram-dropdown" data-studio-rule-editor-dropdown="trainingType"></div>
         </label>
         <label>공지 방식
-          <select data-studio-rule-editor-field="mode">
-            <option value="previous-day" ${editor.mode === "previous-day" ? "selected" : ""}>전날 공지</option>
-            <option value="weekly" ${editor.mode === "weekly" ? "selected" : ""}>1주일치 공지</option>
-          </select>
+          <div class="studio-telegram-dropdown" data-studio-rule-editor-dropdown="mode"></div>
         </label>
-        ${editor.mode === "weekly" ? `<label>전송 요일
-          <select data-studio-rule-editor-field="weekday">${weekdays.map(([value, label]) => `<option value="${value}" ${Number(editor.weekday) === value ? "selected" : ""}>${label}</option>`).join("")}</select>
-        </label>` : `<div class="studio-rule-everyday"><span>전송일</span><strong>일정 하루 전</strong></div>`}
+        <label>전송 요일
+          <div class="studio-telegram-dropdown" data-studio-rule-editor-dropdown="weekday"></div>
+        </label>
         <label>전송 시간
-          <select data-studio-rule-editor-field="deliveryTime">${hours.map((value) => `<option value="${value}" ${editor.deliveryTime === value ? "selected" : ""}>${value}</option>`).join("")}</select>
+          <div class="studio-telegram-dropdown" data-studio-rule-editor-dropdown="deliveryTime"></div>
         </label>
       </div>
       <div class="studio-rule-editor-options">
         <label class="studio-calltime-option">
           <span><strong>콜타임</strong><small>일정 시작 전 도착 시간을 선택합니다.</small></span>
-          <select data-studio-rule-editor-field="callTimeOffsetMinutes" aria-label="콜타임 선택">${studioCallTimeOffsetOptions(editor.callTimeOffsetMinutes)}</select>
+          <div class="studio-telegram-dropdown" data-studio-rule-editor-dropdown="callTimeOffsetMinutes"></div>
         </label>
         <label class="studio-rule-notice">특이사항
           <textarea data-studio-rule-editor-field="notice" maxlength="1500" placeholder="이 예약 규칙으로 보내는 공지에만 추가할 내용을 입력하세요.">${esc(editor.notice || "")}</textarea>
@@ -8503,6 +8560,7 @@ function renderStudioTelegramRules() {
       <small>예배 전날 공지, 교육 주간 공지처럼 필요한 규칙을 추가하세요.</small>
     </div>
   `;
+  if (editor) renderStudioTelegramEditorDropdowns(editor, types, weekdays, hours);
   $("#studioTelegramAddRuleBtn").disabled = Boolean(studioTelegramRuleEditor);
   const message = $("#studioTelegramMessage");
   if (message && !message.textContent) message.textContent = studioTelegramStatusText();
