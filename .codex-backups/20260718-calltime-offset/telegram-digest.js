@@ -19,16 +19,8 @@ export const TELEGRAM_DIGEST_DEFAULTS = {
 };
 
 export const STUDIO_TELEGRAM_DEFAULTS = {
-  fixedNotice: "",
   rules: []
 };
-
-const STUDIO_CALL_TIME_OFFSETS = [30, 60, 120, 180, 240, 300, 360];
-
-function normalizeStudioCallTimeOffset(value) {
-  const minutes = Number(value);
-  return STUDIO_CALL_TIME_OFFSETS.includes(minutes) ? minutes : 60;
-}
 
 function cleanText(value, maxLength = 500) {
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, maxLength);
@@ -48,11 +40,9 @@ export function normalizeTelegramDigestSettings(value = {}) {
 export function normalizeStudioTelegramSettings(value = {}) {
   const rules = Array.isArray(value?.rules) ? value.rules : [];
   return {
-    fixedNotice: cleanText(value.fixedNotice, 1500),
     rules: rules.slice(0, 30).map((rule, index) => {
       const rawHour = Number(String(rule.deliveryTime || "09:00").split(":")[0]);
       const hour = Math.max(0, Math.min(23, Number.isFinite(rawHour) ? rawHour : 9));
-      const notice = rule.notice !== undefined ? rule.notice : rule.fixedNotice;
       return {
         id: cleanText(rule.id || `studio-rule-${index + 1}`, 80).replace(/[^a-zA-Z0-9_-]/g, "-") || `studio-rule-${index + 1}`,
         name: cleanText(rule.name || `공지 규칙 ${index + 1}`, 80),
@@ -61,9 +51,8 @@ export function normalizeStudioTelegramSettings(value = {}) {
         mode: rule.mode === "weekly" ? "weekly" : "previous-day",
         weekday: Math.max(0, Math.min(6, Number(rule.weekday) || 0)),
         deliveryTime: `${String(hour).padStart(2, "0")}:00`,
-        includeCallTime: true,
-        callTimeOffsetMinutes: normalizeStudioCallTimeOffset(rule.callTimeOffsetMinutes),
-        notice: cleanText(notice, 1500)
+        includeCallTime: rule.includeCallTime !== false,
+        fixedNotice: cleanText(rule.fixedNotice, 1500)
       };
     })
   };
@@ -214,10 +203,10 @@ function dateWeekday(value) {
   return new Date(`${value}T00:00:00Z`).getUTCDay();
 }
 
-function callTimeLabel(startTime, offsetMinutes = 60) {
+function callTimeLabel(startTime) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(String(startTime || ""));
   if (!match) return "";
-  const minutes = Number(match[1]) * 60 + Number(match[2]) - normalizeStudioCallTimeOffset(offsetMinutes);
+  const minutes = Number(match[1]) * 60 + Number(match[2]) - 60;
   const wrapped = (minutes + 1440) % 1440;
   const label = `${String(Math.floor(wrapped / 60)).padStart(2, "0")}:${String(wrapped % 60).padStart(2, "0")}`;
   return minutes < 0 ? `${label} (전날)` : label;
@@ -242,60 +231,39 @@ function studioStaffEmoji(type) {
   return "👤";
 }
 
-function studioEventBlock(event, owners, { includeCallTime = true, callTimeOffsetMinutes = 60 } = {}) {
+function studioEventBlock(event, owners, { includeCallTime = true, notice = "" } = {}) {
   const rows = Array.isArray(event.staffRows) && event.staffRows.length
     ? event.staffRows
     : [{ type: event.type || "스탭", owner: event.owner || "" }];
   const startTime = cleanText(event.startTime || "09:00", 10);
-  const lines = [`📡 ${cleanText(event.title || event.trainingType || "방송실 일정", 120)}`];
-  const callTime = callTimeLabel(event.startTime, callTimeOffsetMinutes);
+  const lines = [
+    `🎬 ${studioShortDateLabel(event.date)} ${cleanText(event.title || event.trainingType || "방송실 일정", 120)}`,
+    "• 영상과 예배스탭 포지션",
+    ""
+  ];
+  const callTime = callTimeLabel(event.startTime);
   lines.push(includeCallTime && callTime ? `⏰ [${startTime}] ${callTime} 도착` : `⏰ [${startTime}] 일정 시작`);
-  lines.push(`📍 장소 - ${cleanText(event.room || "장소 미정", 120)}`);
+  lines.push(`📍 장소 - ${cleanText(event.room || "장소 미정", 120)}`, "");
   rows.slice(0, 12).forEach((row) => {
     const type = cleanText(row.type || "스탭", 80);
     lines.push(`${studioStaffEmoji(type)} ${type} - ${studioOwnerLabel(row.owner, owners)}`);
   });
+  const cleanNotice = cleanText(notice, 2000);
+  if (cleanNotice) lines.push("", "📢 특이사항", cleanNotice);
   return lines.join("\n");
 }
 
 export function buildStudioTelegramMessage(state = {}, events = [], options = {}) {
   const owners = ownerNameMap(state);
   const sorted = [...events].sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
-  if (!sorted.length) return "";
   const fixedNotice = cleanText(options.fixedNotice, 1500);
-  const ruleNotice = cleanText(options.notice, 1500);
-  const eventBlock = (event) => studioEventBlock(event, owners, {
-    includeCallTime: options.includeCallTime !== false,
-    callTimeOffsetMinutes: normalizeStudioCallTimeOffset(options.callTimeOffsetMinutes)
+  const blocks = sorted.map((event) => {
+    const eventNotice = cleanText(event.telegramNote, 1000);
+    const notice = sorted.length === 1 ? [eventNotice, fixedNotice].filter(Boolean).join("\n") : eventNotice;
+    return studioEventBlock(event, owners, { includeCallTime: options.includeCallTime !== false, notice });
   });
-  const isWeekly = options.mode === "weekly";
-  let header = `🎬 ${studioShortDateLabel(sorted[0].date)} 방송실 스탭 공지`;
-  let body = sorted.map(eventBlock).join("\n\n──────────\n\n");
-  if (isWeekly) {
-    const referenceDate = /^\d{4}-\d{2}-\d{2}$/.test(String(options.referenceDate || "")) ? options.referenceDate : "";
-    const rangeStart = referenceDate ? offsetDateKey(referenceDate, 1) : sorted[0].date;
-    const rangeEnd = referenceDate ? offsetDateKey(referenceDate, 7) : sorted[sorted.length - 1].date;
-    header = `🎬 ${studioShortDateLabel(rangeStart)}~${studioShortDateLabel(rangeEnd)} 방송실 주간 스탭 공지`;
-    const dateGroups = [];
-    sorted.forEach((event) => {
-      const current = dateGroups[dateGroups.length - 1];
-      if (current?.date === event.date) current.events.push(event);
-      else dateGroups.push({ date: event.date, events: [event] });
-    });
-    body = dateGroups.map((group) => [
-      `📅 ${studioShortDateLabel(group.date)}`,
-      group.events.map(eventBlock).join("\n\n──────────\n\n")
-    ].join("\n\n")).join("\n\n\n");
-  }
-  const sharedNotices = [
-    fixedNotice,
-    ruleNotice,
-    ...sorted.map((event) => cleanText(event.telegramNote, 1000))
-  ].filter(Boolean);
-  const message = [
-    `${header}\n\n${body}`,
-    sharedNotices.length ? `📢 특이사항\n${sharedNotices.join("\n")}` : ""
-  ].filter(Boolean).join("\n\n");
+  if (sorted.length > 1 && fixedNotice) blocks.push(`📢 특이사항\n${fixedNotice}`);
+  const message = blocks.join("\n\n──────────\n\n");
   if (message.length <= 4000) return message;
   return `${message.slice(0, 3940).trimEnd()}\n\n…나머지 일정은 대시보드에서 확인해 주세요.`;
 }
@@ -312,25 +280,6 @@ function studioEventsForRule(state, rule, todayKey) {
     const diff = dateDiff(event.date, todayKey);
     return diff >= 1 && diff <= 7 && matchesType(event);
   });
-}
-
-export function studioPreviewEventsForRule(state, rule, todayKey) {
-  const events = (Array.isArray(state.staffEvents) ? state.staffEvents : [])
-    .filter((event) => rule.trainingType === "all" || event.trainingType === rule.trainingType)
-    .filter((event) => {
-      const diff = dateDiff(event.date, todayKey);
-      return diff !== null && diff >= 0;
-    })
-    .sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
-  if (rule.mode === "weekly") {
-    return events.filter((event) => dateDiff(event.date, todayKey) <= 7);
-  }
-  const nearestDate = events[0]?.date;
-  return nearestDate ? events.filter((event) => event.date === nearestDate) : [];
-}
-
-export function studioGlobalFixedNotice(state) {
-  return normalizeStudioTelegramSettings(state.studioTelegram || {}).fixedNotice;
 }
 
 function envValue(...keys) {
@@ -420,7 +369,7 @@ function escapeTelegramHtml(value) {
 export function formatTelegramMessageHtml(text) {
   return String(text || "").split("\n").map((line) => {
     const escapedLine = escapeTelegramHtml(line);
-    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || /^🎬 /.test(line) || /^📅 /.test(line) || /^📡 /.test(line) || /^⏰ /.test(line) || line === "📢 특이사항" || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
+    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || /^🎬 /.test(line) || /^⏰ /.test(line) || line === "• 영상과 예배스탭 포지션" || line === "📢 특이사항" || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
     return escapedLine;
   }).join("\n");
 }
@@ -482,35 +431,13 @@ export async function handleTelegramDigestRequest(req, res) {
     const action = String(req.body?.action || "send");
     const row = await readDashboardRow(DASHBOARD_STATE_ROW_ID, { accessToken });
     const state = row?.data || {};
-    if (action === "studio-rule-preview") {
-      const previewSettings = normalizeStudioTelegramSettings({
-        fixedNotice: req.body?.fixedNotice,
-        rules: [req.body?.rule || {}]
-      });
-      const rule = previewSettings.rules[0];
-      if (!rule) return res.status(400).json({ ok: false, error: "미리볼 예약 규칙을 찾을 수 없습니다." });
-      const { key: todayKey } = seoulDateParts(new Date());
-      const events = studioPreviewEventsForRule(state, rule, todayKey);
-      if (!events.length) return res.status(404).json({ ok: false, error: "이 규칙으로 미리볼 예정 일정이 없습니다." });
-      const message = buildStudioTelegramMessage(state, events, {
-        mode: rule.mode,
-        includeCallTime: true,
-        callTimeOffsetMinutes: rule.callTimeOffsetMinutes,
-        fixedNotice: previewSettings.fixedNotice,
-        notice: rule.notice
-      });
-      return res.status(200).json({ ok: true, message, eventCount: events.length, ruleName: rule.name });
-    }
     if (action === "studio-preview" || action === "studio-send") {
       const eventId = cleanText(req.body?.eventId, 120);
       const studioEvent = (state.staffEvents || []).find((event) => event.id === eventId);
       if (!studioEvent) return res.status(404).json({ ok: false, error: "방송실 일정을 찾을 수 없습니다." });
-      const studioSettings = normalizeStudioTelegramSettings(state.studioTelegram || {});
       const message = buildStudioTelegramMessage(state, [studioEvent], {
         title: "방송실 일정 안내",
-        includeCallTime: true,
-        callTimeOffsetMinutes: normalizeStudioCallTimeOffset(studioEvent.telegramCallTimeOffsetMinutes),
-        fixedNotice: studioSettings.fixedNotice
+        includeCallTime: studioEvent.telegramCallTimeEnabled !== false
       });
       if (action === "studio-preview") return res.status(200).json({ ok: true, message });
       const telegramResult = await sendTelegramMessage(message);
@@ -595,14 +522,7 @@ export async function handleScheduledTelegramDigest(req, res, scheduledHour) {
         continue;
       }
       try {
-        const message = buildStudioTelegramMessage(state, events, {
-          mode: rule.mode,
-          referenceDate: todayKey,
-          includeCallTime: rule.includeCallTime,
-          callTimeOffsetMinutes: rule.callTimeOffsetMinutes,
-          fixedNotice: studioSettings.fixedNotice,
-          notice: rule.notice
-        });
+        const message = buildStudioTelegramMessage(state, events, { includeCallTime: rule.includeCallTime, fixedNotice: rule.fixedNotice });
         const telegramResult = await sendTelegramMessage(message);
         const status = {
           type: "scheduled",

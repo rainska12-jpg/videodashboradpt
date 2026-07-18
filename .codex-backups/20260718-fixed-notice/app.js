@@ -220,7 +220,7 @@ const defaultTelegramDigestSettings = {
   },
   additionalMessage: ""
 };
-const defaultStudioTelegramSettings = { fixedNotice: "", rules: [] };
+const defaultStudioTelegramSettings = { rules: [] };
 const visibleDetailCalendarFields = ["kickoffDate", "finalDate"];
 const visibleWorkDetailCalendarFields = ["kickoffDate", "finalDate"];
 const defaultOwnerNames = ["김연아", "오상민", "주햇빛", "변명근", "조준호", "유희수"];
@@ -325,11 +325,9 @@ function studioCallTimeOffsetOptions(value) {
 function normalizeStudioTelegramSettings(value = {}) {
   const rules = Array.isArray(value?.rules) ? value.rules : [];
   return {
-    fixedNotice: String(value.fixedNotice || "").trim().slice(0, 1500),
     rules: rules.slice(0, 30).map((rule, index) => {
       const rawHour = Number(String(rule.deliveryTime || "09:00").split(":")[0]);
       const hour = Math.max(0, Math.min(23, Number.isFinite(rawHour) ? rawHour : 9));
-      const notice = rule.notice !== undefined ? rule.notice : rule.fixedNotice;
       return {
         id: String(rule.id || `studio-rule-${index + 1}`),
         name: String(rule.name || `공지 규칙 ${index + 1}`).slice(0, 80),
@@ -340,14 +338,10 @@ function normalizeStudioTelegramSettings(value = {}) {
         deliveryTime: `${String(hour).padStart(2, "0")}:00`,
         includeCallTime: true,
         callTimeOffsetMinutes: normalizeStudioCallTimeOffset(rule.callTimeOffsetMinutes),
-        notice: String(notice || "").trim().slice(0, 1500)
+        fixedNotice: String(rule.fixedNotice || "").slice(0, 1500)
       };
     })
   };
-}
-
-function studioGlobalFixedNotice() {
-  return normalizeStudioTelegramSettings(state.studioTelegram || {}).fixedNotice;
 }
 
 function loadPrefs() {
@@ -482,7 +476,6 @@ let telegramDigestRuntimeStatus = null;
 let telegramDigestStatusLoading = false;
 let studioTelegramDraft = null;
 let studioTelegramRuleEditor = null;
-let studioTelegramPreviewContext = null;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -6602,7 +6595,6 @@ function openStaffEventDetail(staffEventId) {
   const event = state.staffEvents.find((item) => item.id === staffEventId);
   if (!event) return;
   normalizeStaffEventRows(event);
-  const fixedNotice = studioGlobalFixedNotice();
   activeStaffEventId = staffEventId;
   activeScheduleEventId = null;
   $("#staffEventDetailEyebrow").textContent = "STUDIO SCHEDULE";
@@ -6656,9 +6648,8 @@ function openStaffEventDetail(staffEventId) {
           <select data-studio-event-call-time-offset aria-label="콜타임 선택">${studioCallTimeOffsetOptions(event.telegramCallTimeOffsetMinutes)}</select>
         </label>
       </div>
-      ${fixedNotice ? `<div class="studio-auto-fixed-notice"><span>자동 적용 고정 특이사항</span><p>${esc(fixedNotice)}</p><small>공지 관리에 저장된 내용이 전송할 때 자동으로 포함됩니다.</small></div>` : ""}
       <label>
-        ${fixedNotice ? "이 일정 추가 특이사항" : "특이사항"}
+        특이사항
         <textarea data-studio-event-telegram-note maxlength="1000" placeholder="공지에 함께 보낼 준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea>
       </label>
       <small class="studio-event-telegram-message" data-studio-event-telegram-message></small>
@@ -6676,66 +6667,20 @@ function closeStaffEventDetail() {
   $("#staffEventDetailModal").setAttribute("aria-hidden", "true");
 }
 
-function openStudioTelegramPreview({ message = "", mode = "view", eventId = "", title = "텔레그램 공지 미리보기", description = "실제 전송될 내용을 확인하세요." } = {}) {
-  studioTelegramPreviewContext = { mode, eventId };
-  $("#studioTelegramPreviewTitle").textContent = title;
-  $("#studioTelegramPreviewDescription").textContent = description;
-  $("#studioTelegramPreviewContent").textContent = message;
-  $("#studioTelegramPreviewMessage").textContent = "";
-  $("#cancelStudioTelegramPreviewBtn").textContent = mode === "send" ? "취소" : "닫기";
-  $("#confirmStudioTelegramSendBtn").hidden = mode !== "send";
-  $("#studioTelegramPreviewModal").classList.add("open");
-  $("#studioTelegramPreviewModal").setAttribute("aria-hidden", "false");
-}
-
-function closeStudioTelegramPreview() {
-  studioTelegramPreviewContext = null;
-  $("#studioTelegramPreviewModal").classList.remove("open");
-  $("#studioTelegramPreviewModal").setAttribute("aria-hidden", "true");
-}
-
 async function sendStudioEventTelegram(eventId, button) {
   const event = state.staffEvents.find((item) => item.id === eventId);
   if (!event || !button) return;
   const originalText = button.textContent;
   const messageTarget = $("[data-studio-event-telegram-message]");
   button.disabled = true;
-  button.textContent = "미리보기 생성 중…";
+  button.textContent = "전송 중…";
   if (messageTarget) messageTarget.textContent = "";
   try {
     saveState();
     const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
     if (SUPABASE_ENABLED && !remoteSaved) throw new Error("최신 일정 내용을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    const result = await telegramDigestApi("studio-preview", { eventId });
-    openStudioTelegramPreview({
-      message: result.message,
-      mode: "send",
-      eventId,
-      description: "아래 내용 그대로 텔레그램에 전송할까요?"
-    });
-  } catch (error) {
-    if (messageTarget) messageTarget.textContent = error.message || "전송하지 못했습니다.";
-    showToast(error.message || "텔레그램 미리보기를 만들지 못했습니다.");
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
-}
-
-async function confirmStudioTelegramSend() {
-  const eventId = studioTelegramPreviewContext?.mode === "send" ? studioTelegramPreviewContext.eventId : "";
-  if (!eventId) return;
-  const button = $("#confirmStudioTelegramSendBtn");
-  const messageTarget = $("#studioTelegramPreviewMessage");
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = "전송 중…";
-  if (messageTarget) messageTarget.textContent = "";
-  try {
     await telegramDigestApi("studio-send", { eventId });
-    closeStudioTelegramPreview();
-    const detailMessage = $("[data-studio-event-telegram-message]");
-    if (detailMessage) detailMessage.textContent = "텔레그램 그룹으로 전송했습니다.";
+    if (messageTarget) messageTarget.textContent = "텔레그램 그룹으로 전송했습니다.";
     showToast("방송실 일정을 텔레그램으로 전송했습니다.");
   } catch (error) {
     if (messageTarget) messageTarget.textContent = error.message || "전송하지 못했습니다.";
@@ -8409,7 +8354,7 @@ function createStudioTelegramRule(index = 0) {
     deliveryTime: "09:00",
     includeCallTime: true,
     callTimeOffsetMinutes: 60,
-    notice: ""
+    fixedNotice: ""
   };
 }
 
@@ -8443,10 +8388,9 @@ function renderStudioTelegramRules() {
           <span>${esc(typeLabel)}</span>
           <span>${esc(scheduleLabel)}</span>
           <span>콜타임 ${studioCallTimeOffsetLabel(rule.callTimeOffsetMinutes)}</span>
-          ${rule.notice ? `<span>특이사항 있음</span>` : ""}
+          ${rule.fixedNotice ? `<span>고정 특이사항 있음</span>` : ""}
         </div>
         <div class="studio-rule-summary-actions">
-          <button data-preview-studio-rule="${esc(rule.id)}" type="button">미리보기</button>
           <button data-edit-studio-rule="${esc(rule.id)}" type="button">수정</button>
           <button class="danger" data-delete-studio-rule="${esc(rule.id)}" type="button">삭제</button>
         </div>
@@ -8485,9 +8429,9 @@ function renderStudioTelegramRules() {
           <span><strong>콜타임</strong><small>일정 시작 전 도착 시간을 선택합니다.</small></span>
           <select data-studio-rule-editor-field="callTimeOffsetMinutes" aria-label="콜타임 선택">${studioCallTimeOffsetOptions(editor.callTimeOffsetMinutes)}</select>
         </label>
-        <label class="studio-rule-notice">특이사항
-          <textarea data-studio-rule-editor-field="notice" maxlength="1500" placeholder="이 예약 규칙으로 보내는 공지에만 추가할 내용을 입력하세요.">${esc(editor.notice || "")}</textarea>
-          <small data-studio-rule-notice-count>${String(editor.notice || "").length} / 1500</small>
+        <label class="studio-fixed-notice">고정 특이사항
+          <textarea data-studio-rule-editor-field="fixedNotice" maxlength="1500" placeholder="이 규칙으로 보내는 모든 공지에 공통으로 표시할 내용을 입력하세요.">${esc(editor.fixedNotice || "")}</textarea>
+          <small data-studio-fixed-notice-count>${String(editor.fixedNotice || "").length} / 1500</small>
         </label>
       </div>
       <footer>
@@ -8536,8 +8480,6 @@ function openStudioTelegramModal() {
   studioTelegramDraft = structuredClone(normalizeStudioTelegramSettings(state.studioTelegram || {}));
   studioTelegramRuleEditor = null;
   $("#studioTelegramMessage").textContent = "";
-  $("#studioTelegramFixedNotice").value = studioTelegramDraft.fixedNotice || "";
-  $("#studioTelegramFixedNoticeCount").textContent = `${String(studioTelegramDraft.fixedNotice || "").length} / 1500`;
   renderStudioTelegramRules();
   $("#studioTelegramModal").classList.add("open");
   $("#studioTelegramModal").setAttribute("aria-hidden", "false");
@@ -8552,34 +8494,6 @@ function closeStudioTelegramModal() {
   studioTelegramRuleEditor = null;
   $("#studioTelegramModal").classList.remove("open");
   $("#studioTelegramModal").setAttribute("aria-hidden", "true");
-}
-
-async function previewStudioTelegramRule(ruleId, button) {
-  const rule = studioTelegramDraft?.rules.find((item) => item.id === ruleId);
-  if (!rule || !button) return;
-  const originalText = button.textContent;
-  const messageTarget = $("#studioTelegramMessage");
-  button.disabled = true;
-  button.textContent = "생성 중…";
-  if (messageTarget) messageTarget.textContent = "";
-  try {
-    const result = await telegramDigestApi("studio-rule-preview", {
-      rule,
-      fixedNotice: studioTelegramDraft.fixedNotice
-    });
-    openStudioTelegramPreview({
-      message: result.message,
-      mode: "view",
-      title: `${rule.name || "예약 공지"} 미리보기`,
-      description: `가장 가까운 전송 대상 ${result.eventCount || 0}건을 기준으로 생성했습니다.`
-    });
-  } catch (error) {
-    if (messageTarget) messageTarget.textContent = error.message || "미리보기를 만들지 못했습니다.";
-    showToast(error.message || "예약 공지 미리보기를 만들지 못했습니다.");
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
 }
 
 async function saveStudioTelegramSettings() {
@@ -10702,7 +10616,6 @@ function renderMobileStudioDetail() {
   const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
   if (!event || !mobileStudioDetailDraft) return "";
   const time = event.allDay !== false ? "종일 일정" : `${event.startTime || "09:00"} ~ ${event.endTime || "10:00"}`;
-  const fixedNotice = studioGlobalFixedNotice();
   return `
     <div class="mobile-studio-fullscreen mobile-studio-detail" role="dialog" aria-modal="true" aria-label="방송실 일정 상세">
       <header>
@@ -10729,8 +10642,7 @@ function renderMobileStudioDetail() {
         </section>
         ${isAdminUser() ? `<section class="mobile-studio-telegram-panel">
           <div class="mobile-studio-telegram-head"><span><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></span><label class="mobile-studio-inline-calltime" title="일정 시작 전 도착 시간을 선택합니다."><span>콜타임</span><select data-mobile-studio-telegram-calltime-offset aria-label="콜타임 선택">${studioCallTimeOffsetOptions(event.telegramCallTimeOffsetMinutes)}</select></label></div>
-          ${fixedNotice ? `<div class="studio-auto-fixed-notice"><span>자동 적용 고정 특이사항</span><p>${esc(fixedNotice)}</p><small>공지 전송 시 자동으로 포함됩니다.</small></div>` : ""}
-          <label>${fixedNotice ? "이 일정 추가 특이사항" : "특이사항"}<textarea data-mobile-studio-telegram-note maxlength="1000" placeholder="준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea></label>
+          <label>특이사항<textarea data-mobile-studio-telegram-note maxlength="1000" placeholder="준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea></label>
           <small data-studio-event-telegram-message></small>
           <button class="mobile-studio-telegram-send" data-mobile-studio-telegram-send="${esc(event.id)}" type="button">텔레그램 푸쉬</button>
         </section>` : ""}
@@ -11761,7 +11673,6 @@ function closeTopMobileLayer() {
   if (mobileLayerIsOpen("#taskOverviewFilterModal")) { closeTaskOverviewFilter(); return true; }
   if (mobileLayerIsOpen("#scheduleModal")) { closeScheduleModal(); return true; }
   if (mobileLayerIsOpen("#staffScheduleModal")) { closeStaffScheduleModal(); return true; }
-  if (mobileLayerIsOpen("#studioTelegramPreviewModal")) { closeStudioTelegramPreview(); return true; }
   if (mobileLayerIsOpen("#staffEventDetailModal")) { closeStaffEventDetail(); return true; }
   if (mobileLayerIsOpen("#studioTelegramModal")) { closeStudioTelegramModal(); return true; }
   if (mobileLayerIsOpen("#recurringTrainingModal")) { closeRecurringTrainingModal(); return true; }
@@ -13382,10 +13293,6 @@ document.addEventListener("keydown", (event) => {
   toggleDesktopAccountMenu(false);
   openDesktopOrganization(false);
   openDesktopProfile(false);
-  if ($("#studioTelegramPreviewModal")?.classList.contains("open")) {
-    closeStudioTelegramPreview();
-    return;
-  }
   if ($("#studioTelegramModal")?.classList.contains("open")) closeStudioTelegramModal();
 });
 
@@ -14462,11 +14369,6 @@ $("#studioTelegramModal").addEventListener("click", (event) => {
     openStudioTelegramRuleEditor();
     return;
   }
-  const previewButton = event.target.closest("[data-preview-studio-rule]");
-  if (previewButton) {
-    previewStudioTelegramRule(previewButton.dataset.previewStudioRule, previewButton);
-    return;
-  }
   const editButton = event.target.closest("[data-edit-studio-rule]");
   if (editButton) {
     openStudioTelegramRuleEditor(editButton.dataset.editStudioRule);
@@ -14485,12 +14387,6 @@ $("#studioTelegramModal").addEventListener("click", (event) => {
     renderStudioTelegramRules();
   }
 });
-$("#closeStudioTelegramPreviewBtn").addEventListener("click", closeStudioTelegramPreview);
-$("#cancelStudioTelegramPreviewBtn").addEventListener("click", closeStudioTelegramPreview);
-$("#confirmStudioTelegramSendBtn").addEventListener("click", confirmStudioTelegramSend);
-$("#studioTelegramPreviewModal").addEventListener("click", (event) => {
-  if (event.target.id === "studioTelegramPreviewModal") closeStudioTelegramPreview();
-});
 function updateStudioTelegramDraftField(target) {
   const enabledRuleId = target.dataset.studioRuleEnabled;
   if (enabledRuleId) {
@@ -14507,8 +14403,8 @@ function updateStudioTelegramDraftField(target) {
     : ["weekday", "callTimeOffsetMinutes"].includes(field)
       ? Number(target.value)
       : target.value;
-  if (field === "notice") {
-    const count = target.closest(".studio-rule-notice")?.querySelector("[data-studio-rule-notice-count]");
+  if (field === "fixedNotice") {
+    const count = target.closest(".studio-fixed-notice")?.querySelector("[data-studio-fixed-notice-count]");
     if (count) count.textContent = `${target.value.length} / 1500`;
   }
   return true;
@@ -14517,11 +14413,6 @@ $("#studioTelegramRules").addEventListener("input", (event) => updateStudioTeleg
 $("#studioTelegramRules").addEventListener("change", (event) => {
   if (!updateStudioTelegramDraftField(event.target)) return;
   if (event.target.dataset.studioRuleEditorField === "mode") renderStudioTelegramRules();
-});
-$("#studioTelegramFixedNotice").addEventListener("input", (event) => {
-  if (!studioTelegramDraft) return;
-  studioTelegramDraft.fixedNotice = event.target.value.slice(0, 1500);
-  $("#studioTelegramFixedNoticeCount").textContent = `${studioTelegramDraft.fixedNotice.length} / 1500`;
 });
 $("#studioTelegramForm").addEventListener("submit", async (event) => {
   event.preventDefault();

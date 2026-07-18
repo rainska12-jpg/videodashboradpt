@@ -1185,7 +1185,7 @@ body:has(#studioView.active) .date-picker-bottom {
 
 #studioTelegramModal .studio-telegram-card {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
   width: min(1040px, 100%);
   max-height: calc(100dvh - 48px);
   gap: 14px;
@@ -1432,7 +1432,7 @@ body:has(#studioView.active) .date-picker-bottom {
 }
 
 #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
-#studioTelegramModal .studio-rule-notice textarea,
+#studioTelegramModal .studio-fixed-notice textarea,
 #staffEventDetailModal .studio-event-telegram textarea {
   width: 100%;
   min-width: 0;
@@ -1474,7 +1474,7 @@ body:has(#studioView.active) .date-picker-bottom {
   padding: 11px;
 }
 
-#studioTelegramModal .studio-rule-notice {
+#studioTelegramModal .studio-fixed-notice {
   position: relative;
   display: grid;
   gap: 6px;
@@ -1482,14 +1482,14 @@ body:has(#studioView.active) .date-picker-bottom {
   font-size: 10px;
 }
 
-#studioTelegramModal .studio-rule-notice textarea {
+#studioTelegramModal .studio-fixed-notice textarea {
   min-height: 78px;
   padding: 9px 10px;
   line-height: 1.5;
   resize: vertical;
 }
 
-#studioTelegramModal .studio-rule-notice > small {
+#studioTelegramModal .studio-fixed-notice > small {
   justify-self: end;
   color: var(--geist-mute);
   font-size: 9px;
@@ -1828,60 +1828,6 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   line-height: 1.6;
 }
 
-#studioTelegramModal .studio-global-fixed-notice {
-  display: grid;
-  grid-template-columns: minmax(180px, 0.55fr) minmax(0, 1.45fr);
-  align-items: center;
-  gap: 14px;
-  border: 1px solid color-mix(in srgb, var(--geist-accent) 24%, var(--geist-hairline));
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--geist-accent) 5%, var(--geist-elevated));
-  padding: 12px 14px;
-}
-
-#studioTelegramModal .studio-global-fixed-notice > div,
-#studioTelegramModal .studio-global-fixed-notice > label {
-  min-width: 0;
-  display: grid;
-  gap: 4px;
-}
-
-#studioTelegramModal .studio-global-fixed-notice strong {
-  color: var(--geist-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-#studioTelegramModal .studio-global-fixed-notice small {
-  color: var(--geist-mute);
-  font-size: 9px;
-  line-height: 1.45;
-}
-
-#studioTelegramModal .studio-global-fixed-notice textarea {
-  width: 100%;
-  min-height: 64px;
-  border: 1px solid var(--geist-hairline);
-  border-radius: 6px;
-  background: var(--geist-elevated);
-  color: var(--geist-ink);
-  padding: 9px 10px;
-  font: inherit;
-  font-size: 12px;
-  line-height: 1.5;
-  resize: vertical;
-  outline: none;
-}
-
-#studioTelegramModal .studio-global-fixed-notice textarea:focus {
-  border-color: var(--geist-accent);
-  box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.1);
-}
-
-#studioTelegramModal #studioTelegramFixedNoticeCount {
-  justify-self: end;
-}
-
 #studioTelegramModal .studio-rule-summary,
 #studioTelegramModal .studio-rule-editor {
   border-radius: 10px;
@@ -1940,14 +1886,14 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
 
 #studioTelegramModal .studio-rule-grid > label,
 #studioTelegramModal .studio-rule-everyday,
-#studioTelegramModal .studio-rule-notice {
+#studioTelegramModal .studio-fixed-notice {
   color: var(--geist-body);
   font-size: 11px;
   font-weight: 500;
 }
 
 #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
-#studioTelegramModal .studio-rule-notice textarea,
+#studioTelegramModal .studio-fixed-notice textarea,
 #staffEventDetailModal .studio-event-telegram textarea {
   min-height: 42px;
   border: 1px solid var(--geist-hairline);
@@ -1964,7 +1910,7 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
 }
 
 #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select):focus,
-#studioTelegramModal .studio-rule-notice textarea:focus,
+#studioTelegramModal .studio-fixed-notice textarea:focus,
 #staffEventDetailModal .studio-event-telegram textarea:focus {
   border-color: var(--geist-accent);
   box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
@@ -2033,7 +1979,7 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.12);
 }
 
-#studioTelegramModal .studio-rule-notice textarea {
+#studioTelegramModal .studio-fixed-notice textarea {
   min-height: 84px;
   padding: 10px 11px;
   line-height: 1.55;
@@ -2118,35 +2064,6 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   resize: vertical;
 }
 
-#staffEventDetailModal .studio-auto-fixed-notice {
-  display: grid;
-  gap: 5px;
-  border: 1px solid color-mix(in srgb, var(--geist-accent) 28%, var(--geist-hairline));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--geist-accent) 7%, var(--geist-elevated));
-  padding: 11px 12px;
-}
-
-#staffEventDetailModal .studio-auto-fixed-notice > span {
-  color: var(--geist-ink);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-#staffEventDetailModal .studio-auto-fixed-notice > p {
-  margin: 0;
-  color: var(--geist-body);
-  font-size: 12px;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-#staffEventDetailModal .studio-auto-fixed-notice > small {
-  margin: 0;
-  color: var(--geist-mute);
-  font-size: 10px;
-}
-
 #staffEventDetailModal .event-detail-actions .telegram-pill {
   border-color: var(--geist-accent);
   background: var(--geist-accent);
@@ -2155,9 +2072,7 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
 body[data-theme="dark"] #studioTelegramModal .studio-telegram-card,
 body[data-theme="dark"] #studioTelegramModal .studio-rule-summary,
 body[data-theme="dark"] #studioTelegramModal .studio-rule-editor-options > label,
-body[data-theme="dark"] #studioTelegramModal .studio-global-fixed-notice,
-body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram,
-body[data-theme="dark"] #staffEventDetailModal .studio-auto-fixed-notice {
+body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
   border-color: #29302c;
   background: #111512;
 }
@@ -2168,8 +2083,7 @@ body[data-theme="dark"] #studioTelegramModal .studio-rule-editor {
 }
 
 body[data-theme="dark"] #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
-body[data-theme="dark"] #studioTelegramModal .studio-rule-notice textarea,
-body[data-theme="dark"] #studioTelegramModal .studio-global-fixed-notice textarea,
+body[data-theme="dark"] #studioTelegramModal .studio-fixed-notice textarea,
 body[data-theme="dark"] #studioTelegramModal .studio-calltime-option select,
 body[data-theme="dark"] #staffEventDetailModal .studio-inline-calltime select,
 body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram textarea {
@@ -2178,12 +2092,12 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram textarea {
   color: #f2f5f3;
 }
 
-body[data-theme="dark"] #studioTelegramModal :is(.section-head h2, .studio-rule-summary-main strong, .studio-rule-editor > header strong, .studio-rule-everyday strong, .studio-switch-row strong, .studio-telegram-empty strong, .studio-global-fixed-notice strong),
+body[data-theme="dark"] #studioTelegramModal :is(.section-head h2, .studio-rule-summary-main strong, .studio-rule-editor > header strong, .studio-rule-everyday strong, .studio-switch-row strong, .studio-telegram-empty strong),
 body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram strong {
   color: #f2f5f3;
 }
 
-body[data-theme="dark"] #studioTelegramModal :is(.studio-telegram-intro, .studio-rule-grid > label, .studio-rule-everyday, .studio-rule-notice, .studio-rule-summary-main > span, .studio-telegram-message),
+body[data-theme="dark"] #studioTelegramModal :is(.studio-telegram-intro, .studio-rule-grid > label, .studio-rule-everyday, .studio-fixed-notice, .studio-rule-summary-main > span, .studio-telegram-message),
 body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram :is(small, label) {
   color: #a8b0ab;
 }
@@ -2201,134 +2115,6 @@ body[data-theme="dark"] #staffEventDetailModal .event-detail-actions .telegram-p
   border-color: #00ed64;
   background: #00ed64;
   color: #06140a;
-}
-
-#studioTelegramPreviewModal {
-  z-index: 1400;
-  align-items: center;
-  justify-content: center;
-  background: rgba(23, 23, 23, 0.28);
-  padding: 20px;
-  backdrop-filter: blur(4px);
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card {
-  width: min(680px, 100%);
-  max-height: min(760px, calc(100dvh - 40px));
-  display: grid;
-  grid-template-rows: auto minmax(160px, 1fr) auto auto;
-  gap: 14px;
-  border: 1px solid var(--geist-hairline);
-  border-radius: 14px;
-  background: var(--geist-elevated);
-  padding: 20px;
-  box-shadow: 0 24px 64px -22px rgba(0, 0, 0, 0.42);
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid var(--geist-hairline);
-  padding-bottom: 13px;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > header .eyebrow {
-  margin: 0 0 4px;
-  color: var(--geist-mute);
-  font-family: "Geist Mono", monospace;
-  font-size: 9px;
-  font-weight: 500;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card h2,
-#studioTelegramPreviewModal .studio-telegram-preview-card p {
-  margin: 0;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card h2 {
-  color: var(--geist-ink);
-  font-size: 20px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > header p:last-child {
-  margin-top: 4px;
-  color: var(--geist-mute);
-  font-size: 11px;
-}
-
-#studioTelegramPreviewModal #closeStudioTelegramPreviewBtn {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  border: 1px solid var(--geist-hairline);
-  border-radius: 6px;
-  background: var(--geist-elevated);
-  color: var(--geist-body);
-  font-size: 20px;
-}
-
-#studioTelegramPreviewModal #studioTelegramPreviewContent {
-  min-height: 0;
-  overflow: auto;
-  margin: 0;
-  border: 1px solid var(--geist-hairline);
-  border-radius: 10px;
-  background: var(--geist-canvas);
-  color: var(--geist-ink);
-  padding: 16px;
-  font-family: "Geist", "Inter", Arial, sans-serif;
-  font-size: 12px;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-message {
-  min-height: 16px;
-  color: #c50000;
-  font-size: 10px;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > footer button {
-  min-width: 112px;
-  min-height: 42px;
-  border: 1px solid var(--geist-hairline);
-  border-radius: 6px;
-  background: var(--geist-elevated);
-  color: var(--geist-ink);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-#studioTelegramPreviewModal .studio-telegram-preview-card > footer button.primary {
-  border-color: var(--geist-accent);
-  background: var(--geist-accent);
-  color: #06140a;
-}
-
-body[data-theme="dark"] #studioTelegramPreviewModal .studio-telegram-preview-card {
-  border-color: #29302c;
-  background: #0b0f0d;
-}
-
-body[data-theme="dark"] #studioTelegramPreviewModal :is(#closeStudioTelegramPreviewBtn, #studioTelegramPreviewContent, .studio-telegram-preview-card > footer button) {
-  border-color: #29302c;
-  background: #111512;
-  color: #f2f5f3;
-}
-
-body[data-theme="dark"] #studioTelegramPreviewModal .studio-telegram-preview-card h2 {
-  color: #f2f5f3;
 }
 
 @media (max-width: 900px) {
@@ -2359,11 +2145,6 @@ body[data-theme="dark"] #studioTelegramPreviewModal .studio-telegram-preview-car
     letter-spacing: -0.5px;
   }
 
-  #studioTelegramModal .studio-global-fixed-notice {
-    grid-template-columns: 1fr;
-    gap: 9px;
-  }
-
   #studioTelegramModal .studio-rule-editor {
     padding: 14px;
   }
@@ -2373,77 +2154,11 @@ body[data-theme="dark"] #studioTelegramPreviewModal .studio-telegram-preview-car
     white-space: normal;
   }
 
-  #studioTelegramModal .studio-rule-summary-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  #studioTelegramModal .studio-rule-summary-actions [data-preview-studio-rule] {
-    grid-column: 1 / -1;
-  }
-
-  #studioTelegramPreviewModal {
-    align-items: flex-end;
-    padding: 0;
-  }
-
-  #studioTelegramPreviewModal .studio-telegram-preview-card {
-    width: 100%;
-    max-height: 88dvh;
-    border-radius: 16px 16px 0 0;
-    padding: 17px 14px max(14px, env(safe-area-inset-bottom));
-  }
-
-  #studioTelegramPreviewModal .studio-telegram-preview-card > footer {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  #studioTelegramPreviewModal .studio-telegram-preview-card > footer:has(#confirmStudioTelegramSendBtn[hidden]) {
-    grid-template-columns: 1fr;
-  }
-
-  #studioTelegramPreviewModal .studio-telegram-preview-card > footer button {
-    width: 100%;
-    min-width: 0;
-  }
-
   #staffEventDetailModal .studio-event-telegram {
     padding: 14px;
   }
 
   #staffEventDetailModal .studio-event-telegram-head {
     align-items: flex-start;
-  }
-}
-
-/* Keep studio calendar events readable against the dark calendar grid. */
-@media (min-width: 769px) {
-  body[data-theme="dark"] #studioView :is(.studio-week-event, .studio-week-event.typed) {
-    border-color: color-mix(in srgb, var(--studio-type-color) 64%, #39423d);
-    background: color-mix(in srgb, var(--studio-type-color) 20%, #111512);
-    color: #f2f5f3;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-week-event, .studio-week-event.typed):hover {
-    background: color-mix(in srgb, var(--studio-type-color) 28%, #111512);
-  }
-
-  body[data-theme="dark"] #studioView .studio-week-event span {
-    color: #c1c8c4;
-  }
-
-  body[data-theme="dark"] #studioView .studio-week-event strong {
-    color: #f7faf8;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-month-event, .studio-month-event.typed) {
-    border-color: color-mix(in srgb, var(--studio-type-color) 64%, #39423d);
-    background: color-mix(in srgb, var(--studio-type-color) 20%, #111512);
-    color: #f2f5f3;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-month-event, .studio-month-event.typed):hover {
-    background: color-mix(in srgb, var(--studio-type-color) 28%, #111512);
   }
 }

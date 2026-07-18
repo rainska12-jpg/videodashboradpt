@@ -2416,34 +2416,3 @@ body[data-theme="dark"] #studioTelegramPreviewModal .studio-telegram-preview-car
     align-items: flex-start;
   }
 }
-
-/* Keep studio calendar events readable against the dark calendar grid. */
-@media (min-width: 769px) {
-  body[data-theme="dark"] #studioView :is(.studio-week-event, .studio-week-event.typed) {
-    border-color: color-mix(in srgb, var(--studio-type-color) 64%, #39423d);
-    background: color-mix(in srgb, var(--studio-type-color) 20%, #111512);
-    color: #f2f5f3;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-week-event, .studio-week-event.typed):hover {
-    background: color-mix(in srgb, var(--studio-type-color) 28%, #111512);
-  }
-
-  body[data-theme="dark"] #studioView .studio-week-event span {
-    color: #c1c8c4;
-  }
-
-  body[data-theme="dark"] #studioView .studio-week-event strong {
-    color: #f7faf8;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-month-event, .studio-month-event.typed) {
-    border-color: color-mix(in srgb, var(--studio-type-color) 64%, #39423d);
-    background: color-mix(in srgb, var(--studio-type-color) 20%, #111512);
-    color: #f2f5f3;
-  }
-
-  body[data-theme="dark"] #studioView :is(.studio-month-event, .studio-month-event.typed):hover {
-    background: color-mix(in srgb, var(--studio-type-color) 28%, #111512);
-  }
-}

@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="./work-geist.css?v=10" />
     <link rel="stylesheet" href="./task-geist.css?v=2" />
     <link rel="stylesheet" href="./calendar-geist.css?v=2" />
-    <link rel="stylesheet" href="./studio-geist.css?v=12" />
+    <link rel="stylesheet" href="./studio-geist.css?v=8" />
     <link rel="stylesheet" href="./board-geist.css?v=2" />
     <link rel="stylesheet" href="./admin-geist.css?v=3" />
     <link rel="stylesheet" href="./account-geist.css?v=8" />
@@ -34,7 +34,7 @@
     <link rel="stylesheet" href="./mobile-notification-geist.css?v=3" />
     <link rel="stylesheet" href="./mobile-more-geist.css?v=6" />
     <link rel="stylesheet" href="./mobile-board-geist.css?v=4" />
-    <link rel="stylesheet" href="./mobile-studio-geist.css?v=9" />
+    <link rel="stylesheet" href="./mobile-studio-geist.css?v=7" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -772,16 +772,6 @@
           <button id="closeStudioTelegramBtn" class="circle" type="button" aria-label="닫기">×</button>
         </div>
         <p class="studio-telegram-intro">교육 유형별로 전날 공지 또는 1주일치 공지를 예약할 수 있습니다. 예약은 한국 시간 기준 선택한 시간대 안에 전송됩니다.</p>
-        <section class="studio-global-fixed-notice">
-          <div>
-            <strong>고정 특이사항 관리</strong>
-            <small>예약 규칙과 개별 푸시를 포함한 모든 방송실 공지에 자동으로 들어갑니다.</small>
-          </div>
-          <label>
-            <textarea id="studioTelegramFixedNotice" maxlength="1500" placeholder="모든 공지에 공통으로 표시할 준비물, 출입 안내 등을 입력하세요."></textarea>
-            <small id="studioTelegramFixedNoticeCount">0 / 1500</small>
-          </label>
-        </section>
         <div id="studioTelegramRules" class="studio-telegram-rules"></div>
         <button id="studioTelegramAddRuleBtn" class="pill ghost studio-telegram-add" type="button">+ 예약 규칙 추가</button>
         <div id="studioTelegramMessage" class="studio-telegram-message" aria-live="polite"></div>
@@ -790,21 +780,6 @@
           <button class="pill primary" type="submit">예약 설정 저장</button>
         </footer>
       </form>
-    </div>
-
-    <div id="studioTelegramPreviewModal" class="modal-shell studio-telegram-preview-modal" aria-hidden="true">
-      <section class="studio-telegram-preview-card" role="dialog" aria-modal="true" aria-labelledby="studioTelegramPreviewTitle">
-        <header>
-          <div><p class="eyebrow">TELEGRAM PREVIEW</p><h2 id="studioTelegramPreviewTitle">텔레그램 공지 미리보기</h2><p id="studioTelegramPreviewDescription">실제 전송될 내용을 확인하세요.</p></div>
-          <button id="closeStudioTelegramPreviewBtn" type="button" aria-label="미리보기 닫기">×</button>
-        </header>
-        <pre id="studioTelegramPreviewContent"></pre>
-        <div id="studioTelegramPreviewMessage" class="studio-telegram-preview-message" aria-live="polite"></div>
-        <footer>
-          <button id="cancelStudioTelegramPreviewBtn" type="button">취소</button>
-          <button id="confirmStudioTelegramSendBtn" class="primary" type="button">이대로 전송</button>
-        </footer>
-      </section>
     </div>
 
     <div id="recurringTrainingModal" class="modal-shell recurring-training-modal" aria-hidden="true">
@@ -1035,6 +1010,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=139"></script>
+    <script src="./app.js?v=136"></script>
   </body>
 </html>

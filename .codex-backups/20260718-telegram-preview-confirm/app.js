@@ -482,7 +482,6 @@ let telegramDigestRuntimeStatus = null;
 let telegramDigestStatusLoading = false;
 let studioTelegramDraft = null;
 let studioTelegramRuleEditor = null;
-let studioTelegramPreviewContext = null;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -6676,66 +6675,20 @@ function closeStaffEventDetail() {
   $("#staffEventDetailModal").setAttribute("aria-hidden", "true");
 }
 
-function openStudioTelegramPreview({ message = "", mode = "view", eventId = "", title = "텔레그램 공지 미리보기", description = "실제 전송될 내용을 확인하세요." } = {}) {
-  studioTelegramPreviewContext = { mode, eventId };
-  $("#studioTelegramPreviewTitle").textContent = title;
-  $("#studioTelegramPreviewDescription").textContent = description;
-  $("#studioTelegramPreviewContent").textContent = message;
-  $("#studioTelegramPreviewMessage").textContent = "";
-  $("#cancelStudioTelegramPreviewBtn").textContent = mode === "send" ? "취소" : "닫기";
-  $("#confirmStudioTelegramSendBtn").hidden = mode !== "send";
-  $("#studioTelegramPreviewModal").classList.add("open");
-  $("#studioTelegramPreviewModal").setAttribute("aria-hidden", "false");
-}
-
-function closeStudioTelegramPreview() {
-  studioTelegramPreviewContext = null;
-  $("#studioTelegramPreviewModal").classList.remove("open");
-  $("#studioTelegramPreviewModal").setAttribute("aria-hidden", "true");
-}
-
 async function sendStudioEventTelegram(eventId, button) {
   const event = state.staffEvents.find((item) => item.id === eventId);
   if (!event || !button) return;
   const originalText = button.textContent;
   const messageTarget = $("[data-studio-event-telegram-message]");
   button.disabled = true;
-  button.textContent = "미리보기 생성 중…";
+  button.textContent = "전송 중…";
   if (messageTarget) messageTarget.textContent = "";
   try {
     saveState();
     const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
     if (SUPABASE_ENABLED && !remoteSaved) throw new Error("최신 일정 내용을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-    const result = await telegramDigestApi("studio-preview", { eventId });
-    openStudioTelegramPreview({
-      message: result.message,
-      mode: "send",
-      eventId,
-      description: "아래 내용 그대로 텔레그램에 전송할까요?"
-    });
-  } catch (error) {
-    if (messageTarget) messageTarget.textContent = error.message || "전송하지 못했습니다.";
-    showToast(error.message || "텔레그램 미리보기를 만들지 못했습니다.");
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
-}
-
-async function confirmStudioTelegramSend() {
-  const eventId = studioTelegramPreviewContext?.mode === "send" ? studioTelegramPreviewContext.eventId : "";
-  if (!eventId) return;
-  const button = $("#confirmStudioTelegramSendBtn");
-  const messageTarget = $("#studioTelegramPreviewMessage");
-  const originalText = button.textContent;
-  button.disabled = true;
-  button.textContent = "전송 중…";
-  if (messageTarget) messageTarget.textContent = "";
-  try {
     await telegramDigestApi("studio-send", { eventId });
-    closeStudioTelegramPreview();
-    const detailMessage = $("[data-studio-event-telegram-message]");
-    if (detailMessage) detailMessage.textContent = "텔레그램 그룹으로 전송했습니다.";
+    if (messageTarget) messageTarget.textContent = "텔레그램 그룹으로 전송했습니다.";
     showToast("방송실 일정을 텔레그램으로 전송했습니다.");
   } catch (error) {
     if (messageTarget) messageTarget.textContent = error.message || "전송하지 못했습니다.";
@@ -8446,7 +8399,6 @@ function renderStudioTelegramRules() {
           ${rule.notice ? `<span>특이사항 있음</span>` : ""}
         </div>
         <div class="studio-rule-summary-actions">
-          <button data-preview-studio-rule="${esc(rule.id)}" type="button">미리보기</button>
           <button data-edit-studio-rule="${esc(rule.id)}" type="button">수정</button>
           <button class="danger" data-delete-studio-rule="${esc(rule.id)}" type="button">삭제</button>
         </div>
@@ -8552,34 +8504,6 @@ function closeStudioTelegramModal() {
   studioTelegramRuleEditor = null;
   $("#studioTelegramModal").classList.remove("open");
   $("#studioTelegramModal").setAttribute("aria-hidden", "true");
-}
-
-async function previewStudioTelegramRule(ruleId, button) {
-  const rule = studioTelegramDraft?.rules.find((item) => item.id === ruleId);
-  if (!rule || !button) return;
-  const originalText = button.textContent;
-  const messageTarget = $("#studioTelegramMessage");
-  button.disabled = true;
-  button.textContent = "생성 중…";
-  if (messageTarget) messageTarget.textContent = "";
-  try {
-    const result = await telegramDigestApi("studio-rule-preview", {
-      rule,
-      fixedNotice: studioTelegramDraft.fixedNotice
-    });
-    openStudioTelegramPreview({
-      message: result.message,
-      mode: "view",
-      title: `${rule.name || "예약 공지"} 미리보기`,
-      description: `가장 가까운 전송 대상 ${result.eventCount || 0}건을 기준으로 생성했습니다.`
-    });
-  } catch (error) {
-    if (messageTarget) messageTarget.textContent = error.message || "미리보기를 만들지 못했습니다.";
-    showToast(error.message || "예약 공지 미리보기를 만들지 못했습니다.");
-  } finally {
-    button.disabled = false;
-    button.textContent = originalText;
-  }
 }
 
 async function saveStudioTelegramSettings() {
@@ -11761,7 +11685,6 @@ function closeTopMobileLayer() {
   if (mobileLayerIsOpen("#taskOverviewFilterModal")) { closeTaskOverviewFilter(); return true; }
   if (mobileLayerIsOpen("#scheduleModal")) { closeScheduleModal(); return true; }
   if (mobileLayerIsOpen("#staffScheduleModal")) { closeStaffScheduleModal(); return true; }
-  if (mobileLayerIsOpen("#studioTelegramPreviewModal")) { closeStudioTelegramPreview(); return true; }
   if (mobileLayerIsOpen("#staffEventDetailModal")) { closeStaffEventDetail(); return true; }
   if (mobileLayerIsOpen("#studioTelegramModal")) { closeStudioTelegramModal(); return true; }
   if (mobileLayerIsOpen("#recurringTrainingModal")) { closeRecurringTrainingModal(); return true; }
@@ -13382,10 +13305,6 @@ document.addEventListener("keydown", (event) => {
   toggleDesktopAccountMenu(false);
   openDesktopOrganization(false);
   openDesktopProfile(false);
-  if ($("#studioTelegramPreviewModal")?.classList.contains("open")) {
-    closeStudioTelegramPreview();
-    return;
-  }
   if ($("#studioTelegramModal")?.classList.contains("open")) closeStudioTelegramModal();
 });
 
@@ -14462,11 +14381,6 @@ $("#studioTelegramModal").addEventListener("click", (event) => {
     openStudioTelegramRuleEditor();
     return;
   }
-  const previewButton = event.target.closest("[data-preview-studio-rule]");
-  if (previewButton) {
-    previewStudioTelegramRule(previewButton.dataset.previewStudioRule, previewButton);
-    return;
-  }
   const editButton = event.target.closest("[data-edit-studio-rule]");
   if (editButton) {
     openStudioTelegramRuleEditor(editButton.dataset.editStudioRule);
@@ -14484,12 +14398,6 @@ $("#studioTelegramModal").addEventListener("click", (event) => {
     studioTelegramRuleEditor = null;
     renderStudioTelegramRules();
   }
-});
-$("#closeStudioTelegramPreviewBtn").addEventListener("click", closeStudioTelegramPreview);
-$("#cancelStudioTelegramPreviewBtn").addEventListener("click", closeStudioTelegramPreview);
-$("#confirmStudioTelegramSendBtn").addEventListener("click", confirmStudioTelegramSend);
-$("#studioTelegramPreviewModal").addEventListener("click", (event) => {
-  if (event.target.id === "studioTelegramPreviewModal") closeStudioTelegramPreview();
 });
 function updateStudioTelegramDraftField(target) {
   const enabledRuleId = target.dataset.studioRuleEnabled;

@@ -1480,22 +1480,3 @@
     padding-left: 12px;
   }
 }
-
-@media (max-width: 768px) {
-  body[data-theme="dark"] .mobile-studio-event-card {
-    border-color: color-mix(in srgb, var(--studio-type-color) 48%, var(--mobile-video-line));
-    background: color-mix(in srgb, var(--studio-type-color) 13%, var(--mobile-video-elevated));
-  }
-
-  body[data-theme="dark"] .mobile-studio-event-time {
-    color: #c1c8c4;
-  }
-
-  body[data-theme="dark"] .mobile-studio-event-copy strong {
-    color: #f2f5f3;
-  }
-
-  body[data-theme="dark"] .mobile-studio-event-copy :is(small, em) {
-    color: #89928d;
-  }
-}

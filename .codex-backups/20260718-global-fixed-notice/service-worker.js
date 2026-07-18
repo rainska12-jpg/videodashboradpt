@@ -1,4 +1,4 @@
-const CACHE_NAME = "video-work-dashboard-v173";
+const CACHE_NAME = "video-work-dashboard-v170";
 const CORE_ASSETS = [
   "/",
   "/index.html",
@@ -11,7 +11,7 @@ const CORE_ASSETS = [
   "/work-geist.css?v=10",
   "/task-geist.css?v=2",
   "/calendar-geist.css?v=2",
-  "/studio-geist.css?v=12",
+  "/studio-geist.css?v=9",
   "/board-geist.css?v=2",
   "/admin-geist.css?v=3",
   "/account-geist.css?v=8",
@@ -22,8 +22,8 @@ const CORE_ASSETS = [
   "/mobile-notification-geist.css?v=3",
   "/mobile-more-geist.css?v=6",
   "/mobile-board-geist.css?v=4",
-  "/mobile-studio-geist.css?v=9",
-  "/app.js?v=139",
+  "/mobile-studio-geist.css?v=8",
+  "/app.js?v=137",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",
