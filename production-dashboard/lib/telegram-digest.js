@@ -158,11 +158,11 @@ export function buildTelegramDigest(state = {}, rawSettings = {}, options = {}) 
   });
 
   if (!selectedSections.length) selectedSections.push("[알림 항목]\n• 선택된 항목이 없습니다.");
-  if (settings.additionalMessage) selectedSections.push(`[📣 추가 공지]\n${settings.additionalMessage}`);
+  if (settings.additionalMessage) selectedSections.push(settings.additionalMessage);
   const dashboardUrl = cleanText(options.dashboardUrl, 500);
   if (dashboardUrl) selectedSections.push(`🔗 대시보드 열기\n${dashboardUrl}`);
 
-  const message = `📋 영상 업무 데일리 브리핑\n${koreanDateLabel(todayKey)}\n\n${selectedSections.join("\n\n")}`;
+  const message = `📋 영상제작과 업무 브리핑\n${koreanDateLabel(todayKey)}\n\n${selectedSections.join("\n\n")}`;
   if (message.length <= 4000) return message;
   return `${message.slice(0, 3940).trimEnd()}\n\n…일부 항목은 대시보드에서 확인해 주세요.`;
 }

@@ -8125,7 +8125,7 @@ function renderTelegramDigestManager() {
         </section>
 
         <section class="telegram-setting-card telegram-message-card">
-          <header><span>3</span><div><h4>추가 공지 메시지</h4><small>브리핑 마지막에 덧붙일 내용을 입력합니다.</small></div></header>
+          <header><span>3</span><div><h4>추가 메시지</h4><small>입력한 내용이 별도 제목 없이 그대로 표시됩니다.</small></div></header>
           <textarea name="additionalMessage" maxlength="1000" rows="7" placeholder="예: 오늘 14시 전체 회의가 있습니다. 촬영 장비 반납 일정을 확인해 주세요.">${esc(settings.additionalMessage)}</textarea>
           <small>선택 사항 · 최대 1,000자</small>
         </section>
@@ -10670,8 +10670,8 @@ function renderMobileTelegramDigest() {
         </div>
       </section>
       <section class="mobile-settings-section mobile-telegram-section">
-        <h3>추가 공지 메시지</h3>
-        <div class="mobile-telegram-message"><textarea name="additionalMessage" maxlength="1000" rows="6" placeholder="추가로 공지할 메시지를 입력하세요.">${esc(settings.additionalMessage)}</textarea><small>선택 사항 · 최대 1,000자</small></div>
+        <h3>추가 메시지</h3>
+        <div class="mobile-telegram-message"><textarea name="additionalMessage" maxlength="1000" rows="6" placeholder="원하는 형식으로 메시지를 입력하세요.">${esc(settings.additionalMessage)}</textarea><small>별도 제목 없이 입력한 내용 그대로 표시 · 최대 1,000자</small></div>
       </section>
       <section class="mobile-settings-section mobile-telegram-section">
         <h3>미리보기</h3>
