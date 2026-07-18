@@ -1166,12 +1166,31 @@
     font-size: 9px;
   }
 
-  .mobile-studio-telegram-panel > label:not(.mobile-studio-check) {
+  .mobile-studio-telegram-panel > label:not(.mobile-studio-check):not(.mobile-studio-calltime-row) {
     display: grid;
     gap: 5px;
     color: var(--mobile-video-body);
     font-size: 10px;
     font-weight: 500;
+  }
+
+  .mobile-studio-telegram-panel .mobile-studio-calltime-row {
+    display: flex;
+    border: 1px solid color-mix(in srgb, var(--mobile-video-accent) 30%, var(--mobile-video-line));
+    border-radius: 8px;
+    background: var(--mobile-video-elevated);
+    padding: 10px;
+  }
+
+  .mobile-studio-telegram-panel .mobile-studio-calltime-row strong {
+    color: var(--mobile-video-ink);
+    font-size: 12px;
+  }
+
+  .mobile-studio-telegram-panel .mobile-studio-calltime-row small {
+    margin: 0;
+    color: var(--mobile-video-mute);
+    font-size: 9px;
   }
 
   .mobile-studio-telegram-panel textarea {

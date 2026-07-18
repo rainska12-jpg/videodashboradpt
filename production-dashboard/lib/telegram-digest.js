@@ -51,7 +51,8 @@ export function normalizeStudioTelegramSettings(value = {}) {
         mode: rule.mode === "weekly" ? "weekly" : "previous-day",
         weekday: Math.max(0, Math.min(6, Number(rule.weekday) || 0)),
         deliveryTime: `${String(hour).padStart(2, "0")}:00`,
-        includeCallTime: rule.includeCallTime !== false
+        includeCallTime: rule.includeCallTime !== false,
+        fixedNotice: cleanText(rule.fixedNotice, 1500)
       };
     })
   };
@@ -215,31 +216,54 @@ function studioOwnerLabel(ownerId, owners) {
   return cleanText(owners.get(ownerId) || ownerId || "미배정", 80);
 }
 
-function studioEventBlock(event, owners, { includeCallTime = true } = {}) {
+function studioShortDateLabel(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${String(date.getUTCMonth() + 1).padStart(2, "0")}/${String(date.getUTCDate()).padStart(2, "0")}(${weekdays[date.getUTCDay()]})`;
+}
+
+function studioStaffEmoji(type) {
+  const value = String(type || "");
+  if (/\bPD\b/i.test(value) || /영상|카메라/.test(value)) return "🎥";
+  if (/\bCG\b/i.test(value) || /자막/.test(value)) return "💻";
+  if (/\bPC\b/i.test(value) || /송출|중계/.test(value)) return "🖥️";
+  if (/음향|오디오|sound/i.test(value)) return "🎧";
+  return "👤";
+}
+
+function studioEventBlock(event, owners, { includeCallTime = true, notice = "" } = {}) {
   const rows = Array.isArray(event.staffRows) && event.staffRows.length
     ? event.staffRows
     : [{ type: event.type || "스탭", owner: event.owner || "" }];
-  const time = `${cleanText(event.startTime || "09:00", 10)}~${cleanText(event.endTime || "10:00", 10)}`;
+  const startTime = cleanText(event.startTime || "09:00", 10);
   const lines = [
-    `[${koreanDateLabel(event.date)}][${time}]`
+    `🎬 ${studioShortDateLabel(event.date)} ${cleanText(event.title || event.trainingType || "방송실 일정", 120)}`,
+    "• 영상과 예배스탭 포지션",
+    ""
   ];
   const callTime = callTimeLabel(event.startTime);
-  if (includeCallTime && callTime) lines.push(`[콜타임 ${callTime}]`);
-  lines.push(`[${cleanText(event.title || event.trainingType || "방송실 일정", 120)}][${cleanText(event.room || "장소 미정", 120)}]`);
+  lines.push(includeCallTime && callTime ? `⏰ [${startTime}] ${callTime} 도착` : `⏰ [${startTime}] 일정 시작`);
+  lines.push(`📍 장소 - ${cleanText(event.room || "장소 미정", 120)}`, "");
   rows.slice(0, 12).forEach((row) => {
-    lines.push(`[${cleanText(row.type || "스탭", 80)}] : [${studioOwnerLabel(row.owner, owners)}]`);
+    const type = cleanText(row.type || "스탭", 80);
+    lines.push(`${studioStaffEmoji(type)} ${type} - ${studioOwnerLabel(row.owner, owners)}`);
   });
-  const note = cleanText(event.telegramNote, 1000);
-  if (note) lines.push(`특이사항\n${note}`);
+  const cleanNotice = cleanText(notice, 2000);
+  if (cleanNotice) lines.push("", "📢 특이사항", cleanNotice);
   return lines.join("\n");
 }
 
 export function buildStudioTelegramMessage(state = {}, events = [], options = {}) {
   const owners = ownerNameMap(state);
   const sorted = [...events].sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
-  const title = cleanText(options.title || (sorted.length > 1 ? "방송실 주간 일정 안내" : "방송실 일정 안내"), 120);
-  const blocks = sorted.map((event) => studioEventBlock(event, owners, { includeCallTime: options.includeCallTime !== false }));
-  const message = `📡 ${title}\n\n${blocks.join("\n\n──────────\n\n")}`;
+  const fixedNotice = cleanText(options.fixedNotice, 1500);
+  const blocks = sorted.map((event) => {
+    const eventNotice = cleanText(event.telegramNote, 1000);
+    const notice = sorted.length === 1 ? [eventNotice, fixedNotice].filter(Boolean).join("\n") : eventNotice;
+    return studioEventBlock(event, owners, { includeCallTime: options.includeCallTime !== false, notice });
+  });
+  if (sorted.length > 1 && fixedNotice) blocks.push(`📢 특이사항\n${fixedNotice}`);
+  const message = blocks.join("\n\n──────────\n\n");
   if (message.length <= 4000) return message;
   return `${message.slice(0, 3940).trimEnd()}\n\n…나머지 일정은 대시보드에서 확인해 주세요.`;
 }
@@ -345,7 +369,7 @@ function escapeTelegramHtml(value) {
 export function formatTelegramMessageHtml(text) {
   return String(text || "").split("\n").map((line) => {
     const escapedLine = escapeTelegramHtml(line);
-    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
+    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || /^🎬 /.test(line) || /^⏰ /.test(line) || line === "• 영상과 예배스탭 포지션" || line === "📢 특이사항" || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
     return escapedLine;
   }).join("\n");
 }
@@ -498,7 +522,7 @@ export async function handleScheduledTelegramDigest(req, res, scheduledHour) {
         continue;
       }
       try {
-        const message = buildStudioTelegramMessage(state, events, { title: rule.name, includeCallTime: rule.includeCallTime });
+        const message = buildStudioTelegramMessage(state, events, { includeCallTime: rule.includeCallTime, fixedNotice: rule.fixedNotice });
         const telegramResult = await sendTelegramMessage(message);
         const status = {
           type: "scheduled",

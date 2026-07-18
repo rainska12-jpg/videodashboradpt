@@ -317,7 +317,8 @@ function normalizeStudioTelegramSettings(value = {}) {
         mode: rule.mode === "weekly" ? "weekly" : "previous-day",
         weekday: Math.max(0, Math.min(6, Number(rule.weekday) || 0)),
         deliveryTime: `${String(hour).padStart(2, "0")}:00`,
-        includeCallTime: rule.includeCallTime !== false
+        includeCallTime: rule.includeCallTime !== false,
+        fixedNotice: String(rule.fixedNotice || "").slice(0, 1500)
       };
     })
   };
@@ -454,6 +455,7 @@ let adminSection = viewPref("adminSection", "dropdowns");
 let telegramDigestRuntimeStatus = null;
 let telegramDigestStatusLoading = false;
 let studioTelegramDraft = null;
+let studioTelegramRuleEditor = null;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -6619,9 +6621,9 @@ function openStaffEventDetail(staffEventId) {
         <strong>텔레그램 공지 설정</strong>
         <small>이 일정만 바로 보낼 때 적용됩니다.</small>
       </div>
-      <label class="studio-telegram-check">
-        <input data-studio-event-call-time type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} />
-        <span>콜타임 포함 (시작 1시간 전)</span>
+      <label class="studio-switch-row studio-event-calltime-row">
+        <span><strong>콜타임 포함</strong><small>일정 시작 1시간 전을 도착 시간으로 표시합니다.</small></span>
+        <span class="studio-switch"><input data-studio-event-call-time type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span>
       </label>
       <label>
         특이사항
@@ -8327,7 +8329,8 @@ function createStudioTelegramRule(index = 0) {
     mode: "previous-day",
     weekday: 0,
     deliveryTime: "09:00",
-    includeCallTime: true
+    includeCallTime: true,
+    fixedNotice: ""
   };
 }
 
@@ -8345,59 +8348,113 @@ function renderStudioTelegramRules() {
   const types = [["all", "전체 유형"], ...trainingTypeOptions().map((type) => [type, type])];
   const weekdays = [[0, "일요일"], [1, "월요일"], [2, "화요일"], [3, "수요일"], [4, "목요일"], [5, "금요일"], [6, "토요일"]];
   const hours = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, "0")}:00`);
-  target.innerHTML = studioTelegramDraft.rules.length ? studioTelegramDraft.rules.map((rule, index) => `
-    <article class="studio-telegram-rule" data-studio-telegram-rule="${esc(rule.id)}">
-      <header>
-        <div>
-          <span>예약 규칙 ${index + 1}</span>
-          <strong>${esc(rule.name || `방송실 공지 ${index + 1}`)}</strong>
-        </div>
-        <label class="studio-rule-enabled">
-          <input data-studio-rule-field="enabled" type="checkbox" ${rule.enabled !== false ? "checked" : ""} />
-          <span>사용</span>
+  const summaryRows = studioTelegramDraft.rules.map((rule, index) => {
+    const typeLabel = rule.trainingType === "all" ? "전체 유형" : rule.trainingType;
+    const scheduleLabel = rule.mode === "weekly"
+      ? `${weekdays.find(([value]) => value === Number(rule.weekday))?.[1] || "일요일"} · 1주일치 · ${rule.deliveryTime}`
+      : `전날 · ${rule.deliveryTime}`;
+    return `
+      <article class="studio-rule-summary ${rule.enabled === false ? "is-disabled" : ""}" data-studio-telegram-rule="${esc(rule.id)}">
+        <label class="studio-switch studio-summary-switch" title="예약 사용 여부">
+          <input data-studio-rule-enabled="${esc(rule.id)}" type="checkbox" ${rule.enabled !== false ? "checked" : ""} />
+          <span aria-hidden="true"></span>
         </label>
-        <button class="studio-rule-delete" data-delete-studio-rule="${esc(rule.id)}" type="button" aria-label="예약 규칙 삭제">×</button>
+        <div class="studio-rule-summary-main">
+          <strong>${esc(rule.name || `방송실 공지 ${index + 1}`)}</strong>
+          <span>${esc(typeLabel)}</span>
+          <span>${esc(scheduleLabel)}</span>
+          <span>${rule.includeCallTime !== false ? "콜타임 포함" : "콜타임 제외"}</span>
+          ${rule.fixedNotice ? `<span>고정 특이사항 있음</span>` : ""}
+        </div>
+        <div class="studio-rule-summary-actions">
+          <button data-edit-studio-rule="${esc(rule.id)}" type="button">수정</button>
+          <button class="danger" data-delete-studio-rule="${esc(rule.id)}" type="button">삭제</button>
+        </div>
+      </article>
+    `;
+  }).join("");
+  const editor = studioTelegramRuleEditor?.rule;
+  const editorMarkup = editor ? `
+    <article class="studio-rule-editor" data-studio-telegram-editor>
+      <header>
+        <div><span>${studioTelegramRuleEditor.isNew ? "새 예약 규칙" : "예약 규칙 수정"}</span><strong>${esc(editor.name || "방송실 공지")}</strong></div>
+        <button data-cancel-studio-rule type="button" aria-label="편집 취소">×</button>
       </header>
       <div class="studio-rule-grid">
         <label class="studio-rule-name">공지 제목
-          <input data-studio-rule-field="name" maxlength="80" value="${esc(rule.name)}" placeholder="예: 교육 주간 공지" />
+          <input data-studio-rule-editor-field="name" maxlength="80" value="${esc(editor.name)}" placeholder="예: 예배 전날 공지" />
         </label>
         <label>일정 유형
-          <select data-studio-rule-field="trainingType">${types.map(([value, label]) => `<option value="${esc(value)}" ${rule.trainingType === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>
+          <select data-studio-rule-editor-field="trainingType">${types.map(([value, label]) => `<option value="${esc(value)}" ${editor.trainingType === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>
         </label>
         <label>공지 방식
-          <select data-studio-rule-field="mode">
-            <option value="previous-day" ${rule.mode === "previous-day" ? "selected" : ""}>전날 공지</option>
-            <option value="weekly" ${rule.mode === "weekly" ? "selected" : ""}>1주일치 공지</option>
+          <select data-studio-rule-editor-field="mode">
+            <option value="previous-day" ${editor.mode === "previous-day" ? "selected" : ""}>전날 공지</option>
+            <option value="weekly" ${editor.mode === "weekly" ? "selected" : ""}>1주일치 공지</option>
           </select>
         </label>
-        ${rule.mode === "weekly" ? `<label>전송 요일
-          <select data-studio-rule-field="weekday">${weekdays.map(([value, label]) => `<option value="${value}" ${Number(rule.weekday) === value ? "selected" : ""}>${label}</option>`).join("")}</select>
+        ${editor.mode === "weekly" ? `<label>전송 요일
+          <select data-studio-rule-editor-field="weekday">${weekdays.map(([value, label]) => `<option value="${value}" ${Number(editor.weekday) === value ? "selected" : ""}>${label}</option>`).join("")}</select>
         </label>` : `<div class="studio-rule-everyday"><span>전송일</span><strong>일정 하루 전</strong></div>`}
         <label>전송 시간
-          <select data-studio-rule-field="deliveryTime">${hours.map((value) => `<option value="${value}" ${rule.deliveryTime === value ? "selected" : ""}>${value}</option>`).join("")}</select>
-        </label>
-        <label class="studio-telegram-check studio-rule-calltime">
-          <input data-studio-rule-field="includeCallTime" type="checkbox" ${rule.includeCallTime !== false ? "checked" : ""} />
-          <span>콜타임 포함</span>
+          <select data-studio-rule-editor-field="deliveryTime">${hours.map((value) => `<option value="${value}" ${editor.deliveryTime === value ? "selected" : ""}>${value}</option>`).join("")}</select>
         </label>
       </div>
-      <p>${rule.mode === "weekly" ? `${weekdays.find(([value]) => value === Number(rule.weekday))?.[1] || "일요일"} ${esc(rule.deliveryTime)}에 다음 7일 일정을 한 번에 전송` : `각 일정 전날 ${esc(rule.deliveryTime)}에 전송`}</p>
+      <div class="studio-rule-editor-options">
+        <label class="studio-switch-row">
+          <span><strong>콜타임 포함</strong><small>일정 시작 1시간 전을 도착 시간으로 표시합니다.</small></span>
+          <span class="studio-switch"><input data-studio-rule-editor-field="includeCallTime" type="checkbox" ${editor.includeCallTime !== false ? "checked" : ""} /><i aria-hidden="true"></i></span>
+        </label>
+        <label class="studio-fixed-notice">고정 특이사항
+          <textarea data-studio-rule-editor-field="fixedNotice" maxlength="1500" placeholder="이 규칙으로 보내는 모든 공지에 공통으로 표시할 내용을 입력하세요.">${esc(editor.fixedNotice || "")}</textarea>
+          <small data-studio-fixed-notice-count>${String(editor.fixedNotice || "").length} / 1500</small>
+        </label>
+      </div>
+      <footer>
+        <button data-cancel-studio-rule type="button">취소</button>
+        <button class="primary" data-confirm-studio-rule type="button">확인</button>
+      </footer>
     </article>
-  `).join("") : `
+  ` : "";
+  target.innerHTML = (summaryRows || editorMarkup) ? `${summaryRows}${editorMarkup}` : `
     <div class="studio-telegram-empty">
       <span>✈</span>
       <strong>등록된 예약 규칙이 없습니다.</strong>
       <small>예배 전날 공지, 교육 주간 공지처럼 필요한 규칙을 추가하세요.</small>
     </div>
   `;
+  $("#studioTelegramAddRuleBtn").disabled = Boolean(studioTelegramRuleEditor);
   const message = $("#studioTelegramMessage");
   if (message && !message.textContent) message.textContent = studioTelegramStatusText();
+}
+
+function openStudioTelegramRuleEditor(ruleId = "") {
+  if (!studioTelegramDraft) return;
+  const rule = studioTelegramDraft.rules.find((item) => item.id === ruleId);
+  studioTelegramRuleEditor = {
+    isNew: !rule,
+    rule: structuredClone(rule || createStudioTelegramRule(studioTelegramDraft.rules.length))
+  };
+  renderStudioTelegramRules();
+  requestAnimationFrame(() => $("[data-studio-telegram-editor]")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+}
+
+function confirmStudioTelegramRuleEditor() {
+  if (!studioTelegramDraft || !studioTelegramRuleEditor) return;
+  if (!String(studioTelegramRuleEditor.rule.name || "").trim()) return showToast("공지 제목을 입력해 주세요.");
+  const normalized = normalizeStudioTelegramSettings({ rules: [studioTelegramRuleEditor.rule] }).rules[0];
+  if (!normalized) return;
+  const index = studioTelegramDraft.rules.findIndex((rule) => rule.id === normalized.id);
+  if (index >= 0) studioTelegramDraft.rules[index] = normalized;
+  else studioTelegramDraft.rules.push(normalized);
+  studioTelegramRuleEditor = null;
+  renderStudioTelegramRules();
 }
 
 function openStudioTelegramModal() {
   if (!isAdminUser()) return showToast("관리자만 텔레그램 공지를 설정할 수 있습니다.");
   studioTelegramDraft = structuredClone(normalizeStudioTelegramSettings(state.studioTelegram || {}));
+  studioTelegramRuleEditor = null;
   $("#studioTelegramMessage").textContent = "";
   renderStudioTelegramRules();
   $("#studioTelegramModal").classList.add("open");
@@ -8410,6 +8467,7 @@ function openStudioTelegramModal() {
 
 function closeStudioTelegramModal() {
   studioTelegramDraft = null;
+  studioTelegramRuleEditor = null;
   $("#studioTelegramModal").classList.remove("open");
   $("#studioTelegramModal").setAttribute("aria-hidden", "true");
 }
@@ -8417,6 +8475,10 @@ function closeStudioTelegramModal() {
 async function saveStudioTelegramSettings() {
   if (!studioTelegramDraft) return;
   const message = $("#studioTelegramMessage");
+  if (studioTelegramRuleEditor) {
+    if (message) message.textContent = "편집 중인 예약 규칙에서 먼저 확인을 눌러 주세요.";
+    return;
+  }
   state.studioTelegram = normalizeStudioTelegramSettings(studioTelegramDraft);
   saveState();
   const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
@@ -10556,7 +10618,7 @@ function renderMobileStudioDetail() {
         </section>
         ${isAdminUser() ? `<section class="mobile-studio-telegram-panel">
           <div><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></div>
-          <label class="mobile-studio-check"><input data-mobile-studio-telegram-calltime type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><span>콜타임 포함 (시작 1시간 전)</span></label>
+          <label class="studio-switch-row mobile-studio-calltime-row"><span><strong>콜타임 포함</strong><small>시작 1시간 전을 도착 시간으로 표시</small></span><span class="studio-switch"><input data-mobile-studio-telegram-calltime type="checkbox" ${event.telegramCallTimeEnabled !== false ? "checked" : ""} /><i aria-hidden="true"></i></span></label>
           <label>특이사항<textarea data-mobile-studio-telegram-note maxlength="1000" placeholder="준비물, 출입 안내 등을 입력하세요.">${esc(event.telegramNote || "")}</textarea></label>
           <small data-studio-event-telegram-message></small>
           <button class="mobile-studio-telegram-send" data-mobile-studio-telegram-send="${esc(event.id)}" type="button">텔레그램 푸쉬</button>
@@ -14279,28 +14341,49 @@ $("#studioTelegramModal").addEventListener("click", (event) => {
   if (!studioTelegramDraft) return;
   if (event.target.closest("#studioTelegramAddRuleBtn")) {
     if (studioTelegramDraft.rules.length >= 30) return showToast("예약 규칙은 최대 30개까지 만들 수 있습니다.");
-    studioTelegramDraft.rules.push(createStudioTelegramRule(studioTelegramDraft.rules.length));
-    renderStudioTelegramRules();
+    openStudioTelegramRuleEditor();
+    return;
+  }
+  const editButton = event.target.closest("[data-edit-studio-rule]");
+  if (editButton) {
+    openStudioTelegramRuleEditor(editButton.dataset.editStudioRule);
     return;
   }
   const deleteButton = event.target.closest("[data-delete-studio-rule]");
   if (deleteButton) {
     studioTelegramDraft.rules = studioTelegramDraft.rules.filter((rule) => rule.id !== deleteButton.dataset.deleteStudioRule);
+    if (studioTelegramRuleEditor?.rule.id === deleteButton.dataset.deleteStudioRule) studioTelegramRuleEditor = null;
+    renderStudioTelegramRules();
+    return;
+  }
+  if (event.target.closest("[data-confirm-studio-rule]")) return confirmStudioTelegramRuleEditor();
+  if (event.target.closest("[data-cancel-studio-rule]")) {
+    studioTelegramRuleEditor = null;
     renderStudioTelegramRules();
   }
 });
 function updateStudioTelegramDraftField(target) {
-  const article = target.closest("[data-studio-telegram-rule]");
-  const field = target.dataset.studioRuleField;
-  const rule = studioTelegramDraft?.rules.find((item) => item.id === article?.dataset.studioTelegramRule);
-  if (!rule || !field) return false;
-  rule[field] = target.type === "checkbox" ? target.checked : field === "weekday" ? Number(target.value) : target.value;
+  const enabledRuleId = target.dataset.studioRuleEnabled;
+  if (enabledRuleId) {
+    const rule = studioTelegramDraft?.rules.find((item) => item.id === enabledRuleId);
+    if (!rule) return false;
+    rule.enabled = target.checked;
+    target.closest(".studio-rule-summary")?.classList.toggle("is-disabled", !target.checked);
+    return true;
+  }
+  const field = target.dataset.studioRuleEditorField;
+  if (!field || !studioTelegramRuleEditor) return false;
+  studioTelegramRuleEditor.rule[field] = target.type === "checkbox" ? target.checked : field === "weekday" ? Number(target.value) : target.value;
+  if (field === "fixedNotice") {
+    const count = target.closest(".studio-fixed-notice")?.querySelector("[data-studio-fixed-notice-count]");
+    if (count) count.textContent = `${target.value.length} / 1500`;
+  }
   return true;
 }
 $("#studioTelegramRules").addEventListener("input", (event) => updateStudioTelegramDraftField(event.target));
 $("#studioTelegramRules").addEventListener("change", (event) => {
   if (!updateStudioTelegramDraftField(event.target)) return;
-  if (["mode", "weekday", "deliveryTime"].includes(event.target.dataset.studioRuleField)) renderStudioTelegramRules();
+  if (event.target.dataset.studioRuleEditorField === "mode") renderStudioTelegramRules();
 });
 $("#studioTelegramForm").addEventListener("submit", async (event) => {
   event.preventDefault();

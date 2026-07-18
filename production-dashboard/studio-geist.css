@@ -1186,7 +1186,7 @@ body:has(#studioView.active) .date-picker-bottom {
 #studioTelegramModal .studio-telegram-card {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
-  width: min(920px, 100%);
+  width: min(1040px, 100%);
   max-height: calc(100dvh - 48px);
   gap: 14px;
   border: 1px solid var(--geist-hairline);
@@ -1218,27 +1218,99 @@ body:has(#studioView.active) .date-picker-bottom {
   padding-right: 3px;
 }
 
-#studioTelegramModal .studio-telegram-rule {
+#studioTelegramModal .studio-rule-summary,
+#studioTelegramModal .studio-rule-editor {
   border: 1px solid var(--geist-hairline);
   border-radius: 10px;
   background: var(--geist-canvas);
-  padding: 14px;
 }
 
-#studioTelegramModal .studio-telegram-rule > header {
+#studioTelegramModal .studio-rule-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 34px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  min-height: 54px;
+  padding: 9px 10px 9px 12px;
+  transition: opacity 160ms ease, border-color 160ms ease;
 }
 
-#studioTelegramModal .studio-telegram-rule > header > div {
+#studioTelegramModal .studio-rule-summary.is-disabled {
+  opacity: 0.52;
+}
+
+#studioTelegramModal .studio-rule-summary-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+#studioTelegramModal .studio-rule-summary-main strong {
+  min-width: 0;
+  max-width: 220px;
+  overflow: hidden;
+  color: var(--geist-ink);
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+}
+
+#studioTelegramModal .studio-rule-summary-main > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 999px;
+  background: var(--geist-elevated);
+  color: var(--geist-mute);
+  padding: 4px 8px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+#studioTelegramModal .studio-rule-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#studioTelegramModal .studio-rule-summary-actions button {
+  min-height: 30px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  padding: 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+#studioTelegramModal .studio-rule-summary-actions button.danger {
+  border-color: #ffd2d2;
+  background: #fff7f7;
+  color: #c50000;
+}
+
+#studioTelegramModal .studio-rule-editor {
+  padding: 15px;
+  box-shadow: 0 10px 30px -24px rgba(0, 0, 0, 0.55);
+}
+
+#studioTelegramModal .studio-rule-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+#studioTelegramModal .studio-rule-editor > header > div {
   display: grid;
   gap: 2px;
 }
 
-#studioTelegramModal .studio-telegram-rule > header span,
+#studioTelegramModal .studio-rule-editor > header span,
 #studioTelegramModal .studio-rule-grid > label,
 #studioTelegramModal .studio-rule-everyday > span {
   color: var(--geist-mute);
@@ -1246,35 +1318,104 @@ body:has(#studioView.active) .date-picker-bottom {
   font-weight: 500;
 }
 
-#studioTelegramModal .studio-telegram-rule > header strong {
+#studioTelegramModal .studio-rule-editor > header strong {
   color: var(--geist-ink);
   font-size: 14px;
   font-weight: 600;
 }
 
-#studioTelegramModal .studio-rule-enabled,
-#studioTelegramModal .studio-telegram-check {
+#studioTelegramModal .studio-rule-editor > header > button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--geist-mute);
+  font-size: 20px;
+}
+
+.studio-switch {
+  position: relative;
+  display: inline-flex;
+  width: 40px;
+  min-width: 40px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.studio-switch > input[type="checkbox"] {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  margin: 0;
+  appearance: none;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.studio-switch > :is(span, i) {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border: 1px solid #c7c7c7;
+  border-radius: 999px;
+  background: #d8d8d8;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.studio-switch > :is(span, i)::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 160ms ease;
+}
+
+.studio-switch > input:checked + :is(span, i) {
+  border-color: #00c95b;
+  background: #00d860;
+}
+
+.studio-switch > input:checked + :is(span, i)::after {
+  transform: translateX(16px);
+}
+
+.studio-switch > input:focus-visible + :is(span, i) {
+  outline: 2px solid color-mix(in srgb, #00d860 45%, transparent);
+  outline-offset: 2px;
+}
+
+.studio-switch-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  justify-content: space-between;
+  gap: 14px;
 }
 
-#studioTelegramModal input[type="checkbox"],
-#staffEventDetailModal .studio-event-telegram input[type="checkbox"] {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
-  accent-color: #00ed64;
+.studio-switch-row > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
 }
 
-#studioTelegramModal .studio-rule-delete {
-  width: 34px;
-  height: 34px;
-  border: 1px solid #ffd2d2;
-  border-radius: 6px;
-  background: #fff1f1;
-  color: #c50000;
-  font-size: 18px;
+.studio-switch-row > span:first-child strong {
+  color: var(--geist-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.studio-switch-row > span:first-child small {
+  color: var(--geist-mute);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 #studioTelegramModal .studio-rule-grid {
@@ -1291,6 +1432,7 @@ body:has(#studioView.active) .date-picker-bottom {
 }
 
 #studioTelegramModal .studio-rule-grid :is(input:not([type="checkbox"]), select),
+#studioTelegramModal .studio-fixed-notice textarea,
 #staffEventDetailModal .studio-event-telegram textarea {
   width: 100%;
   min-width: 0;
@@ -1317,18 +1459,64 @@ body:has(#studioView.active) .date-picker-bottom {
   font-weight: 500;
 }
 
-#studioTelegramModal .studio-rule-calltime {
-  min-height: 40px;
+#studioTelegramModal .studio-rule-editor-options {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(0, 1.3fr);
+  align-items: start;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+#studioTelegramModal .studio-rule-editor-options > label {
   border: 1px solid var(--geist-hairline);
   border-radius: 6px;
   background: var(--geist-elevated);
-  padding: 0 10px;
+  padding: 11px;
 }
 
-#studioTelegramModal .studio-telegram-rule > p {
-  margin: 10px 0 0;
+#studioTelegramModal .studio-fixed-notice {
+  position: relative;
+  display: grid;
+  gap: 6px;
   color: var(--geist-mute);
   font-size: 10px;
+}
+
+#studioTelegramModal .studio-fixed-notice textarea {
+  min-height: 78px;
+  padding: 9px 10px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+#studioTelegramModal .studio-fixed-notice > small {
+  justify-self: end;
+  color: var(--geist-mute);
+  font-size: 9px;
+}
+
+#studioTelegramModal .studio-rule-editor > footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+#studioTelegramModal .studio-rule-editor > footer button {
+  min-width: 80px;
+  min-height: 36px;
+  border: 1px solid var(--geist-hairline);
+  border-radius: 6px;
+  background: var(--geist-elevated);
+  color: var(--geist-body);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#studioTelegramModal .studio-rule-editor > footer button.primary {
+  border-color: #00c95b;
+  background: #00ed64;
+  color: #06140a;
 }
 
 #studioTelegramModal .studio-telegram-empty {
@@ -1420,6 +1608,14 @@ body:has(#studioView.active) .date-picker-bottom {
   gap: 2px;
 }
 
+#staffEventDetailModal .studio-event-calltime-row {
+  min-width: 290px;
+  border: 1px solid rgba(0, 201, 91, 0.22);
+  border-radius: 8px;
+  background: var(--geist-elevated);
+  padding: 9px 10px;
+}
+
 #staffEventDetailModal .studio-event-telegram strong {
   color: var(--geist-ink);
   font-size: 13px;
@@ -1449,7 +1645,7 @@ body:has(#studioView.active) .date-picker-bottom {
   color: #06140a;
 }
 
-body[data-theme="dark"] #studioTelegramModal .studio-rule-delete {
+body[data-theme="dark"] #studioTelegramModal .studio-rule-summary-actions button.danger {
   border-color: rgba(255, 92, 92, 0.35);
   background: rgba(255, 92, 92, 0.12);
   color: #ff8a8a;
@@ -1467,6 +1663,10 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
 
   #studioTelegramModal .studio-rule-name {
     grid-column: 1 / -1;
+  }
+
+  #studioTelegramModal .studio-rule-editor-options {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1491,6 +1691,25 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
     grid-column: auto;
   }
 
+  #studioTelegramModal .studio-rule-summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  #studioTelegramModal .studio-rule-summary-main strong {
+    max-width: 150px;
+  }
+
+  #studioTelegramModal .studio-rule-summary-main > span:nth-of-type(n + 2) {
+    display: none;
+  }
+
+  #studioTelegramModal .studio-rule-summary-actions button {
+    min-width: 0;
+    padding: 0 8px;
+  }
+
   #studioTelegramModal .studio-modal-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1502,6 +1721,10 @@ body[data-theme="dark"] #staffEventDetailModal .studio-event-telegram {
 
   #staffEventDetailModal .studio-event-telegram {
     grid-template-columns: 1fr;
+  }
+
+  #staffEventDetailModal .studio-event-calltime-row {
+    min-width: 0;
   }
 
   #staffEventDetailModal .event-detail-actions {
