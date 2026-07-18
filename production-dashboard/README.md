@@ -41,15 +41,25 @@ Supabase 프로젝트의 Project Settings(프로젝트 설정) > API에서 값�
 ```bash
 SUPABASE_URL=Supabase Project URL
 SUPABASE_ANON_KEY=Supabase anon public key
+TELEGRAM_BOT_TOKEN=BotFather에서 받은 봇 토큰
+TELEGRAM_CHAT_ID=텔레그램 그룹 chat id
+SUPABASE_SECRET_KEY=Supabase 서버 전용 Secret key
+CRON_SECRET=16자 이상의 임의 문자열
+DASHBOARD_URL=https://대시보드주소
 ```
 
 Vercel에도 같은 값을 등록해야 합니다.
 
 1. Vercel 프로젝트로 이동합니다.
 2. Settings(설정) > Environment Variables(환경변수)를 엽니다.
-3. 아래 2개를 추가합니다.
+3. 아래 환경변수를 추가합니다.
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_CHAT_ID`
+   - `SUPABASE_SECRET_KEY` 또는 기존 프로젝트의 `SUPABASE_SERVICE_ROLE_KEY`
+   - `CRON_SECRET`
+   - `DASHBOARD_URL`(선택)
 4. 저장 후 Redeploy(다시 배포)를 실행합니다.
 
 ## 4. Vercel 배포
@@ -70,12 +80,25 @@ Vercel에도 같은 값을 등록해야 합니다.
 - 관리자가 Supabase의 `profiles` 테이블에서 `approved = true`, `status = approved`로 바꾸면 로그인할 수 있습니다.
 - 앱 안 관리자 모드에서도 계정 상태를 관리할 수 있습니다.
 
+## 텔레그램 데일리 브리핑
+
+1. 텔레그램 `@BotFather`에서 봇을 만들고 그룹에 추가합니다.
+2. Vercel 환경변수에 봇 토큰과 그룹 Chat ID를 등록합니다.
+3. 예약 전송을 사용하려면 Supabase 프로젝트의 Settings > API Keys에서 서버 전용 Secret key를 발급해 `SUPABASE_SECRET_KEY`로 등록합니다.
+4. 비밀번호 생성기로 16자 이상의 임의 문자열을 만들어 `CRON_SECRET`으로 등록합니다.
+5. 재배포 후 대시보드의 관리자 모드 > 텔레그램 봇 관리에서 포함 항목, 공지 메시지, 전송 방식을 설정합니다.
+
+직접 푸시는 관리자 계정의 Supabase 로그인 정보를 확인한 뒤 실행됩니다. 예약 푸시는 서버에서만 Secret key를 사용하며 브라우저에는 전달되지 않습니다. Vercel Hobby 요금제는 예약 실행 시간이 시간 단위이므로 선택한 시간대의 0~59분 사이에 전송될 수 있습니다.
+
 ## 파일 설명
 
 - `index.html`: 화면 구조
 - `app.js`: 대시보드 기능
 - `styles.css`: 디자인
 - `api/env.js`: Vercel 환경변수를 브라우저에 전달
+- `api/telegram-digest.js`: 관리자 직접 전송 및 미리보기 API
+- `api/telegram-digest-cron-*.js`: 시간대별 예약 실행 API
+- `lib/telegram-digest.js`: 브리핑 구성 및 텔레그램 전송 공통 로직
 - `vercel.json`: Vercel 배포 설정
 - `.env.local.example`: 환경변수 예시
 - `supabase/schema.sql`: Supabase 테이블, 트리거, RLS 설정

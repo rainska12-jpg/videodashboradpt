@@ -206,6 +206,20 @@ async function deleteProfileFromSupabase(userId) {
 const makeId = () => `item-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const defaultCalendarFields = { kickoffDate: false, shootDate: false, firstEditDate: false, finalDate: true };
 const defaultWorkCalendarFields = { kickoffDate: false, finalDate: true };
+const defaultTelegramDigestSettings = {
+  deliveryMode: "manual",
+  deliveryTime: "09:00",
+  include: {
+    tasksToday: true,
+    tasksThreeDays: true,
+    tasksWeek: true,
+    projectsToday: true,
+    projectsSoon: true,
+    worksToday: true,
+    worksSoon: true
+  },
+  additionalMessage: ""
+};
 const visibleDetailCalendarFields = ["kickoffDate", "finalDate"];
 const visibleWorkDetailCalendarFields = ["kickoffDate", "finalDate"];
 const defaultOwnerNames = ["김연아", "오상민", "주햇빛", "변명근", "조준호", "유희수"];
@@ -271,8 +285,21 @@ const sampleData = {
   staffEvents: [],
   recurringTrainings: [],
   boardPosts: [],
-  boardComments: []
+  boardComments: [],
+  telegramDigest: structuredClone(defaultTelegramDigestSettings)
 };
+
+function normalizeTelegramDigestSettings(value = {}) {
+  const include = value && typeof value.include === "object" ? value.include : {};
+  const rawHour = Number(String(value.deliveryTime || defaultTelegramDigestSettings.deliveryTime).split(":")[0]);
+  const hour = Math.max(0, Math.min(23, Number.isFinite(rawHour) ? rawHour : 9));
+  return {
+    deliveryMode: value.deliveryMode === "daily" ? "daily" : "manual",
+    deliveryTime: `${String(hour).padStart(2, "0")}:00`,
+    include: Object.fromEntries(Object.keys(defaultTelegramDigestSettings.include).map((key) => [key, include[key] !== false])),
+    additionalMessage: String(value.additionalMessage || "").slice(0, 1000)
+  };
+}
 
 function loadPrefs() {
   try {
@@ -402,6 +429,8 @@ let editingBoardCommentId = null;
 let replyingBoardCommentId = null;
 let mobileBoardFilterOpen = false;
 let adminSection = viewPref("adminSection", "dropdowns");
+let telegramDigestRuntimeStatus = null;
+let telegramDigestStatusLoading = false;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -1179,6 +1208,7 @@ function normalizeState(data) {
       body: displayStudioTerminology(item.body),
       message: displayStudioTerminology(item.message)
     })) : [],
+    telegramDigest: normalizeTelegramDigestSettings(data.telegramDigest || {}),
     ownerDefaultsVersion: data.ownerDefaultsVersion || 2
   };
 }
@@ -7986,6 +8016,237 @@ function handleBoardSubmit(event) {
   return false;
 }
 
+const telegramDigestCategoryLabels = {
+  tasksToday: ["오늘 할 일", "오늘 마감인 미완료 할 일"],
+  tasksThreeDays: ["3일 이내 할 일", "내일부터 3일 뒤까지의 할 일"],
+  tasksWeek: ["1주일 이내 할 일", "4일 뒤부터 7일 뒤까지의 할 일"],
+  projectsToday: ["오늘 마감 · 영상", "오늘 최종 출고 예정인 영상"],
+  projectsSoon: ["마감 임박 · 영상", "3일 안에 최종 출고 예정인 영상"],
+  worksToday: ["오늘 마감 · 업무", "오늘 완료 예정인 업무"],
+  worksSoon: ["마감 임박 · 업무", "3일 안에 완료 예정인 업무"]
+};
+
+function telegramDigestSettings() {
+  return normalizeTelegramDigestSettings(state.telegramDigest || {});
+}
+
+function isTelegramDigestCompleted(value) {
+  return /완료|납품|종료/.test(String(value || ""));
+}
+
+function telegramDigestCategoryCount(key) {
+  const tasks = taskOverviewItems().filter((item) => !item.task.done && !item.task.noDueDate && item.task.dueDate);
+  if (key === "tasksToday") return tasks.filter((item) => taskOverviewDayDiff(item) === 0).length;
+  if (key === "tasksThreeDays") return tasks.filter((item) => {
+    const diff = taskOverviewDayDiff(item);
+    return diff >= 1 && diff <= 3;
+  }).length;
+  if (key === "tasksWeek") return tasks.filter((item) => {
+    const diff = taskOverviewDayDiff(item);
+    return diff >= 4 && diff <= 7;
+  }).length;
+  const items = key.startsWith("projects")
+    ? state.projects.filter((item) => item.finalDate && !isTelegramDigestCompleted(item.status))
+    : state.works.filter((item) => item.finalDate && !item.noSchedule && !isTelegramDigestCompleted(item.status));
+  if (key.endsWith("Today")) return items.filter((item) => daysUntil(item.finalDate) === 0).length;
+  return items.filter((item) => {
+    const diff = daysUntil(item.finalDate);
+    return diff >= 1 && diff <= 3;
+  }).length;
+}
+
+function telegramDigestStatusMarkup() {
+  if (telegramDigestStatusLoading) return '<span class="telegram-connection checking"><i></i>연결 확인 중</span>';
+  if (!telegramDigestRuntimeStatus) return '<span class="telegram-connection unknown"><i></i>연결 상태 미확인</span>';
+  if (!telegramDigestRuntimeStatus.configured) return '<span class="telegram-connection error"><i></i>봇 환경변수 확인 필요</span>';
+  if (telegramDigestSettings().deliveryMode === "daily" && !telegramDigestRuntimeStatus.schedulerConfigured) {
+    return '<span class="telegram-connection warning"><i></i>예약 환경변수 확인 필요</span>';
+  }
+  return '<span class="telegram-connection connected"><i></i>텔레그램 봇 연결됨</span>';
+}
+
+function telegramDigestLastRunMarkup() {
+  const status = telegramDigestRuntimeStatus?.status;
+  if (!status) return "아직 전송 기록이 없습니다.";
+  const date = new Date(status.sentAt || status.failedAt || 0);
+  const dateLabel = Number.isNaN(date.getTime()) ? "시간 미상" : new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "Asia/Seoul",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
+  if (status.status === "failed") return `최근 예약 전송 실패 · ${dateLabel}`;
+  return `최근 ${status.type === "scheduled" ? "예약" : "직접"} 전송 · ${dateLabel}`;
+}
+
+function renderTelegramDigestManager() {
+  const settings = telegramDigestSettings();
+  const hourOptions = Array.from({ length: 24 }, (_, hour) => {
+    const value = `${String(hour).padStart(2, "0")}:00`;
+    return `<option value="${value}" ${settings.deliveryTime === value ? "selected" : ""}>${String(hour).padStart(2, "0")}시대</option>`;
+  }).join("");
+  return `
+    <form class="telegram-digest-manager" data-telegram-digest-form>
+      <section class="telegram-manager-hero">
+        <div>
+          <span class="telegram-logo" aria-hidden="true">➤</span>
+          <div><p class="eyebrow">TELEGRAM BOT</p><h3>데일리 업무 브리핑</h3><small>선택한 할 일과 마감 일정을 한 번에 정리해 전송합니다.</small></div>
+        </div>
+        <div class="telegram-runtime-status" data-telegram-runtime-status>${telegramDigestStatusMarkup()}<small>${esc(telegramDigestLastRunMarkup())}</small></div>
+      </section>
+
+      <div class="telegram-manager-grid">
+        <section class="telegram-setting-card">
+          <header><span>1</span><div><h4>전송 방식</h4><small>직접 보내거나 매일 자동으로 전송합니다.</small></div></header>
+          <div class="telegram-delivery-modes">
+            <label class="${settings.deliveryMode === "manual" ? "active" : ""}"><input type="radio" name="deliveryMode" value="manual" ${settings.deliveryMode === "manual" ? "checked" : ""} /><span><b>직접 푸시</b><small>필요할 때 관리자가 바로 전송</small></span></label>
+            <label class="${settings.deliveryMode === "daily" ? "active" : ""}"><input type="radio" name="deliveryMode" value="daily" ${settings.deliveryMode === "daily" ? "checked" : ""} /><span><b>매일 예약 푸시</b><small>선택한 시간대에 하루 한 번 전송</small></span></label>
+          </div>
+          <label class="telegram-time-field ${settings.deliveryMode === "daily" ? "enabled" : ""}">
+            <span>예약 시간대</span>
+            <select name="deliveryTime" ${settings.deliveryMode === "daily" ? "" : "disabled"}>${hourOptions}</select>
+            <small>한국 시간 기준 · Hobby 요금제에서는 선택한 시간대 안에 전송됩니다.</small>
+          </label>
+        </section>
+
+        <section class="telegram-setting-card telegram-category-card">
+          <header><span>2</span><div><h4>알림에 포함할 항목</h4><small>체크한 항목만 메시지에 표시합니다.</small></div></header>
+          <div class="telegram-category-list">
+            ${Object.entries(telegramDigestCategoryLabels).map(([key, [label, description]]) => `
+              <label>
+                <input type="checkbox" name="include-${key}" ${settings.include[key] ? "checked" : ""} />
+                <i></i>
+                <span><b>${esc(label)}</b><small>${esc(description)}</small></span>
+                <em>${telegramDigestCategoryCount(key)}</em>
+              </label>
+            `).join("")}
+          </div>
+        </section>
+
+        <section class="telegram-setting-card telegram-message-card">
+          <header><span>3</span><div><h4>추가 공지 메시지</h4><small>브리핑 마지막에 덧붙일 내용을 입력합니다.</small></div></header>
+          <textarea name="additionalMessage" maxlength="1000" rows="7" placeholder="예: 오늘 14시 전체 회의가 있습니다. 촬영 장비 반납 일정을 확인해 주세요.">${esc(settings.additionalMessage)}</textarea>
+          <small>선택 사항 · 최대 1,000자</small>
+        </section>
+
+        <section class="telegram-setting-card telegram-preview-card">
+          <header><span>4</span><div><h4>미리보기 및 전송</h4><small>저장 후 실제 메시지를 확인하거나 바로 보냅니다.</small></div></header>
+          <div class="telegram-preview-empty" data-telegram-preview-output><span>✈</span><b>메시지 미리보기</b><small>미리보기를 누르면 실제 전송 형태가 표시됩니다.</small></div>
+          <div class="telegram-form-message" data-telegram-form-message aria-live="polite"></div>
+        </section>
+      </div>
+
+      <footer class="telegram-manager-actions">
+        <span>설정을 저장하면 모든 관리자에게 동일하게 적용됩니다.</span>
+        <div>
+          <button class="pill ghost" data-telegram-preview type="button">메시지 미리보기</button>
+          <button class="pill ghost" type="submit">설정 저장</button>
+          <button class="pill primary" data-telegram-send type="button">지금 텔레그램 전송</button>
+        </div>
+      </footer>
+    </form>
+  `;
+}
+
+function telegramDigestSettingsFromForm(form) {
+  const data = new FormData(form);
+  return normalizeTelegramDigestSettings({
+    deliveryMode: data.get("deliveryMode"),
+    deliveryTime: data.get("deliveryTime") || form.elements.deliveryTime?.value || "09:00",
+    include: Object.fromEntries(Object.keys(defaultTelegramDigestSettings.include).map((key) => [key, Boolean(form.elements[`include-${key}`]?.checked)])),
+    additionalMessage: data.get("additionalMessage") || ""
+  });
+}
+
+async function saveTelegramDigestSettings(form, { notify = true } = {}) {
+  if (!form) return false;
+  state.telegramDigest = telegramDigestSettingsFromForm(form);
+  saveState();
+  const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : false;
+  if (notify) showToast(SUPABASE_ENABLED && !remoteSaved ? "설정은 기기에 저장됐지만 서버 저장을 확인하지 못했습니다." : "텔레그램 알림 설정을 저장했습니다.");
+  return !SUPABASE_ENABLED || remoteSaved;
+}
+
+async function telegramDigestApi(action = "status") {
+  const client = getSupabaseClient();
+  if (!client) throw new Error("배포된 대시보드에서 로그인한 뒤 사용할 수 있습니다.");
+  const { data } = await client.auth.getSession();
+  const accessToken = data?.session?.access_token;
+  if (!accessToken) throw new Error("로그인 세션을 확인할 수 없습니다. 다시 로그인해 주세요.");
+  const response = await fetch("/api/telegram-digest", {
+    method: action === "status" ? "GET" : "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(action === "status" ? {} : { "Content-Type": "application/json" })
+    },
+    ...(action === "status" ? {} : { body: JSON.stringify({ action }) })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.ok) throw new Error(result.error || "텔레그램 요청을 처리하지 못했습니다.");
+  return result;
+}
+
+function updateTelegramDigestStatusSurface() {
+  const target = $("[data-telegram-runtime-status]");
+  if (target) target.innerHTML = `${telegramDigestStatusMarkup()}<small>${esc(telegramDigestLastRunMarkup())}</small>`;
+}
+
+async function refreshTelegramDigestStatus() {
+  if (telegramDigestStatusLoading || !SUPABASE_ENABLED) return;
+  telegramDigestStatusLoading = true;
+  updateTelegramDigestStatusSurface();
+  try {
+    telegramDigestRuntimeStatus = await telegramDigestApi("status");
+  } catch (error) {
+    telegramDigestRuntimeStatus = { configured: false, schedulerConfigured: false, status: null, error: error.message };
+  } finally {
+    telegramDigestStatusLoading = false;
+    updateTelegramDigestStatusSurface();
+  }
+}
+
+function toggleTelegramDigestScheduleFields(form) {
+  if (!form) return;
+  const daily = form.elements.deliveryMode?.value === "daily";
+  const timeField = form.querySelector(".telegram-time-field");
+  const select = form.elements.deliveryTime;
+  if (select) select.disabled = !daily;
+  timeField?.classList.toggle("enabled", daily);
+  form.querySelectorAll(".telegram-delivery-modes > label").forEach((label) => label.classList.toggle("active", Boolean(label.querySelector("input")?.checked)));
+}
+
+async function runTelegramDigestAction(action, button) {
+  const form = button?.closest("[data-telegram-digest-form]");
+  if (!form) return;
+  const messageTarget = form.querySelector("[data-telegram-form-message]");
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = action === "preview" ? "미리보기 생성 중…" : "전송 중…";
+  if (messageTarget) messageTarget.textContent = "";
+  try {
+    const saved = await saveTelegramDigestSettings(form, { notify: false });
+    if (!saved && SUPABASE_ENABLED) throw new Error("최신 설정을 서버에 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    const result = await telegramDigestApi(action);
+    if (action === "preview") {
+      const preview = form.querySelector("[data-telegram-preview-output]");
+      if (preview) preview.innerHTML = `<pre>${esc(result.message || "")}</pre>`;
+      if (messageTarget) messageTarget.textContent = "실제 전송될 메시지를 불러왔습니다.";
+    } else {
+      telegramDigestRuntimeStatus = { ...(telegramDigestRuntimeStatus || {}), configured: true, status: result.status };
+      updateTelegramDigestStatusSurface();
+      if (messageTarget) messageTarget.textContent = "텔레그램 그룹으로 전송했습니다.";
+      showToast("텔레그램 알림을 전송했습니다.");
+    }
+  } catch (error) {
+    if (messageTarget) messageTarget.textContent = error.message || "요청을 처리하지 못했습니다.";
+    showToast(error.message || "텔레그램 요청을 처리하지 못했습니다.");
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
 function renderAdmin() {
   if (SUPABASE_ENABLED && isAdminUser() && !adminProfilesRefreshing) {
     adminProfilesRefreshing = true;
@@ -8049,24 +8310,34 @@ function renderAdmin() {
         </div>
       </article>
     `;
+  const sectionMeta = {
+    dropdowns: ["드롭다운 관리", "화면에서 사용하는 선택 항목을 관리합니다."],
+    members: ["멤버 관리", "계정, 직책, 담당자 연결을 관리합니다."],
+    telegram: ["텔레그램 봇 관리", "데일리 업무 브리핑의 내용과 전송 방식을 관리합니다."]
+  };
+  const [sectionTitle, sectionDescription] = sectionMeta[adminSection] || sectionMeta.dropdowns;
   const content = adminSection === "members"
     ? `<div class="admin-member-grid">${renderOptionManager(["positions", "멤버", "직책 관리"])}${renderOptionManager(["owners", "멤버", "담당자 슬롯"])}${renderOwnerLinkManager()}${renderAccountManager()}</div>`
-    : `<div class="admin-dropdown-grid">${dropdownGroups.map(renderOptionManager).join("")}</div>`;
+    : adminSection === "telegram"
+      ? renderTelegramDigestManager()
+      : `<div class="admin-dropdown-grid">${dropdownGroups.map(renderOptionManager).join("")}</div>`;
 
   $("#adminContent").innerHTML = `
     <div class="admin-hub-head">
       <div class="admin-hub-copy">
         <p class="eyebrow">ADMIN SETTINGS</p>
-        <h2>${adminSection === "members" ? "멤버 관리" : "드롭다운 관리"}</h2>
-        <span>${adminSection === "members" ? "계정, 직책, 담당자 연결을 관리합니다." : "화면에서 사용하는 선택 항목을 관리합니다."}</span>
+        <h2>${esc(sectionTitle)}</h2>
+        <span>${esc(sectionDescription)}</span>
       </div>
       <nav aria-label="관리자 설정 메뉴">
         <button class="${adminSection === "dropdowns" ? "active" : ""}" data-admin-section="dropdowns" type="button">드롭다운 관리</button>
         <button class="${adminSection === "members" ? "active" : ""}" data-admin-section="members" type="button">멤버 관리</button>
+        <button class="${adminSection === "telegram" ? "active" : ""}" data-admin-section="telegram" type="button">텔레그램 봇 관리</button>
       </nav>
     </div>
     ${content}
   `;
+  if (adminSection === "telegram") queueMicrotask(refreshTelegramDigestStatus);
 }
 
 
@@ -10366,7 +10637,49 @@ function renderMobileAdminHome() {
   return mobileSubpage("관리자 모드", `
     <section class="mobile-admin-summary"><article><span>승인 대기</span><b>${pending}</b></article><article><span>전체 사용자</span><b>${state.users.length}</b></article><article><span>비활성</span><b>${inactive}</b></article></section>
     <section class="mobile-settings-section"><h3>사용자 관리</h3><div>${mobileMoreRow({ icon: "♙", label: "승인 대기 및 전체 사용자", route: "admin-users", badge: pending ? String(pending) : "" })}</div></section>
-    <section class="mobile-settings-section"><h3>운영 설정</h3><div>${mobileMoreRow({ icon: "◇", label: "담당자·직책 관리", route: "admin-members" })}${mobileMoreRow({ icon: "▤", label: "드롭다운 항목 관리", route: "admin-dropdowns" })}</div></section>
+    <section class="mobile-settings-section"><h3>운영 설정</h3><div>${mobileMoreRow({ icon: "➤", label: "텔레그램 봇 관리", route: "admin-telegram" })}${mobileMoreRow({ icon: "◇", label: "담당자·직책 관리", route: "admin-members" })}${mobileMoreRow({ icon: "▤", label: "드롭다운 항목 관리", route: "admin-dropdowns" })}</div></section>
+  `);
+}
+
+function renderMobileTelegramDigest() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  const settings = telegramDigestSettings();
+  const hourOptions = Array.from({ length: 24 }, (_, hour) => {
+    const value = `${String(hour).padStart(2, "0")}:00`;
+    return `<option value="${value}" ${settings.deliveryTime === value ? "selected" : ""}>${String(hour).padStart(2, "0")}시대</option>`;
+  }).join("");
+  return mobileSubpage("텔레그램 봇 관리", `
+    <form class="mobile-telegram-manager" data-telegram-digest-form>
+      <section class="mobile-telegram-hero">
+        <span>➤</span>
+        <div><b>데일리 업무 브리핑</b><small>선택한 할 일과 마감 일정을 텔레그램으로 전송합니다.</small></div>
+        <div class="telegram-runtime-status" data-telegram-runtime-status>${telegramDigestStatusMarkup()}<small>${esc(telegramDigestLastRunMarkup())}</small></div>
+      </section>
+      <section class="mobile-settings-section mobile-telegram-section">
+        <h3>전송 방식</h3>
+        <div class="mobile-telegram-modes">
+          <label><input type="radio" name="deliveryMode" value="manual" ${settings.deliveryMode === "manual" ? "checked" : ""} /><span><b>직접 푸시</b><small>필요할 때 바로 전송</small></span></label>
+          <label><input type="radio" name="deliveryMode" value="daily" ${settings.deliveryMode === "daily" ? "checked" : ""} /><span><b>매일 예약 푸시</b><small>매일 한 번 자동 전송</small></span></label>
+          <label class="telegram-time-field ${settings.deliveryMode === "daily" ? "enabled" : ""}"><span>예약 시간대</span><select name="deliveryTime" ${settings.deliveryMode === "daily" ? "" : "disabled"}>${hourOptions}</select><small>한국 시간 기준 · 선택한 시간대 안에 전송</small></label>
+        </div>
+      </section>
+      <section class="mobile-settings-section mobile-telegram-section">
+        <h3>알림에 포함할 항목</h3>
+        <div class="mobile-telegram-categories">
+          ${Object.entries(telegramDigestCategoryLabels).map(([key, [label, description]]) => `<label><input type="checkbox" name="include-${key}" ${settings.include[key] ? "checked" : ""} /><i></i><span><b>${esc(label)}</b><small>${esc(description)}</small></span><em>${telegramDigestCategoryCount(key)}</em></label>`).join("")}
+        </div>
+      </section>
+      <section class="mobile-settings-section mobile-telegram-section">
+        <h3>추가 공지 메시지</h3>
+        <div class="mobile-telegram-message"><textarea name="additionalMessage" maxlength="1000" rows="6" placeholder="추가로 공지할 메시지를 입력하세요.">${esc(settings.additionalMessage)}</textarea><small>선택 사항 · 최대 1,000자</small></div>
+      </section>
+      <section class="mobile-settings-section mobile-telegram-section">
+        <h3>미리보기</h3>
+        <div class="mobile-telegram-preview" data-telegram-preview-output><span>✈</span><b>메시지 미리보기</b><small>버튼을 누르면 전송 형태가 표시됩니다.</small></div>
+        <div class="telegram-form-message" data-telegram-form-message aria-live="polite"></div>
+      </section>
+      <div class="mobile-telegram-actions"><button data-telegram-preview type="button">미리보기</button><button type="submit">설정 저장</button><button data-telegram-send type="button">지금 전송</button></div>
+    </form>
   `);
 }
 
@@ -10412,6 +10725,7 @@ function renderMobileMoreRoute() {
   if (mobileMoreRoute === "admin-home") return renderMobileAdminHome();
   if (mobileMoreRoute === "admin-users") return renderMobileAdminUsers();
   if (mobileMoreRoute.startsWith("admin-user:")) return renderMobileAdminUserDetail(mobileMoreRoute.slice(11));
+  if (mobileMoreRoute === "admin-telegram") return renderMobileTelegramDigest();
   if (mobileMoreRoute === "admin-dropdowns") return renderMobileAdminDropdowns();
   if (mobileMoreRoute === "admin-members") return renderMobileAdminMembers();
   return renderMobileMoreInline();
@@ -10480,6 +10794,8 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-more-route]", (button) => navigateMobileMore(button.dataset.mobileMoreRoute));
   bind("[data-mobile-more-back]", () => mobileMoreBack());
   bind("[data-mobile-more-target]", (button) => openMobileSection(button.dataset.mobileMoreTarget));
+  bind("[data-telegram-preview]", (button) => runTelegramDigestAction("preview", button));
+  bind("[data-telegram-send]", (button) => runTelegramDigestAction("send", button));
   bind("[data-mobile-admin-user-open]", (button) => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
   bind("[data-mobile-user-role]", (button) => {
     const userRow = button.closest("[data-mobile-admin-user]");
@@ -10974,6 +11290,7 @@ function navigateMobileMore(route) {
   renderMobileDashboard();
   window.scrollTo({ top: 0, behavior: "auto" });
   if (route === "organization") refreshOrganizationDirectory();
+  if (route === "admin-telegram") queueMicrotask(refreshTelegramDigestStatus);
 }
 
 function mobileMoreBack() {
@@ -11930,6 +12247,11 @@ $("#mobileAddForm")?.addEventListener("submit", (event) => {
   submitMobileAddForm(event.currentTarget);
 });
 $("#mobileApp")?.addEventListener("submit", (event) => {
+  if (event.target.matches("[data-telegram-digest-form]")) {
+    event.preventDefault();
+    saveTelegramDigestSettings(event.target);
+    return;
+  }
   if (event.target.matches("[data-mobile-profile-form]")) {
     event.preventDefault();
     saveMobileProfile(event.target);
@@ -11943,6 +12265,10 @@ $("#mobileApp")?.addEventListener("submit", (event) => {
   }
 });
 $("#mobileApp")?.addEventListener("change", (event) => {
+  if (event.target.matches('[name="deliveryMode"]')) {
+    toggleTelegramDigestScheduleFields(event.target.closest("[data-telegram-digest-form]"));
+    return;
+  }
   if (event.target.matches("[data-mobile-profile-photo]")) {
     prepareMobileProfilePhoto(event.target.files?.[0]);
     return;
@@ -13724,9 +14050,15 @@ $("#adminUnlockBtn").addEventListener("click", () => {
   $("#adminMessage").textContent = "비밀번호가 맞지 않습니다.";
 });
 
-$("#adminContent").addEventListener("submit", (event) => {
+$("#adminContent").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const telegramForm = event.target.closest("[data-telegram-digest-form]");
+  if (telegramForm) {
+    await saveTelegramDigestSettings(telegramForm);
+    return;
+  }
   const manager = event.target.closest("[data-option-group]");
+  if (!manager) return;
   addOption(manager.dataset.optionGroup, new FormData(event.target).get("option"));
 });
 
@@ -13742,6 +14074,16 @@ $("#adminContent").addEventListener("click", (event) => {
     adminSection = sectionButton.dataset.adminSection;
     saveViewPrefs({ adminSection });
     renderAdmin();
+    return;
+  }
+  const telegramPreviewButton = event.target.closest("[data-telegram-preview]");
+  if (telegramPreviewButton) {
+    runTelegramDigestAction("preview", telegramPreviewButton);
+    return;
+  }
+  const telegramSendButton = event.target.closest("[data-telegram-send]");
+  if (telegramSendButton) {
+    runTelegramDigestAction("send", telegramSendButton);
     return;
   }
   const saveOwnerLinksButton = event.target.closest("[data-save-owner-links]");
@@ -13786,6 +14128,10 @@ $("#adminContent").addEventListener("click", (event) => {
 });
 
 $("#adminContent").addEventListener("change", async (event) => {
+  if (event.target.matches('[name="deliveryMode"]')) {
+    toggleTelegramDigestScheduleFields(event.target.closest("[data-telegram-digest-form]"));
+    return;
+  }
   const positionSelect = event.target.closest("[data-user-position]");
   if (positionSelect) {
     setUserPosition(positionSelect.dataset.userPosition, positionSelect.value);

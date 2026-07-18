@@ -1,0 +1,364 @@
+const SEOUL_TIME_ZONE = "Asia/Seoul";
+const DASHBOARD_STATE_ROW_ID = "main";
+const TELEGRAM_STATUS_ROW_ID = "telegram-digest-status";
+
+export const TELEGRAM_DIGEST_DEFAULTS = {
+  deliveryMode: "manual",
+  deliveryTime: "09:00",
+  include: {
+    tasksToday: true,
+    tasksThreeDays: true,
+    tasksWeek: true,
+    projectsToday: true,
+    projectsSoon: true,
+    worksToday: true,
+    worksSoon: true
+  },
+  additionalMessage: ""
+};
+
+function cleanText(value, maxLength = 500) {
+  return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "").trim().slice(0, maxLength);
+}
+
+export function normalizeTelegramDigestSettings(value = {}) {
+  const include = value && typeof value.include === "object" ? value.include : {};
+  const hour = Math.max(0, Math.min(23, Number(String(value.deliveryTime || TELEGRAM_DIGEST_DEFAULTS.deliveryTime).split(":")[0]) || 0));
+  return {
+    deliveryMode: value.deliveryMode === "daily" ? "daily" : "manual",
+    deliveryTime: `${String(hour).padStart(2, "0")}:00`,
+    include: Object.fromEntries(Object.keys(TELEGRAM_DIGEST_DEFAULTS.include).map((key) => [key, include[key] !== false])),
+    additionalMessage: cleanText(value.additionalMessage, 1000)
+  };
+}
+
+function seoulDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SEOUL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    key: `${values.year}-${values.month}-${values.day}`,
+    hour: Number(values.hour || 0)
+  };
+}
+
+function dateDiff(dateKey, todayKey) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))) return null;
+  const target = Date.parse(`${dateKey}T00:00:00Z`);
+  const today = Date.parse(`${todayKey}T00:00:00Z`);
+  return Math.round((target - today) / 86400000);
+}
+
+function koreanDateLabel(dateKey) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  return new Intl.DateTimeFormat("ko-KR", {
+    timeZone: "UTC",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    weekday: "short"
+  }).format(date);
+}
+
+function ownerNameMap(state) {
+  return new Map((state.owners || []).map((owner) => [owner.id, owner.name || owner.id]));
+}
+
+function ownerLabels(item, owners) {
+  const ids = Array.isArray(item?.owners) ? item.owners : [item?.owner].filter(Boolean);
+  const labels = ids.map((id) => owners.get(id) || id).filter(Boolean);
+  return labels.length ? labels.join(", ") : "미배정";
+}
+
+function openTaskItems(state) {
+  const projects = new Map((state.projects || []).map((project) => [project.id, project]));
+  const projectTasks = (state.tasks || []).map((task) => {
+    const project = projects.get(task.projectId);
+    return { task, source: "영상", parentTitle: project?.title || "영상 제목 없음" };
+  });
+  const workTasks = (state.works || []).flatMap((work) => (work.tasks || []).map((task) => ({
+    task,
+    source: "업무",
+    parentTitle: work.title || "업무 제목 없음"
+  })));
+  return [...projectTasks, ...workTasks]
+    .filter((item) => !item.task.done && !item.task.noDueDate && item.task.dueDate)
+    .sort((a, b) => `${a.task.dueDate} ${a.task.startTime || ""}`.localeCompare(`${b.task.dueDate} ${b.task.startTime || ""}`));
+}
+
+function isCompletedStatus(value) {
+  return /완료|납품|종료/.test(String(value || ""));
+}
+
+function taskLine(item, owners, todayKey) {
+  const task = item.task || {};
+  const diff = dateDiff(task.dueDate, todayKey);
+  const due = diff === 0 ? "오늘" : diff > 0 ? `D-${diff}` : `지연 ${Math.abs(diff)}일`;
+  const time = task.allDay === false && task.startTime ? ` ${task.startTime}` : "";
+  return `• [${item.source}] ${cleanText(item.parentTitle, 80)} · ${cleanText(task.text || task.title || "할 일", 120)} (${due}${time}, ${cleanText(ownerLabels(task, owners), 80)})`;
+}
+
+function deadlineLine(item, owners, todayKey) {
+  const diff = dateDiff(item.finalDate, todayKey);
+  const due = diff === 0 ? "오늘" : `D-${diff}`;
+  return `• ${cleanText(item.title || "제목 없음", 140)} (${due}, ${cleanText(ownerLabels(item, owners), 80)})`;
+}
+
+function section(title, items, lineBuilder) {
+  const visible = items.slice(0, 18);
+  const lines = visible.length ? visible.map(lineBuilder) : ["• 해당 항목 없음"];
+  if (items.length > visible.length) lines.push(`• 외 ${items.length - visible.length}건은 대시보드에서 확인`);
+  return [`[${title} · ${items.length}건]`, ...lines].join("\n");
+}
+
+export function buildTelegramDigest(state = {}, rawSettings = {}, options = {}) {
+  const settings = normalizeTelegramDigestSettings(rawSettings);
+  const todayKey = options.todayKey || seoulDateParts(options.now || new Date()).key;
+  const owners = ownerNameMap(state);
+  const tasks = openTaskItems(state);
+  const projects = (state.projects || []).filter((item) => item.finalDate && !isCompletedStatus(item.status));
+  const works = (state.works || []).filter((item) => item.finalDate && !item.noSchedule && !isCompletedStatus(item.status));
+  const selectedSections = [];
+
+  const taskSections = [
+    ["tasksToday", "📌 오늘 할 일", tasks.filter((item) => dateDiff(item.task.dueDate, todayKey) === 0)],
+    ["tasksThreeDays", "⏳ 3일 이내 할 일", tasks.filter((item) => {
+      const diff = dateDiff(item.task.dueDate, todayKey);
+      return diff >= 1 && diff <= 3;
+    })],
+    ["tasksWeek", "🗓 1주일 이내 할 일", tasks.filter((item) => {
+      const diff = dateDiff(item.task.dueDate, todayKey);
+      return diff >= 4 && diff <= 7;
+    })]
+  ];
+  taskSections.forEach(([key, title, items]) => {
+    if (settings.include[key]) selectedSections.push(section(title, items, (item) => taskLine(item, owners, todayKey)));
+  });
+
+  const deadlineSections = [
+    ["projectsToday", "🎬 오늘 마감 · 영상", projects.filter((item) => dateDiff(item.finalDate, todayKey) === 0)],
+    ["projectsSoon", "⚠️ 마감 임박 · 영상", projects.filter((item) => {
+      const diff = dateDiff(item.finalDate, todayKey);
+      return diff >= 1 && diff <= 3;
+    })],
+    ["worksToday", "📂 오늘 마감 · 업무", works.filter((item) => dateDiff(item.finalDate, todayKey) === 0)],
+    ["worksSoon", "⚠️ 마감 임박 · 업무", works.filter((item) => {
+      const diff = dateDiff(item.finalDate, todayKey);
+      return diff >= 1 && diff <= 3;
+    })]
+  ];
+  deadlineSections.forEach(([key, title, items]) => {
+    if (settings.include[key]) selectedSections.push(section(title, items, (item) => deadlineLine(item, owners, todayKey)));
+  });
+
+  if (!selectedSections.length) selectedSections.push("[알림 항목]\n• 선택된 항목이 없습니다.");
+  if (settings.additionalMessage) selectedSections.push(`[📣 추가 공지]\n${settings.additionalMessage}`);
+  const dashboardUrl = cleanText(options.dashboardUrl, 500);
+  if (dashboardUrl) selectedSections.push(`🔗 대시보드 열기\n${dashboardUrl}`);
+
+  const message = `📋 영상 업무 데일리 브리핑\n${koreanDateLabel(todayKey)}\n\n${selectedSections.join("\n\n")}`;
+  if (message.length <= 4000) return message;
+  return `${message.slice(0, 3940).trimEnd()}\n\n…일부 항목은 대시보드에서 확인해 주세요.`;
+}
+
+function envValue(...keys) {
+  return keys.map((key) => process.env[key]).find(Boolean) || "";
+}
+
+function supabaseConfig({ privileged = false } = {}) {
+  const url = envValue("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL").replace(/\/$/, "");
+  const anonKey = envValue("SUPABASE_ANON_KEY", "NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  const secretKey = envValue("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY");
+  return { url, key: privileged ? secretKey : anonKey, anonKey, secretKey };
+}
+
+function restHeaders(apiKey, accessToken = "") {
+  const headers = {
+    apikey: apiKey,
+    "Content-Type": "application/json"
+  };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  else if (!String(apiKey).startsWith("sb_secret_")) headers.Authorization = `Bearer ${apiKey}`;
+  return headers;
+}
+
+async function readDashboardRow(id, { accessToken = "", privileged = false } = {}) {
+  const config = supabaseConfig({ privileged });
+  if (!config.url || !config.key) throw new Error(privileged ? "SUPABASE_SECRET_KEY가 설정되지 않았습니다." : "Supabase 환경변수가 없습니다.");
+  const response = await fetch(`${config.url}/rest/v1/dashboard_state?id=eq.${encodeURIComponent(id)}&select=data,updated_at`, {
+    headers: restHeaders(config.key, accessToken)
+  });
+  if (!response.ok) throw new Error(`Supabase 데이터를 읽지 못했습니다. (${response.status})`);
+  const rows = await response.json();
+  return rows[0] || null;
+}
+
+async function upsertDashboardRow(id, data, { accessToken = "", privileged = false } = {}) {
+  const config = supabaseConfig({ privileged });
+  if (!config.url || !config.key) throw new Error(privileged ? "SUPABASE_SECRET_KEY가 설정되지 않았습니다." : "Supabase 환경변수가 없습니다.");
+  const response = await fetch(`${config.url}/rest/v1/dashboard_state?on_conflict=id`, {
+    method: "POST",
+    headers: {
+      ...restHeaders(config.key, accessToken),
+      Prefer: "resolution=merge-duplicates,return=minimal"
+    },
+    body: JSON.stringify({ id, data, updated_at: new Date().toISOString() })
+  });
+  if (!response.ok) throw new Error(`Supabase 상태를 저장하지 못했습니다. (${response.status})`);
+}
+
+async function acquireDailyRunLock(dateKey) {
+  const config = supabaseConfig({ privileged: true });
+  if (!config.url || !config.key) throw new Error("SUPABASE_SECRET_KEY가 설정되지 않았습니다.");
+  const id = `telegram-digest-run-${dateKey}`;
+  const response = await fetch(`${config.url}/rest/v1/dashboard_state`, {
+    method: "POST",
+    headers: {
+      ...restHeaders(config.key),
+      Prefer: "return=minimal"
+    },
+    body: JSON.stringify({ id, data: { status: "sending", date: dateKey, startedAt: new Date().toISOString() } })
+  });
+  if (response.status === 409) return { acquired: false, id };
+  if (!response.ok) throw new Error(`예약 전송 잠금을 만들지 못했습니다. (${response.status})`);
+  return { acquired: true, id };
+}
+
+async function verifyAdminAccess(accessToken) {
+  const { url, anonKey } = supabaseConfig();
+  if (!url || !anonKey || !accessToken) return false;
+  const userResponse = await fetch(`${url}/auth/v1/user`, {
+    headers: restHeaders(anonKey, accessToken)
+  });
+  if (!userResponse.ok) return false;
+  const user = await userResponse.json();
+  if (!user?.id) return false;
+  const profileResponse = await fetch(`${url}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=role,status,approved`, {
+    headers: restHeaders(anonKey, accessToken)
+  });
+  if (!profileResponse.ok) return false;
+  const profiles = await profileResponse.json();
+  const profile = profiles[0];
+  return profile?.role === "admin" && profile?.approved === true && ["approved", "active"].includes(profile?.status);
+}
+
+async function sendTelegramMessage(text) {
+  const token = envValue("TELEGRAM_BOT_TOKEN");
+  const chatId = envValue("TELEGRAM_CHAT_ID");
+  if (!token || !chatId) throw new Error("텔레그램 봇 토큰 또는 챗 아이디가 설정되지 않았습니다.");
+  const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chat_id: chatId, text })
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.ok === false) throw new Error(result.description || `텔레그램 전송에 실패했습니다. (${response.status})`);
+  return result.result || {};
+}
+
+function requestOrigin(req) {
+  const configured = envValue("DASHBOARD_URL").replace(/\/$/, "");
+  if (configured) return configured;
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
+  return host ? `https://${host}` : "";
+}
+
+function bearerToken(req) {
+  const header = String(req.headers.authorization || "");
+  return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+}
+
+function publicError(error) {
+  const message = String(error?.message || "요청을 처리하지 못했습니다.");
+  if (/TELEGRAM|SUPABASE|텔레그램|Supabase|예약 전송/.test(message)) return message;
+  console.error(error);
+  return "요청을 처리하지 못했습니다. Vercel 로그를 확인해 주세요.";
+}
+
+export async function handleTelegramDigestRequest(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST" && req.method !== "GET") return res.status(405).json({ ok: false, error: "지원하지 않는 요청입니다." });
+  const accessToken = bearerToken(req);
+  if (!await verifyAdminAccess(accessToken)) return res.status(403).json({ ok: false, error: "관리자 인증이 필요합니다." });
+
+  try {
+    if (req.method === "GET") {
+      const status = await readDashboardRow(TELEGRAM_STATUS_ROW_ID, { accessToken }).catch(() => null);
+      return res.status(200).json({
+        ok: true,
+        configured: Boolean(envValue("TELEGRAM_BOT_TOKEN") && envValue("TELEGRAM_CHAT_ID")),
+        schedulerConfigured: Boolean(envValue("CRON_SECRET") && envValue("SUPABASE_SECRET_KEY", "SUPABASE_SERVICE_ROLE_KEY")),
+        status: status?.data || null
+      });
+    }
+
+    const action = req.body?.action === "preview" ? "preview" : "send";
+    const row = await readDashboardRow(DASHBOARD_STATE_ROW_ID, { accessToken });
+    const state = row?.data || {};
+    const settings = normalizeTelegramDigestSettings(state.telegramDigest || {});
+    const message = buildTelegramDigest(state, settings, { dashboardUrl: requestOrigin(req) });
+    if (action === "preview") return res.status(200).json({ ok: true, message });
+
+    const telegramResult = await sendTelegramMessage(message);
+    const status = {
+      type: "manual",
+      status: "sent",
+      sentAt: new Date().toISOString(),
+      messageId: telegramResult.message_id || null
+    };
+    await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { accessToken });
+    return res.status(200).json({ ok: true, message, status });
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: publicError(error) });
+  }
+}
+
+export async function handleScheduledTelegramDigest(req, res, scheduledHour) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "GET") return res.status(405).json({ ok: false, error: "지원하지 않는 요청입니다." });
+  const cronSecret = envValue("CRON_SECRET");
+  if (!cronSecret || req.headers.authorization !== `Bearer ${cronSecret}`) return res.status(401).json({ ok: false, error: "예약 실행 인증에 실패했습니다." });
+
+  try {
+    const row = await readDashboardRow(DASHBOARD_STATE_ROW_ID, { privileged: true });
+    const state = row?.data || {};
+    const settings = normalizeTelegramDigestSettings(state.telegramDigest || {});
+    const expectedHour = Number(String(settings.deliveryTime).slice(0, 2));
+    if (settings.deliveryMode !== "daily") return res.status(200).json({ ok: true, skipped: "manual-mode" });
+    if (Number(scheduledHour) !== expectedHour) return res.status(200).json({ ok: true, skipped: "different-hour" });
+
+    const now = new Date();
+    const { key: todayKey } = seoulDateParts(now);
+    const lock = await acquireDailyRunLock(todayKey);
+    if (!lock.acquired) return res.status(200).json({ ok: true, skipped: "already-sent" });
+
+    try {
+      const message = buildTelegramDigest(state, settings, { now, todayKey, dashboardUrl: requestOrigin(req) });
+      const telegramResult = await sendTelegramMessage(message);
+      const status = {
+        type: "scheduled",
+        status: "sent",
+        sentAt: new Date().toISOString(),
+        date: todayKey,
+        deliveryTime: settings.deliveryTime,
+        messageId: telegramResult.message_id || null
+      };
+      await upsertDashboardRow(lock.id, status, { privileged: true });
+      await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true });
+      return res.status(200).json({ ok: true, status });
+    } catch (error) {
+      const status = { type: "scheduled", status: "failed", failedAt: new Date().toISOString(), date: todayKey, error: publicError(error) };
+      await upsertDashboardRow(lock.id, status, { privileged: true }).catch(() => {});
+      await upsertDashboardRow(TELEGRAM_STATUS_ROW_ID, status, { privileged: true }).catch(() => {});
+      throw error;
+    }
+  } catch (error) {
+    return res.status(500).json({ ok: false, error: publicError(error) });
+  }
+}

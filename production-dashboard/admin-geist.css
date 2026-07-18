@@ -801,3 +801,454 @@
     justify-content: flex-start;
   }
 }
+
+@media (min-width: 769px) {
+  #adminView .admin-hub-head nav {
+    grid-template-columns: repeat(3, auto);
+  }
+
+  #adminView .telegram-digest-manager {
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+  }
+
+  #adminView .telegram-manager-hero {
+    min-height: 104px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 18px 24px;
+  }
+
+  #adminView .telegram-manager-hero > div:first-child {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #adminView .telegram-logo {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: #229ed9;
+    color: #fff;
+    font-size: 19px;
+    transform: rotate(-24deg);
+  }
+
+  #adminView .telegram-manager-hero h3,
+  #adminView .telegram-setting-card h4 {
+    margin: 0;
+    color: var(--geist-ink);
+  }
+
+  #adminView .telegram-manager-hero h3 {
+    font-size: 18px;
+    line-height: 26px;
+    letter-spacing: -0.4px;
+  }
+
+  #adminView .telegram-manager-hero p {
+    margin: 0 0 1px;
+  }
+
+  #adminView .telegram-manager-hero small,
+  #adminView .telegram-setting-card header small,
+  #adminView .telegram-message-card > small,
+  #adminView .telegram-manager-actions > span {
+    color: var(--geist-mute);
+    font-size: 10px;
+    line-height: 16px;
+  }
+
+  #adminView .telegram-runtime-status {
+    display: grid;
+    justify-items: end;
+    gap: 5px;
+  }
+
+  #adminView .telegram-runtime-status > small {
+    color: var(--geist-mute);
+    font-size: 9px;
+  }
+
+  #adminView .telegram-connection {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 28px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 999px;
+    background: var(--geist-canvas);
+    color: var(--geist-body);
+    padding: 0 10px;
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  #adminView .telegram-connection i {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--geist-faint);
+  }
+
+  #adminView .telegram-connection.connected {
+    border-color: rgba(0, 237, 100, 0.28);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  #adminView .telegram-connection.connected i {
+    background: var(--geist-accent);
+  }
+
+  #adminView .telegram-connection.warning {
+    border-color: #ffe0ae;
+    background: #fff8e8;
+    color: #9a5b00;
+  }
+
+  #adminView .telegram-connection.warning i {
+    background: #f5a623;
+  }
+
+  #adminView .telegram-connection.error {
+    border-color: #ffd4d4;
+    background: #fff3f3;
+    color: #c50000;
+  }
+
+  #adminView .telegram-connection.error i {
+    background: #ee0000;
+  }
+
+  #adminView .telegram-connection.checking i {
+    animation: telegram-pulse 1s ease-in-out infinite;
+  }
+
+  #adminView .telegram-manager-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+
+  #adminView .telegram-setting-card {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 16px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 18px;
+  }
+
+  #adminView .telegram-setting-card > header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  #adminView .telegram-setting-card > header > span {
+    width: 24px;
+    height: 24px;
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--geist-ink);
+    color: var(--geist-elevated);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+  }
+
+  #adminView .telegram-setting-card h4 {
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: -0.25px;
+  }
+
+  #adminView .telegram-setting-card header div {
+    display: grid;
+    gap: 2px;
+  }
+
+  #adminView .telegram-delivery-modes {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #adminView .telegram-delivery-modes > label {
+    min-height: 76px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 8px;
+    background: var(--geist-canvas);
+    padding: 12px;
+    cursor: pointer;
+  }
+
+  #adminView .telegram-delivery-modes > label.active {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent-soft);
+    box-shadow: inset 0 0 0 1px var(--geist-accent);
+  }
+
+  #adminView .telegram-delivery-modes input {
+    width: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    accent-color: var(--geist-accent);
+  }
+
+  #adminView .telegram-delivery-modes span {
+    display: grid;
+    gap: 3px;
+  }
+
+  #adminView .telegram-delivery-modes b,
+  #adminView .telegram-time-field > span,
+  #adminView .telegram-category-list b {
+    color: var(--geist-ink);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  #adminView .telegram-delivery-modes small,
+  #adminView .telegram-time-field small,
+  #adminView .telegram-category-list small {
+    color: var(--geist-mute);
+    font-size: 9px;
+    line-height: 14px;
+  }
+
+  #adminView .telegram-time-field {
+    display: grid;
+    grid-template-columns: auto minmax(130px, 180px);
+    align-items: center;
+    gap: 8px 14px;
+    border-top: 1px solid var(--geist-hairline);
+    padding-top: 14px;
+    opacity: 0.52;
+  }
+
+  #adminView .telegram-time-field.enabled {
+    opacity: 1;
+  }
+
+  #adminView .telegram-time-field small {
+    grid-column: 1 / -1;
+  }
+
+  #adminView .telegram-category-card {
+    grid-row: span 2;
+  }
+
+  #adminView .telegram-category-list {
+    display: grid;
+    gap: 6px;
+  }
+
+  #adminView .telegram-category-list > label {
+    min-height: 54px;
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 7px;
+    background: var(--geist-canvas);
+    padding: 8px 10px;
+    cursor: pointer;
+  }
+
+  #adminView .telegram-category-list > label:has(input:checked) {
+    border-color: rgba(0, 237, 100, 0.44);
+    background: var(--geist-accent-soft);
+  }
+
+  #adminView .telegram-category-list input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #adminView .telegram-category-list > label > i {
+    width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 5px;
+    background: var(--geist-elevated);
+  }
+
+  #adminView .telegram-category-list input:checked + i {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+  }
+
+  #adminView .telegram-category-list input:checked + i::after {
+    content: "✓";
+    color: #06140a;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  #adminView .telegram-category-list span {
+    display: grid;
+    gap: 1px;
+  }
+
+  #adminView .telegram-category-list em {
+    min-width: 26px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 999px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    padding: 0 7px;
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+    font-style: normal;
+  }
+
+  #adminView .telegram-message-card textarea {
+    width: 100%;
+    min-height: 150px;
+    resize: vertical;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 7px;
+    background: var(--geist-canvas);
+    color: var(--geist-ink);
+    padding: 12px;
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 18px;
+    outline: none;
+  }
+
+  #adminView .telegram-message-card textarea:focus {
+    border-color: var(--geist-accent);
+    box-shadow: 0 0 0 3px rgba(0, 237, 100, 0.1);
+  }
+
+  #adminView .telegram-preview-card {
+    min-height: 280px;
+  }
+
+  #adminView .telegram-preview-empty {
+    min-height: 176px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 4px;
+    overflow: auto;
+    border: 1px dashed var(--geist-hairline);
+    border-radius: 8px;
+    background: var(--geist-canvas);
+    color: var(--geist-mute);
+    padding: 14px;
+    text-align: center;
+  }
+
+  #adminView .telegram-preview-empty > span {
+    color: #229ed9;
+    font-size: 22px;
+  }
+
+  #adminView .telegram-preview-empty > b {
+    color: var(--geist-body);
+    font-size: 11px;
+  }
+
+  #adminView .telegram-preview-empty > small {
+    font-size: 9px;
+  }
+
+  #adminView .telegram-preview-empty pre {
+    width: 100%;
+    margin: 0;
+    color: var(--geist-body);
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 17px;
+    text-align: left;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #adminView .telegram-form-message {
+    min-height: 16px;
+    color: var(--geist-mute);
+    font-size: 10px;
+  }
+
+  #adminView .telegram-manager-actions {
+    min-height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border-top: 1px solid var(--geist-hairline);
+    background: var(--geist-elevated);
+    padding: 14px 24px;
+  }
+
+  #adminView .telegram-manager-actions > div {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  #adminView .telegram-manager-actions button {
+    min-height: 38px;
+    border-radius: 6px;
+    padding: 0 13px;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  #adminView .telegram-manager-actions button.primary {
+    border-color: var(--geist-accent);
+    background: var(--geist-accent);
+    color: #06140a;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 960px) {
+  #adminView .admin-hub-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #adminView .telegram-manager-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #adminView .telegram-category-card {
+    grid-row: auto;
+  }
+
+  #adminView .telegram-manager-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@keyframes telegram-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
