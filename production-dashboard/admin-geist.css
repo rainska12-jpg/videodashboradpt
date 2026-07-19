@@ -1252,3 +1252,242 @@
   0%, 100% { opacity: 0.35; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
 }
+
+@media (min-width: 769px) {
+  #adminView .admin-hub-head nav {
+    grid-template-columns: repeat(4, auto);
+  }
+
+  #adminView .admin-activity-manager {
+    display: grid;
+    gap: 14px;
+    background: var(--geist-canvas);
+    padding: 16px;
+  }
+
+  #adminView .admin-activity-filters {
+    display: grid;
+    grid-template-columns: 200px minmax(160px, 1fr) minmax(180px, 1fr);
+    gap: 10px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 14px;
+  }
+
+  #adminView .admin-activity-filters label {
+    display: grid;
+    gap: 6px;
+    color: var(--geist-mute);
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  #adminView .admin-activity-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  #adminView .admin-activity-summary article {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    padding: 14px;
+  }
+
+  #adminView .admin-activity-summary span,
+  #adminView .admin-activity-summary small {
+    color: var(--geist-mute);
+    font-size: 9px;
+    font-weight: 500;
+  }
+
+  #adminView .admin-activity-summary b {
+    color: var(--geist-ink);
+    font-family: "Geist Mono", monospace;
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  #adminView .admin-activity-days {
+    display: grid;
+    gap: 10px;
+  }
+
+  #adminView .admin-activity-day {
+    overflow: hidden;
+    border: 1px solid var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+  }
+
+  #adminView .admin-activity-day > header {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    border-bottom: 1px solid var(--geist-hairline);
+    background: var(--geist-soft);
+    padding: 0 14px;
+  }
+
+  #adminView .admin-activity-day > header div {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  #adminView .admin-activity-day > header strong {
+    color: var(--geist-ink);
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  #adminView .admin-activity-day > header span {
+    border: 1px solid var(--geist-hairline);
+    border-radius: 999px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    padding: 2px 7px;
+    font-size: 9px;
+  }
+
+  #adminView .admin-activity-day > header small {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 9px;
+  }
+
+  #adminView .admin-activity-list {
+    display: grid;
+  }
+
+  #adminView .admin-activity-row {
+    min-height: 72px;
+    display: grid;
+    grid-template-columns: 52px 48px minmax(0, 1fr) minmax(100px, 150px);
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--geist-hairline);
+    padding: 10px 14px;
+  }
+
+  #adminView .admin-activity-row:last-child {
+    border-bottom: 0;
+  }
+
+  #adminView .admin-activity-row time {
+    color: var(--geist-mute);
+    font-family: "Geist Mono", monospace;
+    font-size: 10px;
+  }
+
+  #adminView .admin-activity-entity {
+    min-height: 24px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid #cfe0ff;
+    border-radius: 999px;
+    background: #f2f6ff;
+    color: #2256a0;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  #adminView .admin-activity-entity.work {
+    border-color: rgba(0, 237, 100, 0.28);
+    background: var(--geist-accent-soft);
+    color: #087231;
+  }
+
+  body[data-theme="dark"] #adminView .admin-activity-entity.project {
+    border-color: #29415f;
+    background: #162334;
+    color: #91b9ef;
+  }
+
+  #adminView .admin-activity-copy {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+  }
+
+  #adminView .admin-activity-copy > strong {
+    overflow: hidden;
+    color: var(--geist-ink);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #adminView .admin-activity-copy p {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--geist-body);
+    font-size: 10px;
+  }
+
+  #adminView .admin-activity-copy p b {
+    color: var(--geist-mute);
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  #adminView .admin-activity-actor {
+    min-width: 0;
+    display: grid;
+    justify-items: end;
+    gap: 3px;
+  }
+
+  #adminView .admin-activity-actor span {
+    color: var(--geist-mute);
+    font-size: 8px;
+  }
+
+  #adminView .admin-activity-actor strong {
+    overflow: hidden;
+    max-width: 100%;
+    color: var(--geist-body);
+    font-size: 10px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  #adminView .admin-activity-empty {
+    min-height: 240px;
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 7px;
+    border: 1px dashed var(--geist-hairline);
+    border-radius: 10px;
+    background: var(--geist-elevated);
+    color: var(--geist-mute);
+    text-align: center;
+  }
+
+  #adminView .admin-activity-empty strong {
+    color: var(--geist-body);
+    font-size: 13px;
+  }
+
+  #adminView .admin-activity-empty span {
+    font-size: 10px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 960px) {
+  #adminView .admin-activity-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}

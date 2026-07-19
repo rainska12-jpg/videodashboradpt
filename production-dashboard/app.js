@@ -204,6 +204,7 @@ async function deleteProfileFromSupabase(userId) {
 }
 
 const makeId = () => `item-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const PROGRESS_ACTIVITY_TYPES = new Set(["status_change", "task_check", "management_record_created"]);
 const defaultCalendarFields = { kickoffDate: false, shootDate: false, firstEditDate: false, finalDate: true };
 const defaultWorkCalendarFields = { kickoffDate: false, finalDate: true };
 const defaultTelegramDigestSettings = {
@@ -281,6 +282,7 @@ const sampleData = {
   works: [],
   owners: [],
   notifications: [],
+  activityLogs: [],
   tasks: [],
   schedules: [],
   staffEvents: [],
@@ -478,6 +480,9 @@ let editingBoardCommentId = null;
 let replyingBoardCommentId = null;
 let mobileBoardFilterOpen = false;
 let adminSection = viewPref("adminSection", "dropdowns");
+let adminActivityMonth = viewPref("adminActivityMonth", dateKey(new Date()).slice(0, 7));
+let adminActivityEntityFilter = viewPref("adminActivityEntityFilter", "all");
+let adminActivityTypeFilter = viewPref("adminActivityTypeFilter", "all");
 let telegramDigestRuntimeStatus = null;
 let telegramDigestStatusLoading = false;
 let studioTelegramDraft = null;
@@ -946,6 +951,71 @@ function dateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeActivityLog(item = {}) {
+  const occurredAt = String(item.occurredAt || item.createdAt || "");
+  const occurredDate = new Date(occurredAt);
+  const fallbackDate = Number.isNaN(occurredDate.getTime()) ? "" : dateKey(occurredDate);
+  return {
+    id: item.id || makeId(),
+    entityType: item.entityType === "work" ? "work" : "project",
+    entityId: String(item.entityId || ""),
+    entityTitle: String(item.entityTitle || ""),
+    activityType: PROGRESS_ACTIVITY_TYPES.has(item.activityType) ? item.activityType : "status_change",
+    activityDate: /^\d{4}-\d{2}-\d{2}$/.test(String(item.activityDate || "")) ? String(item.activityDate) : fallbackDate,
+    occurredAt,
+    actorUserId: String(item.actorUserId || ""),
+    actorName: String(item.actorName || "사용자"),
+    previousStatus: String(item.previousStatus || ""),
+    nextStatus: String(item.nextStatus || ""),
+    taskId: String(item.taskId || ""),
+    taskChecked: typeof item.taskChecked === "boolean" ? item.taskChecked : null,
+    managementRecordCreated: Boolean(item.managementRecordCreated)
+  };
+}
+
+function recordProgressActivity({
+  entityType,
+  entity,
+  activityType,
+  previousStatus = "",
+  nextStatus = "",
+  taskId = "",
+  taskChecked = null
+} = {}) {
+  if (!entity?.id || !["project", "work"].includes(entityType) || !PROGRESS_ACTIVITY_TYPES.has(activityType)) return null;
+  const now = new Date();
+  const actor = notificationActor();
+  const log = normalizeActivityLog({
+    id: makeId(),
+    entityType,
+    entityId: entity.id,
+    entityTitle: entity.title || "",
+    activityType,
+    activityDate: dateKey(now),
+    occurredAt: now.toISOString(),
+    actorUserId: actor.id,
+    actorName: actor.name,
+    previousStatus: activityType === "status_change" ? previousStatus : "",
+    nextStatus: activityType === "status_change" ? nextStatus : "",
+    taskId: activityType === "task_check" ? taskId : "",
+    taskChecked: activityType === "task_check" ? Boolean(taskChecked) : null,
+    managementRecordCreated: activityType === "management_record_created"
+  });
+  state.activityLogs = Array.isArray(state.activityLogs) ? state.activityLogs : [];
+  state.activityLogs.push(log);
+  return log;
+}
+
+function progressActivityLogsFor(entityType, entityId) {
+  return (state.activityLogs || [])
+    .filter((log) => log.entityType === entityType && log.entityId === entityId)
+    .sort((a, b) => String(a.occurredAt).localeCompare(String(b.occurredAt)));
+}
+
+function progressActivityDatesFor(entityType, entityId) {
+  return [...new Set(progressActivityLogsFor(entityType, entityId).map((log) => log.activityDate).filter(Boolean))].sort();
+}
+
 function formatDate(value) {
   if (!value) return "날짜 선택";
   const date = new Date(`${value}T00:00:00`);
@@ -1268,6 +1338,9 @@ function normalizeState(data) {
       body: displayStudioTerminology(item.body),
       message: displayStudioTerminology(item.message)
     })) : [],
+    activityLogs: Array.isArray(data.activityLogs)
+      ? data.activityLogs.map(normalizeActivityLog).filter((item) => item.entityId && item.activityDate)
+      : [],
     telegramDigest: normalizeTelegramDigestSettings(data.telegramDigest || {}),
     studioTelegram: normalizeStudioTelegramSettings(data.studioTelegram || {}),
     ownerDefaultsVersion: data.ownerDefaultsVersion || 2
@@ -2486,8 +2559,17 @@ function renderProjectList() {
       className: project.status ? statusClass(project.status) : "outline-cell",
       disabled: !canEditProject(project),
       onSelect: (value) => {
+        const previousStatus = project.status || "";
+        if (previousStatus === value) return;
         project.status = value;
         if (value === "납품 완료") project.progress = 100;
+        recordProgressActivity({
+          entityType: "project",
+          entity: project,
+          activityType: "status_change",
+          previousStatus,
+          nextStatus: value
+        });
         saveState();
         renderAll();
       }
@@ -2607,7 +2689,18 @@ function renderWorkList() {
         className: field === "status" && work.status ? workStatusClass(work.status) : "outline-cell",
         disabled: !canEditWork(work),
         onSelect: (value) => {
+          const previousStatus = work[field];
+          if (previousStatus === value) return;
           work[field] = value;
+          if (field === "status") {
+            recordProgressActivity({
+              entityType: "work",
+              entity: work,
+              activityType: "status_change",
+              previousStatus,
+              nextStatus: value
+            });
+          }
           saveState();
           renderAll();
         }
@@ -2780,6 +2873,7 @@ function syncBasicSaveButton(scope, editable = true) {
 function saveProjectBasicChanges({ showMessage = true } = {}) {
   const project = state.projects.find((item) => item.id === projectBasicDraft?.projectId);
   if (!project || !projectBasicDraft) return false;
+  const previousStatus = projectBasicDraft.originalStatus;
   const changedFields = [];
   if (projectBasicDraft.status !== projectBasicDraft.originalStatus) changedFields.push("status");
   if (projectBasicDraft.memo !== projectBasicDraft.originalMemo) changedFields.push("memo");
@@ -2787,6 +2881,15 @@ function saveProjectBasicChanges({ showMessage = true } = {}) {
   project.status = projectBasicDraft.status;
   project.memo = projectBasicDraft.memo;
   if (project.status === "납품 완료") project.progress = 100;
+  if (changedFields.includes("status")) {
+    recordProgressActivity({
+      entityType: "project",
+      entity: project,
+      activityType: "status_change",
+      previousStatus,
+      nextStatus: project.status
+    });
+  }
   saveState();
   notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: changedFields });
   projectBasicDraft = createProjectBasicDraft(project);
@@ -2799,12 +2902,22 @@ function saveProjectBasicChanges({ showMessage = true } = {}) {
 function saveWorkBasicChanges({ showMessage = true } = {}) {
   const work = state.works.find((item) => item.id === workBasicDraft?.workId);
   if (!work || !workBasicDraft) return false;
+  const previousStatus = workBasicDraft.originalStatus;
   const changedFields = [];
   if (workBasicDraft.status !== workBasicDraft.originalStatus) changedFields.push("status");
   if (workBasicDraft.memo !== workBasicDraft.originalMemo) changedFields.push("memo");
   if (!changedFields.length) return false;
   work.status = workBasicDraft.status;
   work.memo = workBasicDraft.memo;
+  if (changedFields.includes("status")) {
+    recordProgressActivity({
+      entityType: "work",
+      entity: work,
+      activityType: "status_change",
+      previousStatus,
+      nextStatus: work.status
+    });
+  }
   saveState();
   notifyEntityFieldChanges({ entityType: "work", entity: work, ownerIds: workOwners(work), fields: changedFields });
   workBasicDraft = createWorkBasicDraft(work);
@@ -4316,6 +4429,7 @@ function addWorkManagementRecord() {
     createdAt: new Date().toISOString()
   };
   work.records.push(newRecord);
+  recordProgressActivity({ entityType: "work", entity: work, activityType: "management_record_created" });
   notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’에 관리기록을 추가했습니다.`, { type: "work-record", workId: work.id, recordId: newRecord.id, actionType: "work_record_added", title: "관리기록 추가", targetTab: "records" });
   saveState();
   renderWorkDetail();
@@ -4473,6 +4587,13 @@ function notifyTaskCompletion(source, task, done) {
   const ownerIds = uniqueValues([...parentOwners, ...taskOwners(task)]);
   const parentLabel = isWork ? "업무" : "프로젝트";
   const taskLabel = task.title || task.text || "할 일";
+  recordProgressActivity({
+    entityType: isWork ? "work" : "project",
+    entity: parent,
+    activityType: "task_check",
+    taskId: task.id,
+    taskChecked: done
+  });
   notifyOwners(ownerIds, `${notificationActor().name}님이 ‘${parent.title}’ ${parentLabel}의 할 일 ‘${taskLabel}’을 ${done ? "완료" : "완료 취소"} 처리했습니다.`, {
     type: isWork ? "work-task" : "project-task",
     workId: isWork ? parent.id : undefined,
@@ -5998,6 +6119,7 @@ function addManagementRecord() {
     createdAt: new Date().toISOString()
   };
   project.records.push(newRecord);
+  recordProgressActivity({ entityType: "project", entity: project, activityType: "management_record_created" });
   notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’에 관리기록을 추가했습니다.`, { type: "project-record", projectId: project.id, recordId: newRecord.id, actionType: "project_record_added", title: "관리기록 추가", targetTab: "records" });
   saveState();
   renderProjectDetail();
@@ -8726,6 +8848,104 @@ async function saveStudioTelegramSettings() {
   closeStudioTelegramModal();
 }
 
+function adminActivityEntityTitle(log) {
+  const entity = log.entityType === "work"
+    ? state.works.find((item) => item.id === log.entityId)
+    : state.projects.find((item) => item.id === log.entityId);
+  return entity?.title || log.entityTitle || (log.entityType === "work" ? "삭제된 업무" : "삭제된 영상");
+}
+
+function adminActivityDescription(log) {
+  if (log.activityType === "status_change") return `${log.previousStatus || "미설정"} → ${log.nextStatus || "미설정"}`;
+  if (log.activityType === "task_check") return log.taskChecked ? "할 일 완료 체크" : "할 일 완료 체크 해제";
+  return "관리기록 작성";
+}
+
+function adminActivityTypeLabel(type) {
+  return {
+    status_change: "상태 변경",
+    task_check: "할 일",
+    management_record_created: "관리기록"
+  }[type] || "업무 활동";
+}
+
+function adminActivityDateLabel(value) {
+  const target = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return value;
+  const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
+  return `${target.getMonth() + 1}월 ${target.getDate()}일 ${weekdays[target.getDay()]}요일`;
+}
+
+function adminActivityTimeLabel(value) {
+  const target = new Date(value);
+  if (Number.isNaN(target.getTime())) return "--:--";
+  return `${String(target.getHours()).padStart(2, "0")}:${String(target.getMinutes()).padStart(2, "0")}`;
+}
+
+function filteredAdminActivityLogs() {
+  const month = /^\d{4}-\d{2}$/.test(adminActivityMonth) ? adminActivityMonth : dateKey(new Date()).slice(0, 7);
+  return (state.activityLogs || [])
+    .filter((log) => String(log.activityDate || "").startsWith(month))
+    .filter((log) => adminActivityEntityFilter === "all" || log.entityType === adminActivityEntityFilter)
+    .filter((log) => adminActivityTypeFilter === "all" || log.activityType === adminActivityTypeFilter)
+    .sort((a, b) => String(b.occurredAt || "").localeCompare(String(a.occurredAt || "")));
+}
+
+function updateAdminActivityFilter(field, value) {
+  if (field === "month") adminActivityMonth = /^\d{4}-\d{2}$/.test(value) ? value : dateKey(new Date()).slice(0, 7);
+  if (field === "entity") adminActivityEntityFilter = ["all", "project", "work"].includes(value) ? value : "all";
+  if (field === "type") adminActivityTypeFilter = ["all", ...PROGRESS_ACTIVITY_TYPES].includes(value) ? value : "all";
+  saveViewPrefs({ adminActivityMonth, adminActivityEntityFilter, adminActivityTypeFilter });
+}
+
+function renderAdminActivityManager({ mobile = false } = {}) {
+  const logs = filteredAdminActivityLogs();
+  const entityCount = new Set(logs.map((log) => `${log.entityType}:${log.entityId}`)).size;
+  const progressDayCount = new Set(logs.map((log) => `${log.entityType}:${log.entityId}:${log.activityDate}`)).size;
+  const statusCount = logs.filter((log) => log.activityType === "status_change").length;
+  const checkedTaskCount = logs.filter((log) => log.activityType === "task_check" && log.taskChecked).length;
+  const recordCount = logs.filter((log) => log.activityType === "management_record_created").length;
+  const grouped = new Map();
+  logs.forEach((log) => {
+    const items = grouped.get(log.activityDate) || [];
+    items.push(log);
+    grouped.set(log.activityDate, items);
+  });
+  return `
+    <div class="admin-activity-manager ${mobile ? "is-mobile" : ""}">
+      <section class="admin-activity-filters" aria-label="업무 진행 이력 필터">
+        <label><span>조회 월</span><input data-activity-log-filter="month" type="month" value="${esc(adminActivityMonth)}" /></label>
+        <label><span>대상</span><select data-activity-log-filter="entity"><option value="all" ${adminActivityEntityFilter === "all" ? "selected" : ""}>영상 + 업무</option><option value="project" ${adminActivityEntityFilter === "project" ? "selected" : ""}>영상</option><option value="work" ${adminActivityEntityFilter === "work" ? "selected" : ""}>업무</option></select></label>
+        <label><span>활동</span><select data-activity-log-filter="type"><option value="all" ${adminActivityTypeFilter === "all" ? "selected" : ""}>전체 활동</option><option value="status_change" ${adminActivityTypeFilter === "status_change" ? "selected" : ""}>상태 변경</option><option value="task_check" ${adminActivityTypeFilter === "task_check" ? "selected" : ""}>할 일 체크</option><option value="management_record_created" ${adminActivityTypeFilter === "management_record_created" ? "selected" : ""}>관리기록 작성</option></select></label>
+      </section>
+      <section class="admin-activity-summary" aria-label="업무 진행 이력 요약">
+        <article><span>진행 항목</span><b>${entityCount}</b><small>영상·업무</small></article>
+        <article><span>업무 진행일</span><b>${progressDayCount}</b><small>항목별 날짜</small></article>
+        <article><span>상태 변경</span><b>${statusCount}</b><small>이전 → 변경</small></article>
+        <article><span>완료 체크</span><b>${checkedTaskCount}</b><small>할 일 완료</small></article>
+        <article><span>관리기록</span><b>${recordCount}</b><small>작성 여부</small></article>
+      </section>
+      <div class="admin-activity-days">
+        ${logs.length ? [...grouped.entries()].map(([activityDate, items]) => `
+          <section class="admin-activity-day">
+            <header><div><strong>${esc(adminActivityDateLabel(activityDate))}</strong><span>${items.length}건</span></div><small>진행일 ${esc(activityDate)}</small></header>
+            <div class="admin-activity-list">
+              ${items.map((log) => `
+                <article class="admin-activity-row" data-activity-type="${esc(log.activityType)}">
+                  <time>${esc(adminActivityTimeLabel(log.occurredAt))}</time>
+                  <span class="admin-activity-entity ${log.entityType === "work" ? "work" : "project"}">${log.entityType === "work" ? "업무" : "영상"}</span>
+                  <div class="admin-activity-copy"><strong>${esc(adminActivityEntityTitle(log))}</strong><p><b>${esc(adminActivityTypeLabel(log.activityType))}</b><span>${esc(adminActivityDescription(log))}</span></p></div>
+                  <div class="admin-activity-actor"><span>작업자</span><strong>${esc(log.actorName || "사용자")}</strong></div>
+                </article>
+              `).join("")}
+            </div>
+          </section>
+        `).join("") : '<div class="admin-activity-empty"><strong>선택한 조건의 진행 이력이 없습니다.</strong><span>상태 변경, 할 일 체크, 관리기록 작성 시 이곳에 자동으로 표시됩니다.</span></div>'}
+      </div>
+    </div>
+  `;
+}
+
 function renderAdmin() {
   if (SUPABASE_ENABLED && isAdminUser() && !adminProfilesRefreshing) {
     adminProfilesRefreshing = true;
@@ -8792,14 +9012,17 @@ function renderAdmin() {
   const sectionMeta = {
     dropdowns: ["드롭다운 관리", "화면에서 사용하는 선택 항목을 관리합니다."],
     members: ["멤버 관리", "계정, 직책, 담당자 연결을 관리합니다."],
-    telegram: ["텔레그램 봇 관리", "데일리 업무 브리핑의 내용과 전송 방식을 관리합니다."]
+    telegram: ["텔레그램 봇 관리", "데일리 업무 브리핑의 내용과 전송 방식을 관리합니다."],
+    activity: ["업무 진행 이력", "월별 상태 변경, 할 일 체크, 관리기록 작성 내역을 확인합니다."]
   };
   const [sectionTitle, sectionDescription] = sectionMeta[adminSection] || sectionMeta.dropdowns;
   const content = adminSection === "members"
     ? `<div class="admin-member-grid">${renderOptionManager(["positions", "멤버", "직책 관리"])}${renderOptionManager(["owners", "멤버", "담당자 슬롯"])}${renderOwnerLinkManager()}${renderAccountManager()}</div>`
     : adminSection === "telegram"
       ? renderTelegramDigestManager()
-      : `<div class="admin-dropdown-grid">${dropdownGroups.map(renderOptionManager).join("")}</div>`;
+      : adminSection === "activity"
+        ? renderAdminActivityManager()
+        : `<div class="admin-dropdown-grid">${dropdownGroups.map(renderOptionManager).join("")}</div>`;
 
   $("#adminContent").innerHTML = `
     <div class="admin-hub-head">
@@ -8811,6 +9034,7 @@ function renderAdmin() {
       <nav aria-label="관리자 설정 메뉴">
         <button class="${adminSection === "dropdowns" ? "active" : ""}" data-admin-section="dropdowns" type="button">드롭다운 관리</button>
         <button class="${adminSection === "members" ? "active" : ""}" data-admin-section="members" type="button">멤버 관리</button>
+        <button class="${adminSection === "activity" ? "active" : ""}" data-admin-section="activity" type="button">업무 진행 이력</button>
         <button class="${adminSection === "telegram" ? "active" : ""}" data-admin-section="telegram" type="button">텔레그램 봇 관리</button>
       </nav>
     </div>
@@ -11152,8 +11376,14 @@ function renderMobileAdminHome() {
   return mobileSubpage("관리자 모드", `
     <section class="mobile-admin-summary"><article><span>승인 대기</span><b>${pending}</b></article><article><span>전체 사용자</span><b>${state.users.length}</b></article><article><span>비활성</span><b>${inactive}</b></article></section>
     <section class="mobile-settings-section"><h3>사용자 관리</h3><div>${mobileMoreRow({ icon: "♙", label: "승인 대기 및 전체 사용자", route: "admin-users", badge: pending ? String(pending) : "" })}</div></section>
+    <section class="mobile-settings-section"><h3>업무 데이터</h3><div>${mobileMoreRow({ icon: "▥", label: "업무 진행 이력", route: "admin-activity" })}</div></section>
     <section class="mobile-settings-section"><h3>운영 설정</h3><div>${mobileMoreRow({ icon: "➤", label: "텔레그램 봇 관리", route: "admin-telegram" })}${mobileMoreRow({ icon: "◇", label: "담당자·직책 관리", route: "admin-members" })}${mobileMoreRow({ icon: "▤", label: "드롭다운 항목 관리", route: "admin-dropdowns" })}</div></section>
   `);
+}
+
+function renderMobileAdminActivity() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  return mobileSubpage("업무 진행 이력", renderAdminActivityManager({ mobile: true }));
 }
 
 function renderMobileTelegramDigest() {
@@ -11240,6 +11470,7 @@ function renderMobileMoreRoute() {
   if (mobileMoreRoute === "admin-home") return renderMobileAdminHome();
   if (mobileMoreRoute === "admin-users") return renderMobileAdminUsers();
   if (mobileMoreRoute.startsWith("admin-user:")) return renderMobileAdminUserDetail(mobileMoreRoute.slice(11));
+  if (mobileMoreRoute === "admin-activity") return renderMobileAdminActivity();
   if (mobileMoreRoute === "admin-telegram") return renderMobileTelegramDigest();
   if (mobileMoreRoute === "admin-dropdowns") return renderMobileAdminDropdowns();
   if (mobileMoreRoute === "admin-members") return renderMobileAdminMembers();
@@ -11341,6 +11572,10 @@ function bindMobileCoreActions(app) {
     button.disabled = true;
     saveOwnerLinkSettings().finally(() => { if (button.isConnected) button.disabled = false; });
   });
+  app.querySelectorAll("[data-activity-log-filter]").forEach((input) => input.addEventListener("change", () => {
+    updateAdminActivityFilter(input.dataset.activityLogFilter, input.value);
+    renderMobileDashboard();
+  }));
   bind("[data-mobile-notifications-close]", () => openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection));
   app.querySelectorAll("[data-mobile-open-task-id]").forEach((card) => {
     card.addEventListener("click", (event) => {
@@ -14800,6 +15035,12 @@ $("#adminContent").addEventListener("click", (event) => {
 });
 
 $("#adminContent").addEventListener("change", async (event) => {
+  const activityFilter = event.target.closest("[data-activity-log-filter]");
+  if (activityFilter) {
+    updateAdminActivityFilter(activityFilter.dataset.activityLogFilter, activityFilter.value);
+    renderAdmin();
+    return;
+  }
   if (event.target.matches('[name="deliveryMode"]')) {
     toggleTelegramDigestScheduleFields(event.target.closest("[data-telegram-digest-form]"));
     return;
