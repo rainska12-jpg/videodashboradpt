@@ -10542,7 +10542,7 @@ h3 {
   left: 0;
   display: none;
   gap: 3px;
-  max-height: 224px;
+  max-height: var(--auth-position-menu-max-height, 224px);
   overflow-y: auto;
   border: 1px solid var(--geist-hairline);
   border-radius: 12px;
@@ -10553,6 +10553,11 @@ h3 {
 
 .auth-position-menu.open {
   display: grid;
+}
+
+.auth-position-menu.opens-upward {
+  top: auto;
+  bottom: calc(100% + 7px);
 }
 
 .auth-position-menu button {

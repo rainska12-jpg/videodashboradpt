@@ -1530,6 +1530,29 @@ function setAuthMessage(message) {
   $("#authMessage").textContent = message;
 }
 
+function positionAuthPositionMenu() {
+  const button = $("#signupPositionButton");
+  const menu = $("#signupPositionMenu");
+  if (!button || !menu || !menu.classList.contains("open")) return;
+
+  const viewport = window.visualViewport;
+  const viewportTop = viewport?.offsetTop || 0;
+  const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
+  const buttonRect = button.getBoundingClientRect();
+  const bottomGuard = window.matchMedia("(max-width: 480px)").matches ? 96 : 14;
+  const spaceAbove = Math.max(0, buttonRect.top - viewportTop - 14);
+  const spaceBelow = Math.max(0, viewportBottom - buttonRect.bottom - bottomGuard);
+  const desiredHeight = Math.min(menu.scrollHeight || 224, 224);
+  const opensUpward = spaceBelow < desiredHeight && spaceAbove > spaceBelow;
+  const availableHeight = opensUpward ? spaceAbove : spaceBelow;
+
+  menu.classList.toggle("opens-upward", opensUpward);
+  menu.style.setProperty(
+    "--auth-position-menu-max-height",
+    `${Math.max(120, Math.min(224, Math.floor(availableHeight - 7)))}px`
+  );
+}
+
 function setAuthPositionMenu(open) {
   const button = $("#signupPositionButton");
   const menu = $("#signupPositionMenu");
@@ -1538,7 +1561,17 @@ function setAuthPositionMenu(open) {
   button.setAttribute("aria-expanded", String(open));
   menu.classList.toggle("open", open);
   menu.setAttribute("aria-hidden", String(!open));
+  if (open) {
+    positionAuthPositionMenu();
+  } else {
+    menu.classList.remove("opens-upward");
+    menu.style.removeProperty("--auth-position-menu-max-height");
+  }
 }
+
+window.addEventListener("resize", positionAuthPositionMenu);
+window.visualViewport?.addEventListener("resize", positionAuthPositionMenu);
+window.visualViewport?.addEventListener("scroll", positionAuthPositionMenu);
 
 function selectAuthPosition(position) {
   const input = $("#signupPosition");

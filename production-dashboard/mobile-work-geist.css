@@ -1235,7 +1235,7 @@
   #workDetail #workManagementRecords .record-composer {
     left: 12px;
     right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(96px + env(safe-area-inset-bottom));
     z-index: 220;
     gap: 10px;
     border-radius: 12px;
@@ -1278,7 +1278,7 @@
   }
 
   #workDetail #workDetailRecordsTab.active {
-    padding-bottom: 220px;
+    padding-bottom: 312px;
   }
 
   #workDetail .record-tools {
