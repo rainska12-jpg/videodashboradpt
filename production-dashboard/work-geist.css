@@ -1545,7 +1545,15 @@
   }
 
   #workDetail .work-start-date-control {
-    width: min(180px, 100%);
+    width: min(330px, 100%);
+    display: grid;
+    grid-template-columns: minmax(140px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+
+  #workDetail .work-start-date-control > div {
+    min-width: 0;
   }
 
   #workDetail .work-start-date-control .date-button,

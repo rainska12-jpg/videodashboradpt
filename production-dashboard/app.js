@@ -2669,6 +2669,10 @@ function workStartDateFieldControl() {
   return `
     <div class="date-field-control work-start-date-control">
       <div id="work-detail-kickoffDate"></div>
+      <label class="calendar-toggle work-start-calendar-toggle">
+        <input type="checkbox" data-work-calendar-field="kickoffDate" />
+        <span>캘린더 등록</span>
+      </label>
     </div>
   `;
 }

@@ -2227,10 +2227,27 @@
   }
 
   #workDetail .work-start-date-control,
-  #workDetail .work-start-date-control > div,
   #workDetail .work-schedule-date,
   #workDetail .work-schedule-date > div {
     width: 100%;
+  }
+
+  #workDetail .work-start-date-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px;
+    align-items: center;
+  }
+
+  #workDetail .work-start-date-control > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #workDetail .work-start-calendar-toggle {
+    min-width: 106px;
+    justify-content: center;
+    white-space: nowrap;
   }
 
   #workDetail .work-start-date-control .date-button,
