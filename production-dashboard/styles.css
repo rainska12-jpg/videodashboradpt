@@ -4357,6 +4357,31 @@ h3 {
   background: color-mix(in srgb, var(--geist-accent, #00ed64) 20%, transparent);
 }
 
+.icon-share-btn {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  padding: 0;
+}
+
+.icon-share-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-share-btn.is-loading svg {
+  animation: spin 800ms linear infinite;
+}
+
 .share-readonly-banner {
   display: flex;
   align-items: center;

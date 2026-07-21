@@ -196,8 +196,6 @@ export function buildTelegramDigest(state = {}, rawSettings = {}, options = {}) 
 
   if (!selectedSections.length) selectedSections.push("[알림 항목]\n• 선택된 항목이 없습니다.");
   if (settings.additionalMessage) selectedSections.push(settings.additionalMessage);
-  const dashboardUrl = cleanText(options.dashboardUrl, 500);
-  if (dashboardUrl) selectedSections.push(`🔗 대시보드 열기\n${dashboardUrl}`);
 
   const message = `📋 영상제작과 업무 브리핑\n${koreanDateLabel(todayKey)}\n\n${selectedSections.join("\n\n")}`;
   if (message.length <= 4000) return message;
@@ -420,7 +418,7 @@ function escapeTelegramHtml(value) {
 export function formatTelegramMessageHtml(text) {
   return String(text || "").split("\n").map((line) => {
     const escapedLine = escapeTelegramHtml(line);
-    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || /^🎬 /.test(line) || /^📅 /.test(line) || /^📡 /.test(line) || /^⏰ /.test(line) || line === "📢 특이사항" || line === "🔗 대시보드 열기") return `<b>${escapedLine}</b>`;
+    if (/^\[.+ · \d+건\]$/.test(line) || /^\[[^\]]+\](?:\[[^\]]+\])?$/.test(line) || /^🎬 /.test(line) || /^📅 /.test(line) || /^📡 /.test(line) || /^⏰ /.test(line) || line === "📢 특이사항") return `<b>${escapedLine}</b>`;
     return escapedLine;
   }).join("\n");
 }
@@ -437,13 +435,6 @@ async function sendTelegramMessage(text) {
   const result = await response.json().catch(() => ({}));
   if (!response.ok || result.ok === false) throw new Error(result.description || `텔레그램 전송에 실패했습니다. (${response.status})`);
   return result.result || {};
-}
-
-function requestOrigin(req) {
-  const configured = envValue("DASHBOARD_URL").replace(/\/$/, "");
-  if (configured) return configured;
-  const host = req.headers["x-forwarded-host"] || req.headers.host || "";
-  return host ? `https://${host}` : "";
 }
 
 function bearerToken(req) {
@@ -526,7 +517,7 @@ export async function handleTelegramDigestRequest(req, res) {
     }
 
     const settings = normalizeTelegramDigestSettings(state.telegramDigest || {});
-    const message = buildTelegramDigest(state, settings, { dashboardUrl: requestOrigin(req) });
+    const message = buildTelegramDigest(state, settings);
     if (action === "preview") return res.status(200).json({ ok: true, message });
 
     const telegramResult = await sendTelegramMessage(message);
@@ -565,7 +556,7 @@ export async function handleScheduledTelegramDigest(req, res, scheduledHour) {
         results.push({ kind: "digest", skipped: "already-sent" });
       } else {
         try {
-          const message = buildTelegramDigest(state, digestSettings, { now, todayKey, dashboardUrl: requestOrigin(req) });
+          const message = buildTelegramDigest(state, digestSettings, { now, todayKey });
           const telegramResult = await sendTelegramMessage(message);
           const status = { type: "scheduled", status: "sent", sentAt: new Date().toISOString(), date: todayKey, deliveryTime: digestSettings.deliveryTime, messageId: telegramResult.message_id || null };
           await upsertDashboardRow(lock.id, status, { privileged: true });

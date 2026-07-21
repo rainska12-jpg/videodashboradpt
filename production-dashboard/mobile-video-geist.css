@@ -1499,12 +1499,12 @@
 
   #projectDetail #shareProjectBtn {
     grid-column: 2;
-    width: auto;
+    width: 38px;
+    min-width: 38px;
     min-height: 38px;
-    justify-self: stretch;
+    justify-self: center;
     border-radius: 6px;
-    padding: 0 10px;
-    font-size: 11px;
+    padding: 0;
   }
 
   #projectDetail #saveProjectBasicBtn {

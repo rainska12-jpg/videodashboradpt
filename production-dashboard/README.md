@@ -47,7 +47,6 @@ TELEGRAM_BOT_TOKEN=BotFather에서 받은 봇 토큰
 TELEGRAM_CHAT_ID=텔레그램 그룹 chat id
 SUPABASE_SECRET_KEY=Supabase 서버 전용 Secret key
 CRON_SECRET=16자 이상의 임의 문자열
-DASHBOARD_URL=https://대시보드주소
 ```
 
 Vercel에도 같은 값을 등록해야 합니다.
@@ -61,7 +60,6 @@ Vercel에도 같은 값을 등록해야 합니다.
    - `TELEGRAM_CHAT_ID`
    - `SUPABASE_SECRET_KEY` 또는 기존 프로젝트의 `SUPABASE_SERVICE_ROLE_KEY`
    - `CRON_SECRET`
-   - `DASHBOARD_URL`(선택)
 4. 저장 후 Redeploy(다시 배포)를 실행합니다.
 
 ## 4. Vercel 배포

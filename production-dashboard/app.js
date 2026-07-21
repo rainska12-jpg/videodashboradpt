@@ -1908,10 +1908,11 @@ async function createAndCopyShareLink(entityType, entityId, button) {
     return;
   }
 
-  const originalText = button?.textContent || `${entityLabel} 공유`;
   if (button) {
     button.disabled = true;
-    button.textContent = "링크 생성 중";
+    button.classList.add("is-loading");
+    button.setAttribute("aria-busy", "true");
+    button.title = "공유 링크 생성 중";
   }
   try {
     await saveRemoteDashboardState();
@@ -1929,7 +1930,9 @@ async function createAndCopyShareLink(entityType, entityId, button) {
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = originalText;
+      button.classList.remove("is-loading");
+      button.removeAttribute("aria-busy");
+      button.title = `${entityLabel} 공유 링크 복사`;
     }
   }
 }

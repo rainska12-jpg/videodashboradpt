@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=85" />
+    <link rel="stylesheet" href="./styles.css?v=86" />
     <link rel="stylesheet" href="./work-task.css?v=37" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -28,8 +28,8 @@
     <link rel="stylesheet" href="./admin-geist.css?v=4" />
     <link rel="stylesheet" href="./account-geist.css?v=8" />
     <link rel="stylesheet" href="./mobile-task-geist.css?v=8" />
-    <link rel="stylesheet" href="./mobile-video-geist.css?v=10" />
-    <link rel="stylesheet" href="./mobile-work-geist.css?v=26" />
+    <link rel="stylesheet" href="./mobile-video-geist.css?v=11" />
+    <link rel="stylesheet" href="./mobile-work-geist.css?v=27" />
     <link rel="stylesheet" href="./mobile-calendar-geist.css?v=6" />
     <link rel="stylesheet" href="./mobile-notification-geist.css?v=3" />
     <link rel="stylesheet" href="./mobile-more-geist.css?v=7" />
@@ -495,7 +495,9 @@
         </div>
         <div class="detail-actions">
           <button id="closeDetailBtn" class="pill ghost">목록으로</button>
-          <button id="shareProjectBtn" class="pill share-pill" type="button">영상 공유</button>
+          <button id="shareProjectBtn" class="pill share-pill icon-share-btn" type="button" aria-label="영상 공유 링크 복사" title="영상 공유 링크 복사">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.1M8.7 13.3l6.6 4.1"/></svg>
+          </button>
           <button id="saveProjectBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteDetailBtn" class="pill danger-pill">삭제</button>
         </div>
@@ -545,7 +547,9 @@
         </div>
         <div class="detail-actions">
           <button id="closeWorkDetailBtn" class="pill ghost">목록으로</button>
-          <button id="shareWorkBtn" class="pill share-pill" type="button">업무 공유</button>
+          <button id="shareWorkBtn" class="pill share-pill icon-share-btn" type="button" aria-label="업무 공유 링크 복사" title="업무 공유 링크 복사">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.7 10.7 6.6-4.1M8.7 13.3l6.6 4.1"/></svg>
+          </button>
           <button id="saveWorkBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteWorkDetailBtn" class="pill danger-pill">삭제</button>
         </div>
@@ -1045,6 +1049,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=148"></script>
+    <script src="./app.js?v=149"></script>
   </body>
 </html>
