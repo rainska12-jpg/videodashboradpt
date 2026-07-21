@@ -1882,19 +1882,29 @@ function shareUrlForToken(token) {
 
 async function copyShareUrl(url) {
   if (navigator.clipboard?.writeText && window.isSecureContext) {
-    await navigator.clipboard.writeText(url);
-    return;
+    try {
+      await navigator.clipboard.writeText(url);
+      return true;
+    } catch (error) {
+      console.warn("Clipboard API failed; using copy fallback", error);
+    }
   }
   const input = document.createElement("textarea");
   input.value = url;
   input.setAttribute("readonly", "");
   input.style.position = "fixed";
+  input.style.left = "-9999px";
+  input.style.top = "0";
+  input.style.fontSize = "16px";
   input.style.opacity = "0";
   document.body.appendChild(input);
+  input.focus();
   input.select();
+  input.setSelectionRange(0, input.value.length);
   const copied = document.execCommand("copy");
   input.remove();
   if (!copied) throw new Error("copy failed");
+  return true;
 }
 
 async function createAndCopyShareLink(entityType, entityId, button) {
@@ -1912,6 +1922,7 @@ async function createAndCopyShareLink(entityType, entityId, button) {
     button.disabled = true;
     button.classList.add("is-loading");
     button.setAttribute("aria-busy", "true");
+    button.setAttribute("aria-label", `${entityLabel} 공유 링크 생성 중`);
     button.title = "공유 링크 생성 중";
   }
   try {
@@ -1922,7 +1933,7 @@ async function createAndCopyShareLink(entityType, entityId, button) {
     });
     if (error) throw error;
     await copyShareUrl(shareUrlForToken(token));
-    showToast(`${entityLabel} 읽기 전용 공유 링크를 복사했습니다.`);
+    showToast(`✓ ${entityLabel} 공유 링크가 복사되었습니다.`, { type: "success", duration: 2800 });
   } catch (error) {
     console.warn("Share link creation failed", error);
     const missingSetup = String(error?.message || "").includes("create_share_link");
@@ -1932,6 +1943,7 @@ async function createAndCopyShareLink(entityType, entityId, button) {
       button.disabled = false;
       button.classList.remove("is-loading");
       button.removeAttribute("aria-busy");
+      button.setAttribute("aria-label", `${entityLabel} 공유 링크 복사`);
       button.title = `${entityLabel} 공유 링크 복사`;
     }
   }
@@ -5505,16 +5517,18 @@ function moveCalendarEvent(payload, targetDate) {
   showToast("일정 날짜가 변경되었습니다.");
 }
 
-function showToast(message) {
+function showToast(message, { type = "default", duration = 2200 } = {}) {
   const toast = document.createElement("div");
-  toast.className = "toast";
+  toast.className = `toast toast-${type}`;
   toast.textContent = message;
+  toast.setAttribute("role", "status");
+  toast.setAttribute("aria-live", "polite");
   document.body.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("show"));
   setTimeout(() => {
     toast.classList.remove("show");
     setTimeout(() => toast.remove(), 240);
-  }, 1800);
+  }, duration);
 }
 
 function propertyRow(icon, label, content, className = "") {

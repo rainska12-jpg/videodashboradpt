@@ -1501,10 +1501,14 @@
     grid-column: 2;
     width: 38px;
     min-width: 38px;
+    height: 38px;
     min-height: 38px;
     justify-self: center;
     border-radius: 6px;
-    padding: 0;
+    padding: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
 
   #projectDetail #saveProjectBasicBtn {

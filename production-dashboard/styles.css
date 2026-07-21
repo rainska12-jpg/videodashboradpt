@@ -4335,6 +4335,11 @@ h3 {
   transform: translateY(0);
 }
 
+.toast.toast-success {
+  border: 1px solid color-mix(in srgb, var(--geist-accent, #00ed64) 54%, transparent);
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 18%, var(--surface-3));
+}
+
 .detail-actions {
   display: flex;
   gap: 10px;
@@ -4362,24 +4367,50 @@ h3 {
   min-width: 40px;
   height: 40px;
   min-height: 40px;
-  display: inline-grid;
-  place-items: center;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   border-radius: 999px;
-  padding: 0;
+  padding: 0 !important;
+  line-height: 0;
 }
 
 .icon-share-btn svg {
-  width: 18px;
-  height: 18px;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 19px;
+  height: 19px;
+  transform: translate(-50%, -50%);
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
 }
 
 .icon-share-btn.is-loading svg {
-  animation: spin 800ms linear infinite;
+  transform: translate(-50%, -50%);
+}
+
+@media (max-width: 768px) {
+  .toast {
+    right: 14px;
+    bottom: calc(96px + env(safe-area-inset-bottom));
+    left: 14px;
+    z-index: 500;
+    border-radius: 10px;
+    padding: 13px 16px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.4;
+    transform: translateY(10px);
+  }
+
+  .toast.show {
+    transform: translateY(0);
+  }
 }
 
 .share-readonly-banner {
