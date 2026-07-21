@@ -1831,6 +1831,11 @@ body.auth-locked .mobile-fab-wrap {
   user-select: none;
 }
 
+body.shared-readonly :is(.app-shell, .mobile-topbar, .mobile-tabbar, .mobile-fab-wrap) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .auth-card {
   display: grid;
   gap: 14px;
@@ -4339,6 +4344,62 @@ h3 {
 
 .detail-actions {
   justify-content: flex-end;
+}
+
+.share-pill {
+  border: 1px solid color-mix(in srgb, var(--geist-accent, #00ed64) 48%, transparent);
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 12%, transparent);
+  color: var(--geist-ink, var(--text));
+}
+
+.share-pill:hover {
+  border-color: var(--geist-accent, #00ed64);
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 20%, transparent);
+}
+
+.share-readonly-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 18px;
+  border: 1px solid color-mix(in srgb, var(--geist-accent, #00ed64) 36%, var(--geist-hairline, #eaeaea));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 9%, var(--geist-elevated, #fff));
+  color: var(--geist-body, var(--text));
+  padding: 12px 14px;
+  font-size: 13px;
+}
+
+.share-readonly-banner[hidden] {
+  display: none;
+}
+
+.share-readonly-banner span {
+  display: grid;
+  gap: 2px;
+}
+
+.share-readonly-banner strong {
+  color: var(--geist-ink, var(--text));
+  font-size: 14px;
+}
+
+.share-readonly-banner .pill {
+  flex: 0 0 auto;
+  min-height: 36px;
+}
+
+@media (max-width: 768px) {
+  .share-readonly-banner {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    margin: 0 -12px 14px;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
+  }
 }
 
 .detail-title {

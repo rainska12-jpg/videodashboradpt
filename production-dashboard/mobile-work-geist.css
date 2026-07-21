@@ -2381,3 +2381,27 @@
     grid-column: auto;
   }
 }
+
+@media (max-width: 768px) {
+  #workDetail .detail-actions {
+    grid-template-columns: 38px minmax(72px, 1fr) minmax(62px, auto) 38px;
+  }
+
+  #workDetail #shareWorkBtn {
+    grid-column: 2;
+    width: auto;
+    min-height: 38px;
+    justify-self: stretch;
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  #workDetail #saveWorkBasicBtn {
+    grid-column: 3;
+  }
+
+  #workDetail #deleteWorkDetailBtn {
+    grid-column: 4;
+  }
+}

@@ -8,12 +8,16 @@ const SUPABASE_URL = ENV.SUPABASE_URL || ENV.NEXT_PUBLIC_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY || ENV.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const SUPABASE_ENABLED = Boolean(window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY);
 const DASHBOARD_STATE_ROW_ID = "main";
+const SHARE_TOKEN = new URLSearchParams(window.location.search).get("share")?.trim() || "";
+const SHARE_TOKEN_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let supabaseClient = null;
 let currentProfile = null;
 let remoteStateLoaded = false;
 let remoteSaveTimer = null;
 let isRemoteHydrating = false;
 let isAuthInitializing = SUPABASE_ENABLED;
+let sharedGuestMode = false;
+let sharedLinkPayload = null;
 
 function getSupabaseClient() {
   if (!SUPABASE_ENABLED) return null;
@@ -129,6 +133,63 @@ function queueRemoteSave() {
   }, 700);
 }
 
+async function fetchSharedLinkPayload() {
+  if (!SUPABASE_ENABLED || !SHARE_TOKEN || !SHARE_TOKEN_PATTERN.test(SHARE_TOKEN)) return null;
+  const { data, error } = await getSupabaseClient().rpc("get_shared_item", { p_token: SHARE_TOKEN });
+  if (error) throw error;
+  if (!data?.entity || !["project", "work"].includes(data.entityType)) return null;
+  return data;
+}
+
+function installSharedGuestState(payload) {
+  const guestState = structuredClone(sampleData);
+  guestState.options = { ...structuredClone(defaultOptions), ...(payload.options || {}) };
+  guestState.optionColors = payload.optionColors || {};
+  guestState.owners = Array.isArray(payload.owners) ? payload.owners : [];
+  guestState.projects = payload.entityType === "project" ? [payload.entity] : [];
+  guestState.works = payload.entityType === "work" ? [payload.entity] : [];
+  guestState.tasks = Array.isArray(payload.tasks) ? payload.tasks : [];
+  guestState.currentUser = null;
+  state = migrateOwnerState(normalizeState(guestState));
+  sharedLinkPayload = payload;
+  sharedGuestMode = true;
+}
+
+function openSharedLinkTarget(payload = sharedLinkPayload) {
+  if (!payload) return false;
+  const entityId = payload.entityId || payload.entity?.id;
+  if (payload.entityType === "project" && state.projects.some((item) => item.id === entityId)) {
+    performOpenProjectDetail(entityId);
+    return true;
+  }
+  if (payload.entityType === "work" && state.works.some((item) => item.id === entityId)) {
+    performOpenWorkDetail(entityId);
+    return true;
+  }
+  return false;
+}
+
+async function openSharedLinkForSignedIn() {
+  if (!SHARE_TOKEN) return false;
+  try {
+    sharedLinkPayload = await fetchSharedLinkPayload();
+    sharedGuestMode = false;
+    if (!sharedLinkPayload) {
+      showToast("유효하지 않거나 해제된 공유 링크입니다.");
+      return false;
+    }
+    if (!openSharedLinkTarget(sharedLinkPayload)) {
+      showToast("공유된 항목을 찾을 수 없습니다.");
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("Shared link load failed", error);
+    showToast("공유 링크를 불러오지 못했습니다.");
+    return false;
+  }
+}
+
 async function initSupabaseSession() {
   const client = getSupabaseClient();
   if (!client) {
@@ -141,6 +202,17 @@ async function initSupabaseSession() {
     if (!user) {
       currentProfile = null;
       state.currentUser = null;
+      if (SHARE_TOKEN) {
+        const payload = await fetchSharedLinkPayload();
+        if (payload) {
+          installSharedGuestState(payload);
+          isAuthInitializing = false;
+          renderAll();
+          openSharedLinkTarget(payload);
+          return;
+        }
+        setAuthMessage("유효하지 않거나 해제된 공유 링크입니다.");
+      }
       isAuthInitializing = false;
       renderAll();
       return;
@@ -158,8 +230,10 @@ async function initSupabaseSession() {
     await refreshSupabaseProfiles();
     isAuthInitializing = false;
     renderAll();
+    await openSharedLinkForSignedIn();
   } catch (error) {
     console.warn("Supabase session init failed", error);
+    if (SHARE_TOKEN) setAuthMessage("공유 링크를 불러오지 못했습니다. 잠시 후 다시 시도하세요.");
     isAuthInitializing = false;
     renderAll();
   }
@@ -1597,9 +1671,11 @@ function renderAuth() {
   }
   const user = currentUser();
   const signedIn = AUTH_DISABLED || Boolean(user);
+  const canView = signedIn || sharedGuestMode;
   overlay.classList.remove("auth-loading");
-  overlay.classList.toggle("hidden", signedIn);
-  document.body.classList.toggle("auth-locked", !signedIn);
+  overlay.classList.toggle("hidden", canView);
+  document.body.classList.toggle("auth-locked", !canView);
+  document.body.classList.toggle("shared-readonly", sharedGuestMode);
   $("#logoutBtn").classList.toggle("hidden", !signedIn);
   $("#currentUserPanel").classList.toggle("hidden", !signedIn);
   $("#seedBtn")?.classList.toggle("hidden", !isAdminUser());
@@ -1612,6 +1688,14 @@ function showAuthMode(mode) {
   $("#authForm").classList.toggle("signup-mode", signupMode);
   $("#authMessage").textContent = "";
   setAuthPositionMenu(false);
+}
+
+function requestSharedLinkLogin() {
+  sharedGuestMode = false;
+  showAuthMode("login");
+  renderAuth();
+  setAuthMessage("로그인하면 공유된 항목을 수정할 수 있습니다.");
+  setTimeout(() => $("#authId")?.focus(), 0);
 }
 
 async function login(username, password) {
@@ -1650,7 +1734,9 @@ async function login(username, password) {
     await loadRemoteDashboardState();
     await refreshSupabaseProfiles();
     saveState();
+    sharedGuestMode = false;
     renderAll();
+    await openSharedLinkForSignedIn();
     setAuthMessage("");
     return;
   }
@@ -1776,6 +1862,76 @@ function formatRecordTime(value) {
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   queueRemoteSave();
+}
+
+function isSharedGuestItem(entityType, entityId) {
+  return Boolean(
+    sharedGuestMode
+    && sharedLinkPayload?.entityType === entityType
+    && (sharedLinkPayload.entityId || sharedLinkPayload.entity?.id) === entityId
+  );
+}
+
+function shareUrlForToken(token) {
+  const url = new URL(window.location.href);
+  url.search = "";
+  url.hash = "";
+  url.searchParams.set("share", token);
+  return url.toString();
+}
+
+async function copyShareUrl(url) {
+  if (navigator.clipboard?.writeText && window.isSecureContext) {
+    await navigator.clipboard.writeText(url);
+    return;
+  }
+  const input = document.createElement("textarea");
+  input.value = url;
+  input.setAttribute("readonly", "");
+  input.style.position = "fixed";
+  input.style.opacity = "0";
+  document.body.appendChild(input);
+  input.select();
+  const copied = document.execCommand("copy");
+  input.remove();
+  if (!copied) throw new Error("copy failed");
+}
+
+async function createAndCopyShareLink(entityType, entityId, button) {
+  const entityLabel = entityType === "project" ? "영상" : "업무";
+  if (!currentUser()) {
+    showToast("공유 링크 생성은 로그인 후 사용할 수 있습니다.");
+    return;
+  }
+  if (!SUPABASE_ENABLED) {
+    showToast("배포 환경에서 Supabase를 연결한 뒤 공유할 수 있습니다.");
+    return;
+  }
+
+  const originalText = button?.textContent || `${entityLabel} 공유`;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "링크 생성 중";
+  }
+  try {
+    await saveRemoteDashboardState();
+    const { data: token, error } = await getSupabaseClient().rpc("create_share_link", {
+      p_entity_type: entityType,
+      p_entity_id: entityId
+    });
+    if (error) throw error;
+    await copyShareUrl(shareUrlForToken(token));
+    showToast(`${entityLabel} 읽기 전용 공유 링크를 복사했습니다.`);
+  } catch (error) {
+    console.warn("Share link creation failed", error);
+    const missingSetup = String(error?.message || "").includes("create_share_link");
+    showToast(missingSetup ? "Supabase에서 최신 schema.sql을 먼저 실행하세요." : "공유 링크를 만들지 못했습니다.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function dateOnly(date) {
@@ -3008,15 +3164,19 @@ function renderWorkDetail() {
   const work = state.works.find((item) => item.id === activeWorkId);
   if (!work) return;
   const editable = canEditWork(work);
+  const sharedGuest = isSharedGuestItem("work", work.id);
   const basicDraft = ensureWorkBasicDraft(work);
 
   $("#workDetail .detail-page").classList.toggle("readonly", !editable);
+  $("#workShareBanner").hidden = !sharedGuest;
+  $("#workDetail .detail-actions").hidden = sharedGuest;
+  $("#shareWorkBtn").hidden = !editable;
   $("#deleteWorkDetailBtn").disabled = !editable;
   $("#deleteWorkDetailBtn").title = editable ? "" : "담당자 또는 관리자만 삭제할 수 있습니다.";
   $("#workDetailTitle").value = work.title;
   $("#workDetailTitle").disabled = !editable;
   $("#workDetailProperties").innerHTML = `
-    ${!editable ? '<div class="readonly-notice">이 업무의 담당자 또는 관리자만 수정할 수 있습니다.</div>' : ""}
+    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "이 업무의 담당자 또는 관리자만 수정할 수 있습니다."}</div>` : ""}
     ${propertyRow("☷", "업무분류", '<div id="workDetailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="workDetailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="workDetailClient"></div>')}
@@ -4525,6 +4685,7 @@ function performCloseWorkDetail() {
 }
 
 function closeWorkDetail() {
+  if (isSharedGuestItem("work", activeWorkId)) return;
   requestBasicLeave("work", performCloseWorkDetail);
 }
 
@@ -5472,15 +5633,19 @@ function renderProjectDetail() {
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (!project) return;
   const editable = canEditProject(project);
+  const sharedGuest = isSharedGuestItem("project", project.id);
   const basicDraft = ensureProjectBasicDraft(project);
 
-  $(".detail-page").classList.toggle("readonly", !editable);
+  $("#projectDetail .detail-page").classList.toggle("readonly", !editable);
+  $("#projectShareBanner").hidden = !sharedGuest;
+  $("#projectDetail .detail-actions").hidden = sharedGuest;
+  $("#shareProjectBtn").hidden = !editable;
   $("#deleteDetailBtn").disabled = !editable;
   $("#deleteDetailBtn").title = editable ? "" : "담당자 또는 관리자만 삭제할 수 있습니다.";
   $("#detailTitle").value = project.title;
   $("#detailTitle").disabled = !editable;
   $("#detailProperties").innerHTML = `
-    ${!editable ? '<div class="readonly-notice">이 프로젝트의 담당자 또는 관리자만 수정할 수 있습니다.</div>' : ""}
+    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "이 영상의 담당자 또는 관리자만 수정할 수 있습니다."}</div>` : ""}
     ${propertyRow("☷", "업무분류", '<div id="detailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="detailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="detailClient"></div>')}
@@ -6209,6 +6374,7 @@ function performCloseProjectDetail() {
 }
 
 function closeProjectDetail() {
+  if (isSharedGuestItem("project", activeProjectId)) return;
   requestBasicLeave("project", performCloseProjectDetail);
 }
 
@@ -13821,17 +13987,30 @@ document.addEventListener("keydown", (event) => {
   if ($("#studioTelegramModal")?.classList.contains("open")) closeStudioTelegramModal();
 });
 
-$("#logoutBtn").addEventListener("click", () => {
+$("#logoutBtn").addEventListener("click", async () => {
   toggleDesktopAccountMenu(false);
   currentProfile = null;
   state.currentUser = null;
   saveState();
-  renderAll();
   if (SUPABASE_ENABLED) {
-    getSupabaseClient()?.auth.signOut().catch(() => {
+    await getSupabaseClient()?.auth.signOut().catch(() => {
       showToast("서버 로그아웃 처리가 지연되고 있습니다.");
     });
   }
+  if (SHARE_TOKEN) {
+    try {
+      const payload = await fetchSharedLinkPayload();
+      if (payload) {
+        installSharedGuestState(payload);
+        renderAll();
+        openSharedLinkTarget(payload);
+        return;
+      }
+    } catch (error) {
+      console.warn("Shared link reload after logout failed", error);
+    }
+  }
+  renderAll();
 });
 
 document.body.addEventListener("click", (event) => {
@@ -14047,6 +14226,9 @@ $("#calendarGrid").addEventListener("drop", (event) => {
 });
 
 $("#closeDetailBtn").addEventListener("click", closeProjectDetail);
+$("#shareProjectBtn").addEventListener("click", (event) => {
+  if (activeProjectId) createAndCopyShareLink("project", activeProjectId, event.currentTarget);
+});
 $("#saveProjectBasicBtn").addEventListener("click", () => saveProjectBasicChanges());
 $("#deleteDetailBtn").addEventListener("click", () => {
   if (activeProjectId) confirmDelete(() => deleteProject(activeProjectId));
@@ -14061,10 +14243,14 @@ $("#detailMemo").addEventListener("keyup", () => updateMemoToolbarState("detailM
 $("#detailMemo").addEventListener("mouseup", () => updateMemoToolbarState("detailMemo"));
 $("#detailMemo").addEventListener("focus", () => updateMemoToolbarState("detailMemo"));
 $("#closeWorkDetailBtn").addEventListener("click", closeWorkDetail);
+$("#shareWorkBtn").addEventListener("click", (event) => {
+  if (activeWorkId) createAndCopyShareLink("work", activeWorkId, event.currentTarget);
+});
 $("#saveWorkBasicBtn").addEventListener("click", () => saveWorkBasicChanges());
 $("#deleteWorkDetailBtn").addEventListener("click", () => {
   if (activeWorkId) confirmDelete(() => deleteWork(activeWorkId));
 });
+$$('[data-share-login]').forEach((button) => button.addEventListener("click", requestSharedLinkLogin));
 $("#deleteConfirmCancelBtn").addEventListener("click", closeDeleteConfirm);
 $("#deleteConfirmBtn").addEventListener("click", runDeleteConfirm);
 $("#deleteConfirmModal").addEventListener("click", (event) => {

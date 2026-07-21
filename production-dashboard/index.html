@@ -14,7 +14,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=84" />
+    <link rel="stylesheet" href="./styles.css?v=85" />
     <link rel="stylesheet" href="./work-task.css?v=37" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -28,8 +28,8 @@
     <link rel="stylesheet" href="./admin-geist.css?v=4" />
     <link rel="stylesheet" href="./account-geist.css?v=8" />
     <link rel="stylesheet" href="./mobile-task-geist.css?v=8" />
-    <link rel="stylesheet" href="./mobile-video-geist.css?v=9" />
-    <link rel="stylesheet" href="./mobile-work-geist.css?v=25" />
+    <link rel="stylesheet" href="./mobile-video-geist.css?v=10" />
+    <link rel="stylesheet" href="./mobile-work-geist.css?v=26" />
     <link rel="stylesheet" href="./mobile-calendar-geist.css?v=6" />
     <link rel="stylesheet" href="./mobile-notification-geist.css?v=3" />
     <link rel="stylesheet" href="./mobile-more-geist.css?v=7" />
@@ -489,8 +489,13 @@
 
     <div id="projectDetail" class="detail-shell" aria-hidden="true">
       <div class="detail-page">
+        <div id="projectShareBanner" class="share-readonly-banner" hidden>
+          <span><strong>읽기 전용 공유 화면</strong> 로그인하면 이 영상을 수정할 수 있습니다.</span>
+          <button class="pill ghost" data-share-login type="button">로그인</button>
+        </div>
         <div class="detail-actions">
           <button id="closeDetailBtn" class="pill ghost">목록으로</button>
+          <button id="shareProjectBtn" class="pill share-pill" type="button">영상 공유</button>
           <button id="saveProjectBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteDetailBtn" class="pill danger-pill">삭제</button>
         </div>
@@ -534,8 +539,13 @@
 
     <div id="workDetail" class="detail-shell" aria-hidden="true">
       <div class="detail-page">
+        <div id="workShareBanner" class="share-readonly-banner" hidden>
+          <span><strong>읽기 전용 공유 화면</strong> 로그인하면 이 업무를 수정할 수 있습니다.</span>
+          <button class="pill ghost" data-share-login type="button">로그인</button>
+        </div>
         <div class="detail-actions">
           <button id="closeWorkDetailBtn" class="pill ghost">목록으로</button>
+          <button id="shareWorkBtn" class="pill share-pill" type="button">업무 공유</button>
           <button id="saveWorkBasicBtn" class="pill primary basic-save-btn" type="button" hidden>저장</button>
           <button id="deleteWorkDetailBtn" class="pill danger-pill">삭제</button>
         </div>
@@ -1035,6 +1045,6 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="/api/env.js"></script>
-    <script src="./app.js?v=147"></script>
+    <script src="./app.js?v=148"></script>
   </body>
 </html>

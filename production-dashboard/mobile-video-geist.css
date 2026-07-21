@@ -1493,6 +1493,30 @@
 }
 
 @media (max-width: 768px) {
+  #projectDetail .detail-actions {
+    grid-template-columns: 38px minmax(72px, 1fr) minmax(62px, auto) 38px;
+  }
+
+  #projectDetail #shareProjectBtn {
+    grid-column: 2;
+    width: auto;
+    min-height: 38px;
+    justify-self: stretch;
+    border-radius: 6px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+
+  #projectDetail #saveProjectBasicBtn {
+    grid-column: 3;
+  }
+
+  #projectDetail #deleteDetailBtn {
+    grid-column: 4;
+  }
+}
+
+@media (max-width: 768px) {
   /* Keep the video-project task composer aligned with the work task composer. */
   #projectDetail .project-task-primary-grid {
     display: grid;
