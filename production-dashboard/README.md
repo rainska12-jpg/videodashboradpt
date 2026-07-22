@@ -47,6 +47,8 @@ TELEGRAM_BOT_TOKEN=BotFather에서 받은 봇 토큰
 TELEGRAM_CHAT_ID=텔레그램 그룹 chat id
 SUPABASE_SECRET_KEY=Supabase 서버 전용 Secret key
 CRON_SECRET=16자 이상의 임의 문자열
+OPENAI_API_KEY=OpenAI 서버 전용 API 키
+OPENAI_MONTHLY_REPORT_MODEL=gpt-5.6-luna
 ```
 
 Vercel에도 같은 값을 등록해야 합니다.
@@ -60,6 +62,8 @@ Vercel에도 같은 값을 등록해야 합니다.
    - `TELEGRAM_CHAT_ID`
    - `SUPABASE_SECRET_KEY` 또는 기존 프로젝트의 `SUPABASE_SERVICE_ROLE_KEY`
    - `CRON_SECRET`
+   - `OPENAI_API_KEY`
+   - `OPENAI_MONTHLY_REPORT_MODEL` (선택, 기본값 `gpt-5.6-luna`)
 4. 저장 후 Redeploy(다시 배포)를 실행합니다.
 
 ## 4. Vercel 배포
@@ -97,6 +101,15 @@ Vercel에도 같은 값을 등록해야 합니다.
 
 직접 푸시는 관리자 계정의 Supabase 로그인 정보를 확인한 뒤 실행됩니다. 예약 푸시는 서버에서만 Secret key를 사용하며 브라우저에는 전달되지 않습니다. Vercel Hobby 요금제는 예약 실행 시간이 시간 단위이므로 선택한 시간대의 0~59분 사이에 전송될 수 있습니다.
 
+## 월말보고서 작성
+
+1. Vercel 환경변수에 `OPENAI_API_KEY`를 등록하고 다시 배포합니다.
+2. 관리자 모드 > 보고서 작성에서 보고 월을 선택합니다.
+3. 제목과 날짜 중심으로 자동 수집된 항목을 확인하고 포함 여부 또는 문구를 수정합니다.
+4. 필요하면 `GPT로 정리`를 눌러 항목을 정돈한 뒤 `Word 다운로드`로 `.docx` 파일을 받습니다.
+
+GPT 요청에는 관리기록 본문, 프로젝트 메모, 방송실 시간·장소·스탭 상세정보를 보내지 않습니다. API 키는 서버 함수에서만 사용하며 브라우저 환경변수로 노출하지 않습니다.
+
 ## 파일 설명
 
 - `index.html`: 화면 구조
@@ -105,7 +118,10 @@ Vercel에도 같은 값을 등록해야 합니다.
 - `api/env.js`: Vercel 환경변수를 브라우저에 전달
 - `api/telegram-digest.js`: 관리자 직접 전송 및 미리보기 API
 - `api/telegram-digest-cron-*.js`: 시간대별 예약 실행 API
+- `api/monthly-report.js`: 관리자 인증 및 GPT 월말보고서 정리 API
 - `lib/telegram-digest.js`: 브리핑 구성 및 텔레그램 전송 공통 로직
+- `lib/monthly-report-core.js`: 월말보고서 데이터 수집·중복 제거·검증
+- `lib/monthly-report-docx.js`: 월말보고서 Word 파일 생성
 - `vercel.json`: Vercel 배포 설정
 - `.env.local.example`: 환경변수 예시
 - `supabase/schema.sql`: Supabase 테이블, 트리거, RLS 설정
