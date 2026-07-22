@@ -4814,6 +4814,80 @@ h3 {
   padding: 14px;
 }
 
+.record-theme-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.record-theme-button {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 800;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.record-theme-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
+}
+
+.record-theme-button:not(:disabled):hover {
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.record-theme-button.active.theme-work_content {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: color-mix(in srgb, var(--accent) 13%, var(--surface));
+  color: #0f9f49;
+}
+
+.record-theme-button.active.theme-internal_share {
+  border-color: color-mix(in srgb, #7165e8 48%, var(--border));
+  background: color-mix(in srgb, #7165e8 12%, var(--surface));
+  color: #7165e8;
+}
+
+.record-theme-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.record-theme-badge {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: #0f9f49;
+  padding: 0 9px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.record-theme-badge.theme-internal_share {
+  border-color: color-mix(in srgb, #7165e8 36%, var(--border));
+  background: color-mix(in srgb, #7165e8 10%, var(--surface));
+  color: #7165e8;
+}
+
 .project-revision-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;

@@ -1246,6 +1246,50 @@
     backdrop-filter: blur(16px);
   }
 
+  #workDetail #workManagementRecords .record-theme-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  #workDetail #workManagementRecords .record-theme-button {
+    width: 100%;
+    min-height: 36px;
+    border-color: var(--mobile-video-line);
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    padding: 0 10px;
+    font-size: 10px;
+    font-weight: 500;
+  }
+
+  #workDetail #workManagementRecords .record-theme-button.active.theme-work_content {
+    border-color: var(--mobile-video-accent);
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+  }
+
+  #workDetail #workManagementRecords .record-theme-button.active.theme-internal_share {
+    border-color: color-mix(in srgb, #7165e8 52%, var(--mobile-video-line));
+    background: color-mix(in srgb, #7165e8 12%, var(--mobile-video-elevated));
+    color: #7165e8;
+  }
+
+  #workDetail .record-theme-badge {
+    min-height: 22px;
+    border-color: color-mix(in srgb, var(--mobile-video-accent) 38%, var(--mobile-video-line));
+    background: var(--mobile-video-accent-soft);
+    color: var(--mobile-video-accent-deep);
+    padding: 0 8px;
+    font-size: 9px;
+  }
+
+  #workDetail .record-theme-badge.theme-internal_share {
+    border-color: color-mix(in srgb, #7165e8 38%, var(--mobile-video-line));
+    background: color-mix(in srgb, #7165e8 10%, var(--mobile-video-elevated));
+    color: #6559d2;
+  }
+
   #workDetail #workManagementRecords .record-input {
     min-height: 104px;
     border: 1px solid var(--mobile-video-line);
@@ -1278,7 +1322,7 @@
   }
 
   #workDetail #workDetailRecordsTab.active {
-    padding-bottom: 312px;
+    padding-bottom: 356px;
   }
 
   #workDetail .record-tools {
@@ -1298,16 +1342,18 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+    margin-bottom: 0;
   }
 
   #workDetail .record-meta strong {
-    margin-right: auto;
+    margin-right: 0;
     color: var(--mobile-video-ink);
     font-size: 12px;
     font-weight: 600;
   }
 
   #workDetail .record-meta time {
+    margin-left: auto;
     color: var(--mobile-video-mute);
     font-size: 9px;
   }
@@ -1315,6 +1361,7 @@
   #workDetail .record-card p {
     color: var(--mobile-video-body);
     font-size: 11px;
+    font-weight: 400;
     line-height: 18px;
   }
 

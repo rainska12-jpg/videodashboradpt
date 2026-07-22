@@ -279,6 +279,10 @@ async function deleteProfileFromSupabase(userId) {
 
 const makeId = () => `item-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const PROGRESS_ACTIVITY_TYPES = new Set(["status_change", "task_check", "management_record_created"]);
+const MANAGEMENT_RECORD_THEMES = [
+  { value: "work_content", label: "업무 내용" },
+  { value: "internal_share", label: "내부 공유" }
+];
 const defaultCalendarFields = { kickoffDate: false, shootDate: false, firstEditDate: false, finalDate: true };
 const defaultWorkCalendarFields = { kickoffDate: false, finalDate: true };
 const defaultTelegramDigestSettings = {
@@ -494,6 +498,7 @@ let detailTaskComposerOpen = false;
 let detailTaskDetailOpen = false;
 let detailTaskRecurrenceOpen = false;
 let editingRecordId = null;
+let selectedRecordTheme = "work_content";
 let recordSearchQuery = "";
 let recordFilterMode = viewPref("recordFilterMode", "all");
 let activeDetailTab = "basic";
@@ -509,6 +514,7 @@ let workTaskDetailOpen = false;
 let workTaskRecurrenceOpen = false;
 let workStudioMemoOpen = false;
 let editingWorkRecordId = null;
+let selectedWorkRecordTheme = "work_content";
 let workRecordSearchQuery = "";
 let workRecordFilterMode = viewPref("workRecordFilterMode", "all");
 let activeWorkDetailTab = "basic";
@@ -1025,16 +1031,57 @@ function dateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeManagementRecordTheme(value) {
+  return MANAGEMENT_RECORD_THEMES.some((theme) => theme.value === value) ? value : "work_content";
+}
+
+function managementRecordThemeLabel(value) {
+  const normalized = normalizeManagementRecordTheme(value);
+  return MANAGEMENT_RECORD_THEMES.find((theme) => theme.value === normalized)?.label || "업무 내용";
+}
+
+function managementRecordThemeIcon(value) {
+  if (normalizeManagementRecordTheme(value) === "internal_share") {
+    return '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5.5 7.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm9 0a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2 16v-1.5A3.5 3.5 0 0 1 5.5 11h1A3.5 3.5 0 0 1 10 14.5V16m0-1.5a3.5 3.5 0 0 1 3.5-3.5h1a3.5 3.5 0 0 1 3.5 3.5V16" /></svg>';
+  }
+  return '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12" rx="2" /><path d="M7 4.5v-2h6v2M3 9.5h14M8 9.5v1h4v-1" /></svg>';
+}
+
+function managementRecordThemePicker({ selectedTheme, editable, scope }) {
+  const normalized = normalizeManagementRecordTheme(selectedTheme);
+  const dataAttribute = scope === "work" ? "data-work-record-theme" : "data-record-theme";
+  return `
+    <div class="record-theme-picker" role="group" aria-label="관리기록 테마">
+      ${MANAGEMENT_RECORD_THEMES.map((theme) => `
+        <button class="record-theme-button theme-${theme.value} ${normalized === theme.value ? "active" : ""}" ${dataAttribute}="${theme.value}" type="button" aria-pressed="${normalized === theme.value}" ${editable ? "" : "disabled"}>
+          ${managementRecordThemeIcon(theme.value)}
+          <span>${theme.label}</span>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function updateManagementRecordThemePicker(container, attribute, selectedTheme) {
+  const normalized = normalizeManagementRecordTheme(selectedTheme);
+  container?.querySelectorAll(`[${attribute}]`).forEach((button) => {
+    const active = button.getAttribute(attribute) === normalized;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
 function normalizeActivityLog(item = {}) {
   const occurredAt = String(item.occurredAt || item.createdAt || "");
   const occurredDate = new Date(occurredAt);
   const fallbackDate = Number.isNaN(occurredDate.getTime()) ? "" : dateKey(occurredDate);
+  const activityType = PROGRESS_ACTIVITY_TYPES.has(item.activityType) ? item.activityType : "status_change";
   return {
     id: item.id || makeId(),
     entityType: item.entityType === "work" ? "work" : "project",
     entityId: String(item.entityId || ""),
     entityTitle: String(item.entityTitle || ""),
-    activityType: PROGRESS_ACTIVITY_TYPES.has(item.activityType) ? item.activityType : "status_change",
+    activityType,
     activityDate: /^\d{4}-\d{2}-\d{2}$/.test(String(item.activityDate || "")) ? String(item.activityDate) : fallbackDate,
     occurredAt,
     actorUserId: String(item.actorUserId || ""),
@@ -1043,7 +1090,8 @@ function normalizeActivityLog(item = {}) {
     nextStatus: String(item.nextStatus || ""),
     taskId: String(item.taskId || ""),
     taskChecked: typeof item.taskChecked === "boolean" ? item.taskChecked : null,
-    managementRecordCreated: Boolean(item.managementRecordCreated)
+    managementRecordCreated: Boolean(item.managementRecordCreated),
+    managementRecordTheme: activityType === "management_record_created" ? normalizeManagementRecordTheme(item.managementRecordTheme) : ""
   };
 }
 
@@ -1054,7 +1102,8 @@ function recordProgressActivity({
   previousStatus = "",
   nextStatus = "",
   taskId = "",
-  taskChecked = null
+  taskChecked = null,
+  managementRecordTheme = "work_content"
 } = {}) {
   if (!entity?.id || !["project", "work"].includes(entityType) || !PROGRESS_ACTIVITY_TYPES.has(activityType)) return null;
   const now = new Date();
@@ -1073,7 +1122,8 @@ function recordProgressActivity({
     nextStatus: activityType === "status_change" ? nextStatus : "",
     taskId: activityType === "task_check" ? taskId : "",
     taskChecked: activityType === "task_check" ? Boolean(taskChecked) : null,
-    managementRecordCreated: activityType === "management_record_created"
+    managementRecordCreated: activityType === "management_record_created",
+    managementRecordTheme: activityType === "management_record_created" ? managementRecordTheme : ""
   });
   state.activityLogs = Array.isArray(state.activityLogs) ? state.activityLogs : [];
   state.activityLogs.push(log);
@@ -1264,7 +1314,9 @@ function normalizeState(data) {
       firstEditDate: project.firstEditDate || fallbackFinal,
       finalDate: fallbackFinal,
       calendarFields: { ...defaultCalendarFields, ...(project.calendarFields || {}) },
-      records: Array.isArray(project.records) ? project.records.map((record) => ({ authorUserId: "", ...record })) : []
+      records: Array.isArray(project.records)
+        ? project.records.map((record) => ({ authorUserId: "", ...record, theme: normalizeManagementRecordTheme(record.theme) }))
+        : []
     };
   });
   const works = Array.isArray(data.works) ? data.works : [];
@@ -1306,7 +1358,9 @@ function normalizeState(data) {
           return { ...normalizedTask, ...normalizeWorkTaskRecurrence(normalizedTask) };
         })
         : [],
-      records: Array.isArray(work.records) ? work.records.map((record) => ({ authorUserId: "", ...record })) : []
+      records: Array.isArray(work.records)
+        ? work.records.map((record) => ({ authorUserId: "", ...record, theme: normalizeManagementRecordTheme(record.theme) }))
+        : []
     };
   });
   return {
@@ -4265,12 +4319,13 @@ function renderWorkManagementRecords(work) {
       const author = recordAuthorDisplayName(record.author);
       if (workRecordFilterMode === "mine" && !isCurrentUserRecord(record)) return false;
       if (!query) return true;
-      return `${author || ""} ${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
+      return `${author || ""} ${record.author || ""} ${managementRecordThemeLabel(record.theme)} ${record.body || ""}`.toLowerCase().includes(query);
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const editingRecord = work.records.find((record) => record.id === editingWorkRecordId);
   $("#workManagementRecords").innerHTML = `
     <div class="record-composer">
+      ${managementRecordThemePicker({ selectedTheme: selectedWorkRecordTheme, editable, scope: "work" })}
       <textarea id="workRecordBody" class="record-input" placeholder="새로운 관리 기록을 입력하세요&#10;Enter로 줄바꿈, 버튼으로 등록" ${editable ? "" : "disabled"}>${esc(editingRecord?.body || "")}</textarea>
       <div class="record-actions">
         <span>${editable ? (editingRecord ? "기록 수정 중" : "업무별 관리 메모") : "담당자 또는 관리자만 기록을 추가할 수 있습니다."}</span>
@@ -4292,6 +4347,7 @@ function renderWorkManagementRecords(work) {
                 <article class="record-card" data-notification-work-record="${esc(record.id)}">
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
+                    <span class="record-theme-badge theme-${esc(normalizeManagementRecordTheme(record.theme))}">${esc(managementRecordThemeLabel(record.theme))}</span>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
                     ${canManageRecord(record) ? `<button class="record-control" data-edit-work-record="${esc(record.id)}" type="button">수정</button>` : ""}
                     ${canManageRecord(record) ? `<button class="record-control danger" data-delete-work-record="${esc(record.id)}" type="button">삭제</button>` : ""}
@@ -4605,6 +4661,7 @@ function addWorkManagementRecord() {
   }
   const body = textarea.value.trim();
   if (!body) return;
+  const theme = normalizeManagementRecordTheme(selectedWorkRecordTheme);
   work.records = Array.isArray(work.records) ? work.records : [];
   const user = currentUser();
   const authorName = currentRecordAuthorName(workOwners(work));
@@ -4614,15 +4671,18 @@ function addWorkManagementRecord() {
     if (!canManageRecord(record)) {
       showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
       editingWorkRecordId = null;
+      selectedWorkRecordTheme = "work_content";
       renderWorkDetail();
       return;
     }
-    const changed = Boolean(record && record.body !== body);
+    const changed = Boolean(record && (record.body !== body || normalizeManagementRecordTheme(record.theme) !== theme));
     if (record) {
       record.body = body;
+      record.theme = theme;
       record.updatedAt = new Date().toISOString();
     }
     editingWorkRecordId = null;
+    selectedWorkRecordTheme = "work_content";
     if (changed) notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 수정했습니다.`, { type: "work-record", workId: work.id, recordId: editedRecordId, actionType: "work_record_updated", title: "관리기록 수정", targetTab: "records" });
     saveState();
     renderWorkDetail();
@@ -4633,12 +4693,14 @@ function addWorkManagementRecord() {
     id: makeId(),
     author: authorName,
     authorUserId: user?.id || "",
+    theme,
     body,
     createdAt: new Date().toISOString()
   };
   work.records.push(newRecord);
-  recordProgressActivity({ entityType: "work", entity: work, activityType: "management_record_created" });
+  recordProgressActivity({ entityType: "work", entity: work, activityType: "management_record_created", managementRecordTheme: theme });
   notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’에 관리기록을 추가했습니다.`, { type: "work-record", workId: work.id, recordId: newRecord.id, actionType: "work_record_added", title: "관리기록 추가", targetTab: "records" });
+  selectedWorkRecordTheme = "work_content";
   saveState();
   renderWorkDetail();
   showToast("관리기록이 등록되었습니다.");
@@ -4655,6 +4717,7 @@ function deleteWorkManagementRecord(recordId) {
   notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’의 관리기록을 삭제했습니다.`, { type: "work-record", workId: work.id, recordId, actionType: "work_record_deleted", title: "관리기록 삭제", targetTab: "records" });
   work.records = (work.records || []).filter((record) => record.id !== recordId);
   if (editingWorkRecordId === recordId) editingWorkRecordId = null;
+  selectedWorkRecordTheme = "work_content";
   saveState();
   renderWorkDetail();
   showToast("관리기록이 삭제되었습니다.");
@@ -4667,6 +4730,7 @@ function performOpenWorkDetail(workId, initialTab = "basic") {
   workChangeBuffer.clear();
   if (!workBasicDraft || workBasicDraft.workId !== workId) workBasicDraft = createWorkBasicDraft(openingWork);
   editingWorkRecordId = null;
+  selectedWorkRecordTheme = "work_content";
   workTaskComposerOpen = false;
   resetWorkTaskDraft();
   workStudioMemoOpen = Boolean(openingWork.studioReservation?.memo);
@@ -5760,12 +5824,13 @@ function renderManagementRecords(project) {
       const author = recordAuthorDisplayName(record.author);
       if (recordFilterMode === "mine" && !isCurrentUserRecord(record)) return false;
       if (!query) return true;
-      return `${author || ""} ${record.author || ""} ${record.body || ""}`.toLowerCase().includes(query);
+      return `${author || ""} ${record.author || ""} ${managementRecordThemeLabel(record.theme)} ${record.body || ""}`.toLowerCase().includes(query);
     })
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const editingRecord = project.records?.find((record) => record.id === editingRecordId);
   $("#managementRecords").innerHTML = `
     <div class="record-composer">
+      ${managementRecordThemePicker({ selectedTheme: selectedRecordTheme, editable, scope: "project" })}
       <textarea id="recordBody" class="record-input" placeholder="새로운 관리 기록을 입력하세요&#10;Enter로 줄바꿈, 버튼으로 등록" ${editable ? "" : "disabled"}>${esc(editingRecord?.body || "")}</textarea>
       <div class="record-actions">
         <span>${editable ? (editingRecord ? "기록 수정 중" : "프로젝트별 관리 메모") : "담당자 또는 관리자만 기록을 추가할 수 있습니다."}</span>
@@ -5787,6 +5852,7 @@ function renderManagementRecords(project) {
                 <article class="record-card" data-notification-project-record="${esc(record.id)}">
                   <div class="record-meta">
                     <strong>${esc(recordAuthorDisplayName(record.author))}</strong>
+                    <span class="record-theme-badge theme-${esc(normalizeManagementRecordTheme(record.theme))}">${esc(managementRecordThemeLabel(record.theme))}</span>
                     <time>${esc(formatRecordTime(record.createdAt))}</time>
                     ${canManageRecord(record) ? `<button class="record-control" data-edit-record="${esc(record.id)}" type="button">수정</button>` : ""}
                     ${canManageRecord(record) ? `<button class="record-control danger" data-delete-record="${esc(record.id)}" type="button">삭제</button>` : ""}
@@ -6302,6 +6368,7 @@ function addManagementRecord() {
   }
   const body = textarea.value.trim();
   if (!body) return;
+  const theme = normalizeManagementRecordTheme(selectedRecordTheme);
   project.records = Array.isArray(project.records) ? project.records : [];
   const user = currentUser();
   const authorName = currentRecordAuthorName(projectOwners(project));
@@ -6311,15 +6378,18 @@ function addManagementRecord() {
     if (!canManageRecord(record)) {
       showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
       editingRecordId = null;
+      selectedRecordTheme = "work_content";
       renderProjectDetail();
       return;
     }
-    const changed = Boolean(record && record.body !== body);
+    const changed = Boolean(record && (record.body !== body || normalizeManagementRecordTheme(record.theme) !== theme));
     if (record) {
       record.body = body;
+      record.theme = theme;
       record.updatedAt = new Date().toISOString();
     }
     editingRecordId = null;
+    selectedRecordTheme = "work_content";
     if (changed) notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 수정했습니다.`, { type: "project-record", projectId: project.id, recordId: editedRecordId, actionType: "project_record_updated", title: "관리기록 수정", targetTab: "records" });
     saveState();
     renderProjectDetail();
@@ -6330,12 +6400,14 @@ function addManagementRecord() {
     id: makeId(),
     author: authorName,
     authorUserId: user?.id || "",
+    theme,
     body,
     createdAt: new Date().toISOString()
   };
   project.records.push(newRecord);
-  recordProgressActivity({ entityType: "project", entity: project, activityType: "management_record_created" });
+  recordProgressActivity({ entityType: "project", entity: project, activityType: "management_record_created", managementRecordTheme: theme });
   notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’에 관리기록을 추가했습니다.`, { type: "project-record", projectId: project.id, recordId: newRecord.id, actionType: "project_record_added", title: "관리기록 추가", targetTab: "records" });
+  selectedRecordTheme = "work_content";
   saveState();
   renderProjectDetail();
   showToast("관리기록이 등록되었습니다.");
@@ -6352,6 +6424,7 @@ function deleteManagementRecord(recordId) {
   notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’의 관리기록을 삭제했습니다.`, { type: "project-record", projectId: project.id, recordId, actionType: "project_record_deleted", title: "관리기록 삭제", targetTab: "records" });
   project.records = (project.records || []).filter((record) => record.id !== recordId);
   if (editingRecordId === recordId) editingRecordId = null;
+  selectedRecordTheme = "work_content";
   saveState();
   renderProjectDetail();
   showToast("관리기록이 삭제되었습니다.");
@@ -6364,6 +6437,7 @@ function performOpenProjectDetail(projectId, initialTab = "basic") {
   projectChangeBuffer.clear();
   if (!projectBasicDraft || projectBasicDraft.projectId !== projectId) projectBasicDraft = createProjectBasicDraft(openingProject);
   editingRecordId = null;
+  selectedRecordTheme = "work_content";
   detailTaskComposerOpen = false;
   activeDetailTab = initialTab;
   renderProjectDetail();
@@ -9074,7 +9148,7 @@ function adminActivityEntityTitle(log) {
 function adminActivityDescription(log) {
   if (log.activityType === "status_change") return `${log.previousStatus || "미설정"} → ${log.nextStatus || "미설정"}`;
   if (log.activityType === "task_check") return log.taskChecked ? "할 일 완료 체크" : "할 일 완료 체크 해제";
-  return "관리기록 작성";
+  return `${managementRecordThemeLabel(log.managementRecordTheme)} · 관리기록 작성`;
 }
 
 function adminActivityTypeLabel(type) {
@@ -14576,6 +14650,12 @@ $("#workTaskPanel").addEventListener("change", (event) => {
 });
 
 $("#workManagementRecords").addEventListener("click", (event) => {
+  const themeButton = event.target.closest("[data-work-record-theme]");
+  if (themeButton) {
+    selectedWorkRecordTheme = normalizeManagementRecordTheme(themeButton.dataset.workRecordTheme);
+    updateManagementRecordThemePicker($("#workManagementRecords"), "data-work-record-theme", selectedWorkRecordTheme);
+    return;
+  }
   const filterButton = event.target.closest("[data-work-record-filter]");
   if (filterButton) {
     workRecordFilterMode = filterButton.dataset.workRecordFilter;
@@ -14590,6 +14670,7 @@ $("#workManagementRecords").addEventListener("click", (event) => {
     const record = work?.records?.find((item) => item.id === editButton.dataset.editWorkRecord);
     if (!canManageRecord(record)) return showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
     editingWorkRecordId = editButton.dataset.editWorkRecord;
+    selectedWorkRecordTheme = normalizeManagementRecordTheme(record?.theme);
     if (work) renderWorkManagementRecords(work);
     return;
   }
@@ -14600,6 +14681,7 @@ $("#workManagementRecords").addEventListener("click", (event) => {
   }
   if (event.target.closest("#cancelWorkRecordEditBtn")) {
     editingWorkRecordId = null;
+    selectedWorkRecordTheme = "work_content";
     const work = state.works.find((item) => item.id === activeWorkId);
     if (work) renderWorkManagementRecords(work);
     return;
@@ -14620,6 +14702,12 @@ $("#workManagementRecords").addEventListener("input", (event) => {
 });
 
 $("#managementRecords").addEventListener("click", (event) => {
+  const themeButton = event.target.closest("[data-record-theme]");
+  if (themeButton) {
+    selectedRecordTheme = normalizeManagementRecordTheme(themeButton.dataset.recordTheme);
+    updateManagementRecordThemePicker($("#managementRecords"), "data-record-theme", selectedRecordTheme);
+    return;
+  }
   const filterButton = event.target.closest("[data-record-filter]");
   if (filterButton) {
     recordFilterMode = filterButton.dataset.recordFilter;
@@ -14634,6 +14722,7 @@ $("#managementRecords").addEventListener("click", (event) => {
     const record = project?.records?.find((item) => item.id === editButton.dataset.editRecord);
     if (!canManageRecord(record)) return showToast("작성자 본인만 관리기록을 수정할 수 있습니다.");
     editingRecordId = editButton.dataset.editRecord;
+    selectedRecordTheme = normalizeManagementRecordTheme(record?.theme);
     if (project) renderManagementRecords(project);
     return;
   }
@@ -14644,6 +14733,7 @@ $("#managementRecords").addEventListener("click", (event) => {
   }
   if (event.target.closest("#cancelRecordEditBtn")) {
     editingRecordId = null;
+    selectedRecordTheme = "work_content";
     const project = state.projects.find((item) => item.id === activeProjectId);
     if (project) renderManagementRecords(project);
     return;
