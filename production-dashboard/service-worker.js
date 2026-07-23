@@ -1,4 +1,4 @@
-const CACHE_NAME = "video-work-dashboard-v200";
+const CACHE_NAME = "video-work-dashboard-v201";
 const CORE_ASSETS = [
   "/",
   "/index.html",
@@ -26,7 +26,7 @@ const CORE_ASSETS = [
   "/lib/monthly-report-core.js?v=7",
   "/lib/monthly-report-docx.js?v=6",
   "/templates/monthly-report-template.docx?v=1",
-  "/app.js?v=160",
+  "/app.js?v=161",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

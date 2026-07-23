@@ -159,7 +159,6 @@ function validateModelResult(value, candidates) {
       });
     });
   });
-  if (seen.size !== candidates.length) throw new Error("GPT 전체 정리 결과에 누락된 항목이 있습니다. 다시 정리해 주세요.");
   return result;
 }
 
@@ -209,10 +208,14 @@ export default async function handler(req, res) {
 2. 각 항목을 서로 독립된 문장처럼 처리하지 말고 전체 문체, 표현 방식, 날짜 표기와 순서를 일관되게 맞춘다.
 3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
 4. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
-5. 입력에 있는 모든 candidateId를 정확히 한 번씩 반환하며 추가, 누락, 중복하지 않는다.
-6. text의 제목 표현, 날짜 표기와 문장 구성은 사용자 프롬프트에 맞게 자유롭게 정리할 수 있다.
-7. 원본의 핵심 사실 범위 안에서 작성하고 원본에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
-8. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+5. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
+6. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
+7. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
+8. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
+9. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
+10. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
+11. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
+12. 설명문 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",
@@ -239,7 +242,7 @@ export default async function handler(req, res) {
     const text = outputText(responseBody);
     if (!text) throw new Error("OpenAI API가 보고서 결과를 반환하지 않았습니다.");
     const generated = JSON.parse(text);
-    return res.status(200).json({ ok: true, mode: "whole_report", sections: validateModelResult(generated, candidates) });
+    return res.status(200).json({ ok: true, mode: "whole_report", allowOmissions: true, sections: validateModelResult(generated, candidates) });
   } catch (error) {
     return res.status(500).json({ ok: false, error: publicError(error) });
   }

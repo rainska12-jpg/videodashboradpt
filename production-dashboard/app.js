@@ -9503,13 +9503,13 @@ function monthlyReportOrganizeStageMarkup() {
         <div>
           <p class="eyebrow">STEP 2</p>
           <h3>선택한 ${selectedCount}개 항목으로 보고서 전체를 정리할까요?</h3>
-          <p>상위 업무와 하위 업무를 함께 검토해 전체 문체와 순서를 통일합니다. 정리가 끝난 뒤 미리보기에서 항목을 빼거나 문구를 직접 수정할 수 있습니다.</p>
+          <p>프롬프트에 따라 중복 업무를 묶고 하위 업무를 상위 업무에 합치며, 불필요한 항목은 제외할 수 있습니다. 결과는 미리보기에서 다시 수정할 수 있습니다.</p>
         </div>
       </section>
       <details class="monthly-report-prompt-card" open>
         <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>월말보고 작성 프롬프트</h3></div><span aria-hidden="true"></span></summary>
         <div>
-          <p>아래 프롬프트를 체크된 보고서 전체에 한 번 적용합니다. 제목과 날짜는 정리 후 원본 검증을 거쳐 유지됩니다.</p>
+          <p>아래 프롬프트를 체크된 보고서 전체에 한 번 적용합니다. 항목 통합·삭제, 제목 교정, 날짜·기간 표기 변경을 허용합니다.</p>
           <textarea data-monthly-report-prompt maxlength="12000" rows="15">${esc(prompt)}</textarea>
           <footer><small>관리자 공통 프롬프트</small><button class="pill ghost" data-monthly-report-save-prompt type="button">프롬프트 저장</button></footer>
         </div>
@@ -9649,11 +9649,14 @@ async function generateMonthlyReportWithGpt(button) {
       result.sections,
       monthlyReportSources,
       fallback,
-      { requireComplete: result.mode === "whole_report" }
+      {
+        requireComplete: result.mode === "whole_report",
+        allowOmissions: result.allowOmissions === true
+      }
     );
     monthlyReportGeneratedByGpt = true;
     monthlyReportStep = 3;
-    monthlyReportMessage = "보고서 전체의 문체와 순서를 프롬프트에 따라 정리했습니다. 모든 제목과 날짜는 원본 검증을 거쳤습니다.";
+    monthlyReportMessage = "보고서 전체를 프롬프트에 따라 정리했습니다. 불필요하다고 판단된 항목은 미리보기에서 제외했습니다.";
     renderAdmin();
     if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
     showToast("GPT가 월말보고서 전체를 정리했습니다.");

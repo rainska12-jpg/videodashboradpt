@@ -204,7 +204,7 @@ test("GPT 입력은 상위 업무와 하위 업무를 전체 보고서 묶음으
   assert.equal(report.next[0].section, "next");
 });
 
-test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 누락 결과는 거부한다", () => {
+test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 프롬프트에 따른 항목 생략을 허용한다", () => {
   const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
   const fallback = core.buildMonthlyReportPreview(sources, "2026-07");
   const candidates = core.previewItems(fallback);
@@ -232,9 +232,17 @@ test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 누락 
     () => core.validateGeneratedSections(missing, sources, fallback, { requireComplete: true }),
     /누락된 항목/
   );
+  const omitted = core.validateGeneratedSections(
+    missing,
+    sources,
+    fallback,
+    { requireComplete: true, allowOmissions: true }
+  );
+  assert.equal(omitted.activity.length, missing.activity.length);
+  assert.equal(omitted.activity[0].text, missing.activity[0].text);
 });
 
-test("서버도 전체 업무 묶음을 전달하고 누락은 거부하되 프롬프트의 날짜 표기는 유지한다", async () => {
+test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생략과 날짜 표기를 유지한다", async () => {
   const { wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
   const candidates = [
     {
@@ -276,14 +284,13 @@ test("서버도 전체 업무 묶음을 전달하고 누락은 거부하되 프�
     next: []
   }, candidates);
   assert.equal(valid.activity[0].text, "기관 홍보영상 / 홍보팀 / 7월 3일 추진");
-  assert.throws(
-    () => validateModelResult({
-      activity: [{ candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" }],
-      production: [],
-      next: []
-    }, candidates),
-    /누락된 항목/
-  );
+  const omitted = validateModelResult({
+    activity: [{ candidateId: "project-1", text: "기관 홍보영상 관련 업무 / 7.3., 7.8. / 현장 촬영 포함" }],
+    production: [],
+    next: []
+  }, candidates);
+  assert.deepEqual(omitted.activity.map((item) => item.candidateId), ["project-1"]);
+  assert.equal(omitted.activity[0].text, "기관 홍보영상 관련 업무 / 7.3., 7.8. / 현장 촬영 포함");
   const formatted = validateModelResult({
     activity: [
       { candidateId: "project-1", text: "홍보팀 영상 업무 / 7.3. 추진" },

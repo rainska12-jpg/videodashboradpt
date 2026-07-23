@@ -473,7 +473,7 @@
           });
         });
       });
-      if (seen.size !== expected.size) {
+      if (options.allowOmissions !== true && seen.size !== expected.size) {
         throw new Error("GPT 전체 정리 결과에 누락된 항목이 있습니다. 다시 정리해 주세요.");
       }
       return result;
