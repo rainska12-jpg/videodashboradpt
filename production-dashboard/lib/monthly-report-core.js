@@ -29,6 +29,12 @@
 
 할 일은 실제 할 일 제목과 작업일 또는 완료일을 사용한다.
 
+활동내용은 업무명, 발주부서, 업무한 날짜 순서로 작성하고 그 아래에 할 일 제목과 날짜를 배치한다.
+
+할 일이 없는 업무에는 할 일 항목을 만들지 않는다.
+
+차월계획에는 바로 다음 한 달에 예정된 영상 또는 업무만 작성하고 하위 할 일과 방송실 일정은 작성하지 않는다.
+
 방송실 일정은 일정 날짜와 일정 제목만 사용한다.
 
 방송실 일정의 시간, 장소, 메모, 상세 내용은 작성하지 않는다.
@@ -122,6 +128,7 @@
         dates: uniqueDates(item.dates),
         ...(item.dueDate ? { dueDate: seoulDateKey(item.dueDate) } : {}),
         ...(item.status ? { status: String(item.status) } : {}),
+        ...(item.department ? { department: String(item.department) } : {}),
         ...(item.category ? { category: String(item.category) } : {}),
         reportSections: [...new Set((item.reportSections || []).filter((key) => SECTION_KEYS.includes(key)))]
       });
@@ -137,6 +144,7 @@
         dates: dueDate ? [dueDate] : [],
         dueDate,
         status: String(entity.status || ""),
+        department: String(entity.client || entity.department || "").trim(),
         reportSections: []
       };
       if (dueDate && inMonth(dueDate, month)) item.reportSections.push("activity");
@@ -242,7 +250,6 @@
   function buildMonthlyReportPreview(sources, month) {
     const range = monthRange(month);
     const validSources = (sources || []).filter((source) => SOURCE_TYPES.has(source.sourceType));
-    const sourceById = new Map(validSources.map((source) => [source.sourceId, source]));
     const projectSources = new Map(validSources
       .filter((source) => ["video_project", "work_project"].includes(source.sourceType))
       .map((source) => [source.sourceId, source]));
@@ -254,9 +261,17 @@
       const title = String(payload.title || "").trim();
       if (!title) return;
       const dueStyle = payload.dueStyle === true;
-      const text = dueStyle
-        ? `${title} / 마감일: ${formatDates(dates)}`
-        : `${formatDates(dates)}: ${title}`;
+      const itemType = ["task", "project"].includes(payload.itemType) ? payload.itemType : "standard";
+      const parentTitle = String(payload.parentTitle || "").trim();
+      const parentSourceId = String(payload.parentSourceId || "").trim();
+      const department = String(payload.department || "").trim();
+      const text = itemType === "task"
+        ? `${title} / ${formatDates(dates)}`
+        : itemType === "project"
+          ? `${title} / ${department || "발주부서 미지정"} / ${formatDates(dates)}`
+        : dueStyle
+          ? `${title} / 마감일: ${formatDates(dates)}`
+          : `${formatDates(dates)}: ${title}`;
       sections[section].push({
         id: `report-${section}-${++serial}`,
         section,
@@ -264,6 +279,8 @@
         title,
         dates,
         text,
+        ...(itemType === "task" ? { itemType, parentTitle: parentTitle || "연결 업무 없음", parentSourceId, department } : {}),
+        ...(itemType === "project" ? { itemType, parentTitle: title, parentSourceId, department } : {}),
         included: true
       });
     }
@@ -275,7 +292,16 @@
       const projectDates = tasksCurrentByProject.get(task.projectId) || new Set();
       dates.forEach((date) => projectDates.add(date));
       tasksCurrentByProject.set(task.projectId, projectDates);
-      add("activity", { sourceIds: [task.sourceId], title: task.title, dates });
+      const project = projectSources.get(task.projectId);
+      add("activity", {
+        sourceIds: [task.sourceId, ...(project ? [project.sourceId] : [])],
+        title: task.title,
+        dates,
+        itemType: "task",
+        parentTitle: project?.title,
+        parentSourceId: project?.sourceId,
+        department: project?.department
+      });
     });
 
     const projectActivity = new Map();
@@ -309,40 +335,28 @@
       }
     });
 
+    tasksCurrentByProject.forEach((taskDates, projectId) => {
+      addProjectActivity(projectId, projectSources.get(projectId), [...taskDates]);
+    });
     projectActivity.forEach((entry, projectId) => {
-      const taskDates = tasksCurrentByProject.get(projectId) || new Set();
-      const dates = [...entry.dates].filter((date) => !taskDates.has(date));
-      if (dates.length) add("activity", { sourceIds: [...entry.sourceIds], title: entry.title, dates });
+      const project = projectSources.get(projectId);
+      const dates = [...entry.dates];
+      if (dates.length) add("activity", {
+        sourceIds: [...entry.sourceIds],
+        title: entry.title,
+        dates,
+        itemType: "project",
+        parentSourceId: projectId,
+        department: project?.department
+      });
     });
     standaloneStudio.forEach((schedule) => add("activity", { sourceIds: [schedule.sourceId], title: schedule.title, dates: schedule.dates }));
 
     validSources.filter((source) => source.sourceType === "video_project" && source.reportSections.includes("production"))
       .forEach((source) => add("production", { sourceIds: [source.sourceId], title: source.title, dates: [source.dueDate], dueStyle: true }));
 
-    const nextAdded = new Set();
     validSources.filter((source) => ["video_project", "work_project"].includes(source.sourceType) && source.dueDate && inMonth(source.dueDate, range.nextMonth))
-      .forEach((source) => {
-        add("next", { sourceIds: [source.sourceId], title: source.title, dates: [source.dueDate] });
-        nextAdded.add(source.sourceId);
-      });
-
-    validSources.filter((source) => source.sourceType === "task" && source.reportSections.includes("next")).forEach((task) => {
-      if (nextAdded.has(task.sourceId)) return;
-      const nextDates = uniqueDates(task.dates).filter((date) => inMonth(date, range.nextMonth));
-      const dates = nextDates.length ? nextDates : uniqueDates([task.dueDate, ...task.dates]);
-      add("next", { sourceIds: [task.sourceId], title: task.title, dates: dates.slice(0, 1) });
-      nextAdded.add(task.sourceId);
-    });
-
-    validSources.filter((source) => source.sourceType === "studio_schedule" && source.reportSections.includes("next")).forEach((schedule) => {
-      if (schedule.projectId && nextAdded.has(schedule.projectId)) return;
-      const project = projectSources.get(schedule.projectId);
-      add("next", {
-        sourceIds: [schedule.sourceId, ...(project ? [project.sourceId] : [])],
-        title: project?.title || schedule.title,
-        dates: schedule.dates
-      });
-    });
+      .forEach((source) => add("next", { sourceIds: [source.sourceId], title: source.title, dates: [source.dueDate] }));
 
     SECTION_KEYS.forEach((section) => sections[section].sort((a, b) => {
       const dateCompare = String(a.dates[0] || "9999-99-99").localeCompare(String(b.dates[0] || "9999-99-99"));
@@ -360,6 +374,7 @@
       dates: uniqueDates(source.dates),
       ...(source.dueDate ? { dueDate: source.dueDate } : {}),
       ...(source.status ? { status: source.status } : {}),
+      ...(source.department ? { department: source.department } : {}),
       ...(source.category ? { category: source.category } : {})
     }));
   }
@@ -371,6 +386,22 @@
       title: String(item.title || ""),
       dates: uniqueDates(item.dates)
     })));
+  }
+
+  function setPreviewItemIncluded(sections, itemId, included) {
+    const nextIncluded = included !== false;
+    const allItems = SECTION_KEYS.flatMap((section) => sections?.[section] || []);
+    const target = allItems.find((item) => item.id === itemId);
+    if (!target) return [];
+    target.included = nextIncluded;
+    const changedIds = [target.id];
+    if (target.itemType === "project" && !nextIncluded) {
+      allItems.filter((item) => item.itemType === "task" && item.parentSourceId === target.parentSourceId).forEach((item) => {
+        item.included = false;
+        changedIds.push(item.id);
+      });
+    }
+    return [...new Set(changedIds)];
   }
 
   function validateGeneratedSections(generated, sources, fallbackSections) {
@@ -391,13 +422,37 @@
         const dates = uniqueDates(item.dates).filter((date) => allowedDates.has(date));
         if ((item.dates || []).length && dates.length !== uniqueDates(item.dates).length) return;
         const dueStyle = section === "production";
+        const taskSource = allowedSources.find((source) => source.sourceType === "task" && source.title === title);
+        const titledProjectSource = allowedSources.find((source) => ["video_project", "work_project"].includes(source.sourceType) && source.title === title)
+          || allowedSources.map((source) => sourceById.get(source.projectId)).find((source) => ["video_project", "work_project"].includes(source?.sourceType) && source.title === title);
+        const parentSource = taskSource ? sourceById.get(taskSource.projectId) : titledProjectSource;
+        const itemType = taskSource ? "task" : section === "activity" && titledProjectSource ? "project" : "standard";
+        const department = String(parentSource?.department || "").trim();
         result[section].push({
           id: `report-${section}-gpt-${++serial}`,
           section,
           sourceIds,
           title,
           dates,
-          text: dueStyle ? `${title} / 마감일: ${formatDates(dates)}` : `${formatDates(dates)}: ${title}`,
+          text: itemType === "task"
+            ? `${title} / ${formatDates(dates)}`
+            : itemType === "project"
+              ? `${title} / ${department || "발주부서 미지정"} / ${formatDates(dates)}`
+            : dueStyle
+              ? `${title} / 마감일: ${formatDates(dates)}`
+              : `${formatDates(dates)}: ${title}`,
+          ...(itemType === "task" ? {
+            itemType,
+            parentTitle: String(parentSource?.title || "연결 업무 없음"),
+            parentSourceId: String(parentSource?.sourceId || ""),
+            department
+          } : {}),
+          ...(itemType === "project" ? {
+            itemType,
+            parentTitle: title,
+            parentSourceId: String(parentSource?.sourceId || ""),
+            department
+          } : {}),
           included: true
         });
       });
@@ -418,6 +473,7 @@
     buildMonthlyReportPreview,
     apiSources,
     previewItems,
+    setPreviewItemIncluded,
     validateGeneratedSections
   };
 });

@@ -13,6 +13,7 @@ function fixtureState() {
     projects: [{
       id: "video-1",
       title: "7월 개강 홍보영상",
+      client: "교육팀",
       finalDate: "2026-07-25",
       status: "편집",
       records: [
@@ -25,6 +26,7 @@ function fixtureState() {
     works: [{
       id: "work-1",
       title: "방송실 운영",
+      client: "내부",
       finalDate: "2026-08-12",
       status: "진행",
       records: [],
@@ -51,14 +53,23 @@ test("업무내용 카테고리만 수집하고 본문·메모·시간은 API �
   });
 });
 
-test("관리기록 날짜를 프로젝트별로 묶고 같은 날 할 일과 중복하지 않는다", () => {
+test("활동내용을 업무·발주부서·업무 날짜 아래 하위 할 일과 날짜로 구성한다", () => {
   const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
   const preview = core.buildMonthlyReportPreview(sources, "2026-07");
   const task = preview.activity.find((item) => item.title === "촬영 진행");
   const project = preview.activity.find((item) => item.title === "7월 개강 홍보영상");
   assert.deepEqual(task.dates, ["2026-07-08"]);
-  assert.deepEqual(project.dates, ["2026-07-03", "2026-07-12", "2026-07-25"]);
-  assert.equal(project.dates.includes("2026-07-08"), false);
+  assert.equal(task.itemType, "task");
+  assert.equal(task.parentTitle, "7월 개강 홍보영상");
+  assert.equal(task.parentSourceId, "video-1");
+  assert.equal(task.department, "교육팀");
+  assert.equal(task.text, "촬영 진행 / 7월 8일");
+  assert.deepEqual(task.sourceIds.sort(), ["task-1", "video-1"]);
+  assert.equal(project.itemType, "project");
+  assert.equal(project.department, "교육팀");
+  assert.equal(project.parentSourceId, "video-1");
+  assert.deepEqual(project.dates, ["2026-07-03", "2026-07-08", "2026-07-12", "2026-07-25"]);
+  assert.equal(project.text, "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일, 7월 12일, 7월 25일");
   assert.equal(project.text.includes("기획안"), false);
   assert.equal(project.text.includes("편집"), false);
 });
@@ -77,16 +88,43 @@ test("선택 월 마감 영상은 현재 상태와 무관하게 제작물현황�
   assert.equal(preview.production[0].text, "7월 개강 홍보영상 / 마감일: 7월 25일");
 });
 
-test("차월계획에 다음 달 프로젝트·할 일·방송실 일정과 월말 미완료 할 일을 포함한다", () => {
+test("차월계획은 바로 다음 한 달의 업무만 포함하고 하위 할 일과 방송실 일정은 제외한다", () => {
   const state = fixtureState();
   state.tasks.push({ id: "unfinished", projectId: "video-1", text: "검수 요청", dueDate: "2026-07-29", done: false, createdAt: "2026-07-20T00:00:00Z" });
+  state.projects.push({ id: "future-video", title: "9월 기관 행사영상", client: "홍보팀", finalDate: "2026-09-05", status: "예정", records: [] });
   const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
   const preview = core.buildMonthlyReportPreview(sources, "2026-07");
   const titles = preview.next.map((item) => item.title);
-  assert.ok(titles.includes("방송실 운영"));
-  assert.ok(titles.includes("장비 점검"));
-  assert.ok(titles.includes("검수 요청"));
-  assert.ok(titles.includes("8월 방송실 점검"));
+  assert.deepEqual(titles, ["방송실 운영"]);
+  assert.equal(preview.next.some((item) => item.itemType === "task"), false);
+  assert.equal(titles.includes("8월 방송실 점검"), false);
+  assert.equal(titles.includes("9월 기관 행사영상"), false);
+});
+
+test("할 일이 없는 업무에는 하위 할 일 항목을 만들지 않는다", () => {
+  const state = fixtureState();
+  state.projects.push({ id: "video-no-task", title: "기관 소개영상", client: "홍보팀", finalDate: "2026-07-30", status: "진행", records: [] });
+  const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  const project = preview.activity.find((item) => item.title === "기관 소개영상");
+  assert.ok(project);
+  assert.equal(project.itemType, "project");
+  assert.equal(project.text, "기관 소개영상 / 홍보팀 / 7월 30일");
+  assert.equal(preview.activity.some((item) => item.itemType === "task" && item.parentSourceId === "video-no-task"), false);
+});
+
+test("상위 업무 체크를 해제하면 같은 업무의 하위 할 일도 모두 해제한다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  const project = preview.activity.find((item) => item.itemType === "project" && item.parentSourceId === "video-1");
+  const task = preview.activity.find((item) => item.itemType === "task" && item.parentSourceId === "video-1");
+  const changedIds = core.setPreviewItemIncluded(preview, project.id, false);
+  assert.equal(project.included, false);
+  assert.equal(task.included, false);
+  assert.deepEqual(new Set(changedIds), new Set([project.id, task.id]));
+  core.setPreviewItemIncluded(preview, project.id, true);
+  assert.equal(project.included, true);
+  assert.equal(task.included, false);
 });
 
 test("ISO 타임스탬프는 Asia/Seoul 날짜로 변환한다", () => {
@@ -105,13 +143,36 @@ test("GPT 결과의 원본에 없는 제목과 날짜는 미리보기에서 거�
   assert.deepEqual(validated.activity.map((item) => item.text), fallback.activity.map((item) => item.text));
 });
 
+test("GPT 정리 후에도 활동내용의 업무·하위 할 일 구조를 복원한다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const fallback = core.buildMonthlyReportPreview(sources, "2026-07");
+  const validated = core.validateGeneratedSections({
+    activity: [
+      { sourceIds: ["record-1"], title: "7월 개강 홍보영상", dates: ["2026-07-03"] },
+      { sourceIds: ["task-1"], title: "촬영 진행", dates: ["2026-07-08"] }
+    ],
+    production: [],
+    next: []
+  }, sources, fallback);
+  const project = validated.activity.find((item) => item.title === "7월 개강 홍보영상");
+  const task = validated.activity.find((item) => item.title === "촬영 진행");
+  assert.equal(project.itemType, "project");
+  assert.equal(project.text, "7월 개강 홍보영상 / 교육팀 / 7월 3일");
+  assert.equal(task.itemType, "task");
+  assert.equal(task.parentSourceId, "video-1");
+  assert.equal(task.text, "촬영 진행 / 7월 8일");
+});
+
 test("생성한 Word 파일은 필수 OOXML 구성과 보고서 텍스트를 포함한다", () => {
   const bytes = createMonthlyReportDocx({
     month: "2026-07",
     organization: "영상제작과",
     author: "관리자",
     sections: {
-      activity: [{ included: true, text: "7월 3일: 7월 개강 홍보영상" }],
+      activity: [
+        { included: true, itemType: "project", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일" },
+        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "촬영 진행 / 7월 8일" }
+      ],
       production: [{ included: true, text: "7월 개강 홍보영상 / 마감일: 7월 25일" }],
       next: [{ included: true, text: "8월 4일: 방송실 장비 점검" }]
     }
@@ -126,5 +187,8 @@ test("생성한 Word 파일은 필수 OOXML 구성과 보고서 텍스트를 포
   const documentXml = execFileSync("unzip", ["-p", file, "word/document.xml"], { encoding: "utf8" });
   assert.match(documentXml, /2026년 7월 월말보고서/);
   assert.match(documentXml, /7월 개강 홍보영상/);
+  assert.match(documentXml, /7월 개강 홍보영상 \/ 교육팀 \/ 7월 3일, 7월 8일/);
+  assert.match(documentXml, /촬영 진행 \/ 7월 8일/);
+  assert.ok(documentXml.indexOf("7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일") < documentXml.indexOf("촬영 진행 / 7월 8일"));
   assert.doesNotMatch(documentXml, /해당 없음.*해당 없음.*해당 없음/);
 });

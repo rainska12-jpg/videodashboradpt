@@ -65,6 +65,7 @@ function sanitizeSources(value) {
       dates: uniqueDates(item?.dates),
       ...(dueDate ? { dueDate } : {}),
       ...(item?.status ? { status: cleanText(item.status, 80) } : {}),
+      ...(item?.department ? { department: cleanText(item.department, 160) } : {}),
       ...(item?.category ? { category: cleanText(item.category, 80) } : {})
     };
   }).filter(Boolean);

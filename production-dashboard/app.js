@@ -570,6 +570,8 @@ let studioTelegramDraft = null;
 let studioTelegramRuleEditor = null;
 let studioTelegramPreviewContext = null;
 let monthlyReportMonth = viewPref("monthlyReportMonth", dateKey(new Date()).slice(0, 7));
+let monthlyReportMonthPickerOpen = false;
+let monthlyReportPickerYear = Number(monthlyReportMonth.slice(0, 4)) || new Date().getFullYear();
 let monthlyReportSources = [];
 let monthlyReportPreview = { activity: [], production: [], next: [] };
 let monthlyReportMessage = "";
@@ -9283,19 +9285,93 @@ function ensureMonthlyReportPreview() {
   if (monthlyReportLoadedMonth !== monthlyReportMonth) collectMonthlyReportPreview();
 }
 
+function monthlyReportMonthPickerMarkup() {
+  const [selectedYear, selectedMonth] = monthlyReportMonth.split("-").map(Number);
+  const currentMonth = dateKey(new Date()).slice(0, 7);
+  const label = `${selectedYear}년 ${selectedMonth}월`;
+  return `
+    <div class="monthly-report-month-control" data-monthly-report-month-control>
+      <span>보고 월</span>
+      <button class="monthly-report-month-trigger" data-monthly-report-month-trigger type="button" aria-haspopup="dialog" aria-expanded="${monthlyReportMonthPickerOpen}">
+        <b>${esc(label)}</b>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v3m10-3v3M4.5 9h15M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z"/></svg>
+      </button>
+      ${monthlyReportMonthPickerOpen ? `
+        <div class="monthly-report-month-popover" role="dialog" aria-label="보고 월 선택">
+          <header>
+            <button data-monthly-report-year-step="-1" type="button" aria-label="이전 연도">‹</button>
+            <strong>${monthlyReportPickerYear}년</strong>
+            <button data-monthly-report-year-step="1" type="button" aria-label="다음 연도">›</button>
+          </header>
+          <div class="monthly-report-month-grid">
+            ${Array.from({ length: 12 }, (_, index) => {
+              const value = `${monthlyReportPickerYear}-${String(index + 1).padStart(2, "0")}`;
+              return `<button class="${value === monthlyReportMonth ? "selected" : ""} ${value === currentMonth ? "current" : ""}" data-monthly-report-month-value="${value}" type="button" aria-pressed="${value === monthlyReportMonth}">${index + 1}월</button>`;
+            }).join("")}
+          </div>
+          <footer><button data-monthly-report-current-month type="button">이번 달</button></footer>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function selectMonthlyReportMonth(value) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(value || ""))) return;
+  monthlyReportMonth = value;
+  monthlyReportPickerYear = Number(value.slice(0, 4));
+  monthlyReportMonthPickerOpen = false;
+  saveViewPrefs({ monthlyReportMonth });
+  collectMonthlyReportPreview();
+  renderAdmin();
+}
+
 function monthlyReportSectionMarkup(key, title, description) {
   const items = monthlyReportPreview[key] || [];
+  const itemMarkup = (item, extraClass = "") => `
+    <label class="monthly-report-preview-item ${extraClass} ${item.included === false ? "is-excluded" : ""}" data-monthly-report-item="${esc(item.id)}">
+      <input type="checkbox" data-monthly-report-include="${esc(item.id)}" ${item.included === false ? "" : "checked"} />
+      <i aria-hidden="true"></i>
+      <input type="text" data-monthly-report-text="${esc(item.id)}" value="${esc(item.text)}" aria-label="보고서 항목 문구" />
+    </label>
+  `;
+  let listMarkup = items.map((item) => itemMarkup(item)).join("");
+  if (key === "activity") {
+    const groupKeyOf = (item) => item.parentSourceId || `${item.parentTitle || "연결 업무 없음"}\u0000${item.department || ""}`;
+    const groups = new Map();
+    items.filter((item) => ["project", "task"].includes(item.itemType)).forEach((item) => {
+      const groupKey = groupKeyOf(item);
+      if (!groups.has(groupKey)) groups.set(groupKey, { parent: null, tasks: [] });
+      if (item.itemType === "project") groups.get(groupKey).parent = item;
+      else groups.get(groupKey).tasks.push(item);
+    });
+    const renderedGroups = new Set();
+    listMarkup = items.map((item) => {
+      if (!["project", "task"].includes(item.itemType)) return itemMarkup(item);
+      const groupKey = groupKeyOf(item);
+      if (renderedGroups.has(groupKey)) return "";
+      renderedGroups.add(groupKey);
+      const group = groups.get(groupKey) || { parent: null, tasks: [] };
+      const parentText = group.parent?.text || `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정`;
+      return `
+        <article class="monthly-report-task-group">
+          <div class="monthly-report-task-parent">
+            <span>업무명 / 발주부서 / 업무한 날짜</span>
+            ${group.parent ? itemMarkup(group.parent, "is-parent") : `<strong>${esc(parentText)}</strong>`}
+          </div>
+          ${group.tasks.length ? `
+            <div class="monthly-report-task-columns" aria-hidden="true"><span>하위 할 일</span><span>날짜</span></div>
+            <div class="monthly-report-task-children">${group.tasks.map((task) => itemMarkup(task)).join("")}</div>
+          ` : ""}
+        </article>
+      `;
+    }).join("");
+  }
   return `
     <section class="monthly-report-preview-section" data-monthly-report-section="${key}">
       <header><div><h4>${esc(title)}</h4><small>${esc(description)}</small></div><span>${items.length}개</span></header>
       <div class="monthly-report-preview-list">
-        ${items.length ? items.map((item) => `
-          <label class="monthly-report-preview-item ${item.included === false ? "is-excluded" : ""}" data-monthly-report-item="${esc(item.id)}">
-            <input type="checkbox" data-monthly-report-include="${esc(item.id)}" ${item.included === false ? "" : "checked"} />
-            <i aria-hidden="true"></i>
-            <input type="text" data-monthly-report-text="${esc(item.id)}" value="${esc(item.text)}" aria-label="보고서 항목 문구" />
-          </label>
-        `).join("") : '<div class="monthly-report-empty">해당 항목이 없습니다.</div>'}
+        ${items.length ? listMarkup : '<div class="monthly-report-empty">해당 항목이 없습니다.</div>'}
       </div>
     </section>
   `;
@@ -9309,7 +9385,7 @@ function renderMonthlyReportManager() {
     <div class="monthly-report-manager">
       <section class="monthly-report-toolbar">
         <div>
-          <label><span>보고 월</span><input type="month" data-monthly-report-month value="${esc(monthlyReportMonth)}" /></label>
+          ${monthlyReportMonthPickerMarkup()}
           <button class="pill ghost" data-monthly-report-collect type="button">데이터 다시 수집</button>
         </div>
         <div class="monthly-report-actions">
@@ -9331,21 +9407,21 @@ function renderMonthlyReportManager() {
         <span>${esc(monthlyReportMessage)}</span>
       </div>
 
-      <section class="monthly-report-preview-card">
-        <header class="monthly-report-card-head"><div><p class="eyebrow">PREVIEW</p><h3>보고서 미리보기</h3></div><small>체크 해제한 항목은 Word 문서에서 제외됩니다. 문구는 직접 수정할 수 있습니다.</small></header>
-        ${monthlyReportSectionMarkup("activity", "4-1. 활동내용", "업무가 진행된 날짜와 공식 제목")}
-        ${monthlyReportSectionMarkup("production", "4-2. 제작물현황", "선택한 달에 마감일이 있는 영상")}
-        ${monthlyReportSectionMarkup("next", "4-3. 차월계획", "미완료 할 일과 다음 달 예정 업무")}
-      </section>
-
       <details class="monthly-report-prompt-card">
-        <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>기본 GPT 프롬프트</h3></div><span>열기</span></summary>
+        <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>월말보고 작성 프롬프트</h3></div><span>열기</span></summary>
         <div>
           <p>관리기록 본문·메모·시간 정보는 프롬프트 실행 전 데이터에서 이미 제외됩니다.</p>
           <textarea data-monthly-report-prompt maxlength="12000" rows="18">${esc(prompt)}</textarea>
           <footer><small>모든 관리자에게 동일하게 저장됩니다.</small><button class="pill ghost" data-monthly-report-save-prompt type="button">프롬프트 저장</button></footer>
         </div>
       </details>
+
+      <section class="monthly-report-preview-card">
+        <header class="monthly-report-card-head"><div><p class="eyebrow">PREVIEW</p><h3>보고서 미리보기</h3></div><small>체크 해제한 항목은 Word 문서에서 제외됩니다. 문구는 직접 수정할 수 있습니다.</small></header>
+        ${monthlyReportSectionMarkup("activity", "4-1. 활동내용", "업무가 진행된 날짜와 공식 제목")}
+        ${monthlyReportSectionMarkup("production", "4-2. 제작물현황", "선택한 달에 마감일이 있는 영상")}
+        ${monthlyReportSectionMarkup("next", "4-3. 차월계획", "바로 다음 달에 예정된 업무만 표시하며 하위 할 일은 제외")}
+      </section>
     </div>
   `;
 }
@@ -9364,7 +9440,7 @@ async function saveMonthlyReportPrompt() {
   state.monthlyReport = { prompt: String(input.value || window.MonthlyReportCore?.DEFAULT_PROMPT || "").slice(0, 12000) };
   saveState();
   const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : true;
-  showToast(remoteSaved === false ? "기기에는 저장했지만 서버 저장을 확인하지 못했습니다." : "월말보고서 기본 프롬프트를 저장했습니다.");
+  showToast(remoteSaved === false ? "기기에는 저장했지만 서버 저장을 확인하지 못했습니다." : "월말보고 작성 프롬프트를 저장했습니다.");
 }
 
 async function monthlyReportApi() {
@@ -15503,6 +15579,33 @@ $("#adminContent").addEventListener("submit", async (event) => {
 });
 
 $("#adminContent").addEventListener("click", (event) => {
+  if (monthlyReportMonthPickerOpen && !event.target.closest("[data-monthly-report-month-control]")) {
+    monthlyReportMonthPickerOpen = false;
+    $(".monthly-report-month-popover")?.remove();
+    $("[data-monthly-report-month-trigger]")?.setAttribute("aria-expanded", "false");
+  }
+  const monthTrigger = event.target.closest("[data-monthly-report-month-trigger]");
+  if (monthTrigger) {
+    monthlyReportMonthPickerOpen = !monthlyReportMonthPickerOpen;
+    if (monthlyReportMonthPickerOpen) monthlyReportPickerYear = Number(monthlyReportMonth.slice(0, 4));
+    renderAdmin();
+    return;
+  }
+  const yearStep = event.target.closest("[data-monthly-report-year-step]");
+  if (yearStep) {
+    monthlyReportPickerYear = Math.max(1900, Math.min(2200, monthlyReportPickerYear + Number(yearStep.dataset.monthlyReportYearStep || 0)));
+    renderAdmin();
+    return;
+  }
+  const monthValue = event.target.closest("[data-monthly-report-month-value]")?.dataset.monthlyReportMonthValue;
+  if (monthValue) {
+    selectMonthlyReportMonth(monthValue);
+    return;
+  }
+  if (event.target.closest("[data-monthly-report-current-month]")) {
+    selectMonthlyReportMonth(dateKey(new Date()).slice(0, 7));
+    return;
+  }
   const collectReportButton = event.target.closest("[data-monthly-report-collect]");
   if (collectReportButton) {
     collectMonthlyReportPreview();
@@ -15594,19 +15697,23 @@ $("#adminContent").addEventListener("input", (event) => {
 });
 
 $("#adminContent").addEventListener("change", async (event) => {
-  const reportMonth = event.target.closest("[data-monthly-report-month]");
-  if (reportMonth) {
-    monthlyReportMonth = /^\d{4}-\d{2}$/.test(reportMonth.value) ? reportMonth.value : dateKey(new Date()).slice(0, 7);
-    saveViewPrefs({ monthlyReportMonth });
-    collectMonthlyReportPreview();
-    renderAdmin();
-    return;
-  }
   const reportInclude = event.target.closest("[data-monthly-report-include]");
   if (reportInclude) {
-    const item = monthlyReportFindItem(reportInclude.dataset.monthlyReportInclude);
-    if (item) item.included = reportInclude.checked;
-    reportInclude.closest("[data-monthly-report-item]")?.classList.toggle("is-excluded", !reportInclude.checked);
+    const changedIds = window.MonthlyReportCore?.setPreviewItemIncluded
+      ? window.MonthlyReportCore.setPreviewItemIncluded(monthlyReportPreview, reportInclude.dataset.monthlyReportInclude, reportInclude.checked)
+      : (() => {
+        const item = monthlyReportFindItem(reportInclude.dataset.monthlyReportInclude);
+        if (item) item.included = reportInclude.checked;
+        return [reportInclude.dataset.monthlyReportInclude];
+      })();
+    const changedSet = new Set(changedIds);
+    $("#adminContent")?.querySelectorAll("[data-monthly-report-include]").forEach((input) => {
+      if (!changedSet.has(input.dataset.monthlyReportInclude)) return;
+      const changedItem = monthlyReportFindItem(input.dataset.monthlyReportInclude);
+      if (!changedItem) return;
+      input.checked = changedItem.included !== false;
+      input.closest("[data-monthly-report-item]")?.classList.toggle("is-excluded", changedItem.included === false);
+    });
     return;
   }
   const activityFilter = event.target.closest("[data-activity-log-filter]");
