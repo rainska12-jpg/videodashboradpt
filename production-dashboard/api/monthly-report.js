@@ -73,19 +73,56 @@ function sanitizeSources(value) {
 
 function sanitizeCandidates(value, sourceById) {
   if (!Array.isArray(value)) return [];
-  return value.slice(0, 500).map((item) => {
+  const candidates = value.slice(0, 500).map((item) => {
+    const candidateId = cleanText(item?.candidateId, 200);
     const section = cleanText(item?.section, 20);
     const sourceIds = [...new Set((Array.isArray(item?.sourceIds) ? item.sourceIds : []).map((id) => cleanText(id, 160)).filter((id) => sourceById.has(id)))];
     const title = cleanText(item?.title, 240);
     const dates = uniqueDates(item?.dates);
     const text = cleanText(item?.text, 500);
-    if (!SECTION_KEYS.includes(section) || !sourceIds.length || !title) return null;
+    const itemTypeValue = cleanText(item?.itemType, 20);
+    const itemType = ["project", "task"].includes(itemTypeValue) ? itemTypeValue : "standard";
+    const parentSourceId = cleanText(item?.parentSourceId, 160);
+    const parentTitle = cleanText(item?.parentTitle, 240);
+    const department = cleanText(item?.department, 160);
+    if (!candidateId || !SECTION_KEYS.includes(section) || !sourceIds.length || !title) return null;
     const allowedSources = sourceIds.map((id) => sourceById.get(id));
     if (!allowedSources.some((source) => source.title === title)) return null;
     const allowedDates = new Set(allowedSources.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
     if (dates.some((date) => !allowedDates.has(date))) return null;
-    return { section, sourceIds, title, dates, text };
+    return { candidateId, section, sourceIds, title, dates, text, itemType, parentSourceId, parentTitle, department };
   }).filter(Boolean);
+  const seen = new Set();
+  return candidates.filter((candidate) => {
+    if (seen.has(candidate.candidateId)) return false;
+    seen.add(candidate.candidateId);
+    return true;
+  });
+}
+
+function wholeReportDraft(candidates) {
+  const activityGroups = new Map();
+  candidates.filter((candidate) => candidate.section === "activity").forEach((candidate) => {
+    const key = candidate.itemType === "standard"
+      ? `standalone:${candidate.candidateId}`
+      : `work:${candidate.parentSourceId || candidate.parentTitle || candidate.candidateId}`;
+    if (!activityGroups.has(key)) {
+      activityGroups.set(key, {
+        groupTitle: candidate.parentTitle || candidate.title,
+        department: candidate.department,
+        parent: null,
+        tasks: []
+      });
+    }
+    const group = activityGroups.get(key);
+    if (candidate.itemType === "task") group.tasks.push(candidate);
+    else group.parent = candidate;
+  });
+  return {
+    activityGroups: [...activityGroups.values()],
+    production: candidates.filter((candidate) => candidate.section === "production"),
+    next: candidates.filter((candidate) => candidate.section === "next")
+  };
 }
 
 function outputText(result) {
@@ -98,47 +135,48 @@ function outputText(result) {
   return "";
 }
 
-function validateModelResult(value, sources, candidates) {
-  const sourceById = new Map(sources.map((source) => [source.sourceId, source]));
-  const candidatesBySection = Object.fromEntries(SECTION_KEYS.map((section) => [section, candidates.filter((item) => item.section === section)]));
+function koreanDateText(date) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  return match ? `${Number(match[2])}월 ${Number(match[3])}일` : "";
+}
+
+function validateModelResult(value, candidates) {
+  const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
   const result = { activity: [], production: [], next: [] };
+  const seen = new Set();
   SECTION_KEYS.forEach((section) => {
-    const allowedIds = new Set(candidatesBySection[section].flatMap((item) => item.sourceIds));
-    const rawItems = Array.isArray(value?.[section]) ? value[section].slice(0, 300) : [];
+    const rawItems = Array.isArray(value?.[section]) ? value[section].slice(0, 500) : [];
     rawItems.forEach((item) => {
-      const sourceIds = [...new Set((Array.isArray(item?.sourceIds) ? item.sourceIds : []).map((id) => cleanText(id, 160)))];
-      if (!sourceIds.length || sourceIds.some((id) => !allowedIds.has(id) || !sourceById.has(id))) return;
-      const referenced = sourceIds.map((id) => sourceById.get(id));
-      const title = cleanText(item?.title, 240);
-      if (!referenced.some((source) => source.title === title)) return;
-      const allowedDates = new Set(referenced.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
-      const dates = uniqueDates(item?.dates);
-      if (dates.some((date) => !allowedDates.has(date))) return;
-      const matchingCandidate = candidatesBySection[section].find((candidate) =>
-        candidate.title === title && candidate.sourceIds.some((id) => sourceIds.includes(id))
-      );
+      const candidateId = cleanText(item?.candidateId, 200);
+      const candidate = candidateById.get(candidateId);
+      if (!candidate || candidate.section !== section || seen.has(candidateId)) {
+        throw new Error("GPT 전체 정리 결과의 항목 구성이 원본과 일치하지 않습니다.");
+      }
       const generatedText = cleanText(item?.text, 500);
+      if (!generatedText.includes(candidate.title)) {
+        throw new Error(`GPT 전체 정리 결과에서 원본 제목을 확인할 수 없습니다: ${candidate.title}`);
+      }
+      const missingDate = candidate.dates.map(koreanDateText).filter(Boolean).find((date) => !generatedText.includes(date));
+      if (missingDate) {
+        throw new Error(`GPT 전체 정리 결과에서 원본 날짜를 확인할 수 없습니다: ${candidate.title} · ${missingDate}`);
+      }
+      seen.add(candidateId);
       result[section].push({
-        sourceIds,
-        title,
-        dates,
-        text: generatedText.includes(title) ? generatedText : matchingCandidate?.text || title
+        candidateId,
+        sourceIds: candidate.sourceIds,
+        title: candidate.title,
+        dates: candidate.dates,
+        text: generatedText
       });
     });
-
-    const covered = new Set(result[section].flatMap((item) => item.sourceIds));
-    candidatesBySection[section].forEach((candidate) => {
-      if (!candidate.sourceIds.some((id) => covered.has(id))) {
-        result[section].push({ sourceIds: candidate.sourceIds, title: candidate.title, dates: candidate.dates, text: candidate.text });
-      }
-    });
   });
+  if (seen.size !== candidates.length) throw new Error("GPT 전체 정리 결과에 누락된 항목이 있습니다. 다시 정리해 주세요.");
   return result;
 }
 
 function publicError(error) {
   const message = String(error?.message || "월말보고서를 정리하지 못했습니다.");
-  if (/OPENAI_API_KEY|OpenAI API|API 사용량|관리자 인증/.test(message)) return message;
+  if (/OPENAI_API_KEY|OpenAI API|API 사용량|관리자 인증|GPT 전체 정리 결과/.test(message)) return message;
   console.error(error);
   return "월말보고서를 정리하지 못했습니다. Vercel 로그를 확인해 주세요.";
 }
@@ -162,12 +200,10 @@ export default async function handler(req, res) {
     const schemaItem = {
       type: "object",
       additionalProperties: false,
-      required: ["sourceIds", "title", "dates", "text"],
+      required: ["candidateId", "text"],
       properties: {
-        sourceIds: { type: "array", minItems: 1, items: { type: "string" } },
-        title: { type: "string" },
-        dates: { type: "array", items: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } },
-        text: { type: "string" }
+        candidateId: { type: "string" },
+        text: { type: "string", minLength: 1 }
       }
     };
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -176,9 +212,19 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: envValue("OPENAI_MONTHLY_REPORT_MODEL") || "gpt-5.6-luna",
         store: false,
-        reasoning: { effort: "low" },
-        instructions: `${prompt}\n\n출력 규칙: 입력 후보를 빠뜨리지 말고 제목과 날짜를 그대로 유지한다. 각 항목은 근거가 되는 sourceIds를 모두 포함한다. text에는 사용자의 프롬프트에 따라 정리한 최종 미리보기 문구를 작성하되 원본 title을 정확히 포함하고 목록 기호는 붙이지 않는다. 원본에 없는 사실은 추가하지 않는다. 설명문 없이 지정된 JSON 구조만 반환한다.`,
-        input: JSON.stringify({ month, sources, candidates }),
+        reasoning: { effort: "medium" },
+        instructions: `${prompt}
+
+전체 정리 규칙:
+1. report 전체를 먼저 읽고 활동내용, 제작물현황, 차월계획을 하나의 월말보고서로 편집한다.
+2. 각 항목을 서로 독립된 문장처럼 처리하지 말고 전체 문체, 표현 방식, 날짜 표기와 순서를 일관되게 맞춘다.
+3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
+4. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
+5. 입력에 있는 모든 candidateId를 정확히 한 번씩 반환하며 추가, 누락, 중복하지 않는다.
+6. text는 전체 보고서의 문체에 맞춰 새로 정리하되 해당 항목의 원본 title과 모든 날짜를 정확히 포함한다.
+7. 원본에 없는 사실을 추가하지 않고 목록 기호는 붙이지 않는다.
+8. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+        input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",
           format: {
@@ -204,7 +250,7 @@ export default async function handler(req, res) {
     const text = outputText(responseBody);
     if (!text) throw new Error("OpenAI API가 보고서 결과를 반환하지 않았습니다.");
     const generated = JSON.parse(text);
-    return res.status(200).json({ ok: true, sections: validateModelResult(generated, sources, candidates) });
+    return res.status(200).json({ ok: true, mode: "whole_report", sections: validateModelResult(generated, candidates) });
   } catch (error) {
     return res.status(500).json({ ok: false, error: publicError(error) });
   }

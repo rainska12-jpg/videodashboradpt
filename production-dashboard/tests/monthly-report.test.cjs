@@ -42,6 +42,14 @@ function fixtureState() {
   };
 }
 
+async function monthlyReportApiInternals() {
+  const apiPath = path.join(__dirname, "../api/monthly-report.js");
+  const source = fs.readFileSync(apiPath, "utf8")
+    .replace("export default async function handler", "async function handler");
+  const testableSource = `${source}\nexport { wholeReportDraft, validateModelResult };`;
+  return import(`data:text/javascript;base64,${Buffer.from(testableSource).toString("base64")}`);
+}
+
 test("업무내용 카테고리만 수집하고 본문·메모·시간은 API 데이터에서 제외한다", () => {
   const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
   const records = sources.filter((item) => item.sourceType === "management_record");
@@ -181,6 +189,111 @@ test("체크 해제 항목은 GPT 후보에서 제외하고 프롬프트로 정�
     next: []
   }, sources, fallback);
   assert.equal(validated.activity[0].text, "7월 개강 홍보영상 / 교육팀 / 7월 3일 진행");
+});
+
+test("GPT 입력은 상위 업무와 하위 업무를 전체 보고서 묶음으로 구성한다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  const report = core.wholeReportDraft(preview);
+  const projectGroup = report.activityGroups.find((group) => group.parent?.title === "7월 개강 홍보영상");
+  assert.ok(projectGroup);
+  assert.equal(projectGroup.parent.itemType, "project");
+  assert.deepEqual(projectGroup.tasks.map((item) => item.title), ["촬영 진행"]);
+  assert.ok(projectGroup.parent.candidateId);
+  assert.equal(report.production[0].section, "production");
+  assert.equal(report.next[0].section, "next");
+});
+
+test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 누락 결과는 거부한다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const fallback = core.buildMonthlyReportPreview(sources, "2026-07");
+  const candidates = core.previewItems(fallback);
+  const generated = { activity: [], production: [], next: [] };
+  candidates.slice().reverse().forEach((candidate) => {
+    generated[candidate.section].push({
+      candidateId: candidate.candidateId,
+      text: `${candidate.text} / 전체 문체 정리`
+    });
+  });
+  const validated = core.validateGeneratedSections(generated, sources, fallback, { requireComplete: true });
+  assert.deepEqual(
+    validated.activity.map((item) => item.id),
+    generated.activity.map((item) => item.candidateId)
+  );
+  assert.ok(validated.activity.every((item) => item.text.endsWith("/ 전체 문체 정리")));
+
+  const missing = {
+    activity: generated.activity.slice(1),
+    production: generated.production,
+    next: generated.next
+  };
+  assert.throws(
+    () => core.validateGeneratedSections(missing, sources, fallback, { requireComplete: true }),
+    /누락된 항목/
+  );
+});
+
+test("서버도 전체 업무 묶음을 전달하고 누락·날짜 변경 결과를 거부한다", async () => {
+  const { wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
+  const candidates = [
+    {
+      candidateId: "project-1",
+      section: "activity",
+      sourceIds: ["project-1"],
+      title: "기관 홍보영상",
+      dates: ["2026-07-03"],
+      text: "기관 홍보영상 / 홍보팀 / 7월 3일",
+      itemType: "project",
+      parentSourceId: "project-1",
+      parentTitle: "기관 홍보영상",
+      department: "홍보팀"
+    },
+    {
+      candidateId: "task-1",
+      section: "activity",
+      sourceIds: ["task-1", "project-1"],
+      title: "촬영 진행",
+      dates: ["2026-07-08"],
+      text: "촬영 진행 / 7월 8일",
+      itemType: "task",
+      parentSourceId: "project-1",
+      parentTitle: "기관 홍보영상",
+      department: "홍보팀"
+    }
+  ];
+  const draft = wholeReportDraft(candidates);
+  assert.equal(draft.activityGroups.length, 1);
+  assert.equal(draft.activityGroups[0].parent.candidateId, "project-1");
+  assert.equal(draft.activityGroups[0].tasks[0].candidateId, "task-1");
+
+  const valid = validateModelResult({
+    activity: [
+      { candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" },
+      { candidateId: "task-1", text: "촬영 진행 / 7월 8일 완료" }
+    ],
+    production: [],
+    next: []
+  }, candidates);
+  assert.equal(valid.activity[0].text, "기관 홍보영상 / 홍보팀 / 7월 3일 추진");
+  assert.throws(
+    () => validateModelResult({
+      activity: [{ candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" }],
+      production: [],
+      next: []
+    }, candidates),
+    /누락된 항목/
+  );
+  assert.throws(
+    () => validateModelResult({
+      activity: [
+        { candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" },
+        { candidateId: "task-1", text: "촬영 진행 / 7월 9일 완료" }
+      ],
+      production: [],
+      next: []
+    }, candidates),
+    /원본 날짜/
+  );
 });
 
 test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {

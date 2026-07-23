@@ -9502,14 +9502,14 @@ function monthlyReportOrganizeStageMarkup() {
         <div class="monthly-report-confirmation-icon" aria-hidden="true">2</div>
         <div>
           <p class="eyebrow">STEP 2</p>
-          <h3>선택한 ${selectedCount}개 항목으로 월말보고서를 정리할까요?</h3>
-          <p>선택하지 않은 항목은 제외됩니다. 정리가 끝난 뒤 미리보기에서 항목을 빼거나 문구를 직접 수정할 수 있습니다.</p>
+          <h3>선택한 ${selectedCount}개 항목으로 보고서 전체를 정리할까요?</h3>
+          <p>상위 업무와 하위 업무를 함께 검토해 전체 문체와 순서를 통일합니다. 정리가 끝난 뒤 미리보기에서 항목을 빼거나 문구를 직접 수정할 수 있습니다.</p>
         </div>
       </section>
       <details class="monthly-report-prompt-card" open>
         <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>월말보고 작성 프롬프트</h3></div><span aria-hidden="true"></span></summary>
         <div>
-          <p>아래에 보이는 프롬프트를 그대로 사용합니다. 제목과 날짜는 원본 검증을 거쳐 유지됩니다.</p>
+          <p>아래 프롬프트를 체크된 보고서 전체에 한 번 적용합니다. 제목과 날짜는 정리 후 원본 검증을 거쳐 유지됩니다.</p>
           <textarea data-monthly-report-prompt maxlength="12000" rows="15">${esc(prompt)}</textarea>
           <footer><small>관리자 공통 프롬프트</small><button class="pill ghost" data-monthly-report-save-prompt type="button">프롬프트 저장</button></footer>
         </div>
@@ -9635,7 +9635,7 @@ async function generateMonthlyReportWithGpt(button) {
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = "GPT 정리 중…";
-  monthlyReportMessage = "제목과 날짜만 GPT에 전달해 보고서 순서를 정리하고 있습니다.";
+  monthlyReportMessage = "체크된 보고서 전체를 검토해 문체, 업무 묶음과 항목 순서를 정리하고 있습니다.";
   const promptInput = button.closest(".monthly-report-manager")?.querySelector("[data-monthly-report-prompt]")
     || $("[data-monthly-report-prompt]");
   const prompt = String(promptInput?.value || state.monthlyReport?.prompt || window.MonthlyReportCore.DEFAULT_PROMPT).slice(0, 12000);
@@ -9645,13 +9645,18 @@ async function generateMonthlyReportWithGpt(button) {
   try {
     const result = await monthlyReportApi(prompt);
     const fallback = cloneMonthlyReportSections(monthlyReportDraft);
-    monthlyReportPreview = window.MonthlyReportCore.validateGeneratedSections(result.sections, monthlyReportSources, fallback);
+    monthlyReportPreview = window.MonthlyReportCore.validateGeneratedSections(
+      result.sections,
+      monthlyReportSources,
+      fallback,
+      { requireComplete: result.mode === "whole_report" }
+    );
     monthlyReportGeneratedByGpt = true;
     monthlyReportStep = 3;
-    monthlyReportMessage = "선택한 항목을 프롬프트에 따라 정리했습니다. 제목과 날짜는 원본 검증을 거쳤습니다.";
+    monthlyReportMessage = "보고서 전체의 문체와 순서를 프롬프트에 따라 정리했습니다. 모든 제목과 날짜는 원본 검증을 거쳤습니다.";
     renderAdmin();
     if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
-    showToast("GPT가 월말보고서를 정리했습니다.");
+    showToast("GPT가 월말보고서 전체를 정리했습니다.");
   } catch (error) {
     monthlyReportGeneratedByGpt = false;
     monthlyReportStep = 2;

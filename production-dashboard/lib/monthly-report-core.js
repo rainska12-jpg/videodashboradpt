@@ -9,6 +9,12 @@
   const SECTION_KEYS = ["activity", "production", "next"];
   const DEFAULT_PROMPT = `제공된 원본 데이터만 사용하여 월말보고서를 작성한다.
 
+각 항목을 따로 수정하지 말고 체크된 보고서 전체를 먼저 검토한 뒤 하나의 문서처럼 정리한다.
+
+전체 항목의 문체, 표현 방식, 날짜 표기, 항목 순서를 일관되게 맞춘다.
+
+활동내용에서는 상위 업무와 연결된 하위 할 일을 하나의 업무 묶음으로 판단한다.
+
 월말보고서에서는 세부 업무 설명보다 날짜와 공식 제목이 중요하다.
 
 결과를 활동내용, 제작물현황, 차월계획으로 구분한다.
@@ -383,12 +389,43 @@
     return SECTION_KEYS.flatMap((section) => (sections?.[section] || [])
       .filter((item) => item.included !== false)
       .map((item) => ({
+      candidateId: String(item.id || ""),
       section,
       sourceIds: [...new Set(item.sourceIds || [])],
       title: String(item.title || ""),
       dates: uniqueDates(item.dates),
-      text: String(item.text || "").slice(0, 500)
+      text: String(item.text || "").slice(0, 500),
+      itemType: ["project", "task"].includes(item.itemType) ? item.itemType : "standard",
+      parentSourceId: String(item.parentSourceId || ""),
+      parentTitle: String(item.parentTitle || ""),
+      department: String(item.department || "")
     })));
+  }
+
+  function wholeReportDraft(sections) {
+    const candidates = previewItems(sections);
+    const activityGroups = new Map();
+    candidates.filter((item) => item.section === "activity").forEach((item) => {
+      const key = item.itemType === "standard"
+        ? `standalone:${item.candidateId}`
+        : `work:${item.parentSourceId || item.parentTitle || item.candidateId}`;
+      if (!activityGroups.has(key)) {
+        activityGroups.set(key, {
+          groupTitle: item.parentTitle || item.title,
+          department: item.department,
+          parent: null,
+          tasks: []
+        });
+      }
+      const group = activityGroups.get(key);
+      if (item.itemType === "task") group.tasks.push(item);
+      else group.parent = item;
+    });
+    return {
+      activityGroups: [...activityGroups.values()],
+      production: candidates.filter((item) => item.section === "production"),
+      next: candidates.filter((item) => item.section === "next")
+    };
   }
 
   function setPreviewItemIncluded(sections, itemId, included) {
@@ -407,10 +444,42 @@
     return [...new Set(changedIds)];
   }
 
-  function validateGeneratedSections(generated, sources, fallbackSections) {
+  function validateGeneratedSections(generated, sources, fallbackSections, options = {}) {
     const sourceById = new Map((sources || []).map((source) => [source.sourceId, source]));
     const fallback = fallbackSections || { activity: [], production: [], next: [] };
     const result = { activity: [], production: [], next: [] };
+    if (options.requireComplete === true) {
+      const expected = new Map(SECTION_KEYS.flatMap((section) => (fallback[section] || [])
+        .filter((item) => item.included !== false)
+        .map((item) => [String(item.id || ""), { ...item, section }])));
+      const seen = new Set();
+      SECTION_KEYS.forEach((section) => {
+        const items = Array.isArray(generated?.[section]) ? generated[section] : [];
+        items.forEach((item) => {
+          const candidateId = String(item?.candidateId || "");
+          const original = expected.get(candidateId);
+          if (!original || original.section !== section || seen.has(candidateId)) {
+            throw new Error("GPT 전체 정리 결과의 항목 구성이 원본과 일치하지 않습니다.");
+          }
+          const generatedText = String(item.text || "").trim().slice(0, 500);
+          if (!generatedText || !generatedText.includes(original.title)) {
+            throw new Error(`GPT 전체 정리 결과에서 원본 제목을 확인할 수 없습니다: ${original.title}`);
+          }
+          seen.add(candidateId);
+          result[section].push({
+            ...original,
+            sourceIds: [...(original.sourceIds || [])],
+            dates: [...(original.dates || [])],
+            text: generatedText,
+            included: true
+          });
+        });
+      });
+      if (seen.size !== expected.size) {
+        throw new Error("GPT 전체 정리 결과에 누락된 항목이 있습니다. 다시 정리해 주세요.");
+      }
+      return result;
+    }
     let serial = 0;
     SECTION_KEYS.forEach((section) => {
       const candidates = Array.isArray(generated?.[section]) ? generated[section] : [];
@@ -478,6 +547,7 @@
     buildMonthlyReportPreview,
     apiSources,
     previewItems,
+    wholeReportDraft,
     setPreviewItemIncluded,
     validateGeneratedSections
   };
