@@ -215,12 +215,13 @@ test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 누락 
       text: `${candidate.text} / 전체 문체 정리`
     });
   });
+  generated.activity[0].text = "프롬프트로 자유롭게 바꾼 업무 표현 / 7.2.";
   const validated = core.validateGeneratedSections(generated, sources, fallback, { requireComplete: true });
   assert.deepEqual(
     validated.activity.map((item) => item.id),
     generated.activity.map((item) => item.candidateId)
   );
-  assert.ok(validated.activity.every((item) => item.text.endsWith("/ 전체 문체 정리")));
+  assert.equal(validated.activity[0].text, "프롬프트로 자유롭게 바꾼 업무 표현 / 7.2.");
 
   const missing = {
     activity: generated.activity.slice(1),
@@ -233,7 +234,7 @@ test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 누락 
   );
 });
 
-test("서버도 전체 업무 묶음을 전달하고 누락·날짜 변경 결과를 거부한다", async () => {
+test("서버도 전체 업무 묶음을 전달하고 누락은 거부하되 프롬프트의 날짜 표기는 유지한다", async () => {
   const { wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
   const candidates = [
     {
@@ -283,17 +284,16 @@ test("서버도 전체 업무 묶음을 전달하고 누락·날짜 변경 결�
     }, candidates),
     /누락된 항목/
   );
-  assert.throws(
-    () => validateModelResult({
-      activity: [
-        { candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" },
-        { candidateId: "task-1", text: "촬영 진행 / 7월 9일 완료" }
-      ],
-      production: [],
-      next: []
-    }, candidates),
-    /원본 날짜/
-  );
+  const formatted = validateModelResult({
+    activity: [
+      { candidateId: "project-1", text: "홍보팀 영상 업무 / 7.3. 추진" },
+      { candidateId: "task-1", text: "현장 촬영 / 7.8. 완료" }
+    ],
+    production: [],
+    next: []
+  }, candidates);
+  assert.equal(formatted.activity[0].text, "홍보팀 영상 업무 / 7.3. 추진");
+  assert.equal(formatted.activity[1].text, "현장 촬영 / 7.8. 완료");
 });
 
 test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {

@@ -135,11 +135,6 @@ function outputText(result) {
   return "";
 }
 
-function koreanDateText(date) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  return match ? `${Number(match[2])}월 ${Number(match[3])}일` : "";
-}
-
 function validateModelResult(value, candidates) {
   const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
   const result = { activity: [], production: [], next: [] };
@@ -153,13 +148,7 @@ function validateModelResult(value, candidates) {
         throw new Error("GPT 전체 정리 결과의 항목 구성이 원본과 일치하지 않습니다.");
       }
       const generatedText = cleanText(item?.text, 500);
-      if (!generatedText.includes(candidate.title)) {
-        throw new Error(`GPT 전체 정리 결과에서 원본 제목을 확인할 수 없습니다: ${candidate.title}`);
-      }
-      const missingDate = candidate.dates.map(koreanDateText).filter(Boolean).find((date) => !generatedText.includes(date));
-      if (missingDate) {
-        throw new Error(`GPT 전체 정리 결과에서 원본 날짜를 확인할 수 없습니다: ${candidate.title} · ${missingDate}`);
-      }
+      if (!generatedText) throw new Error("GPT 전체 정리 결과에 비어 있는 항목이 있습니다.");
       seen.add(candidateId);
       result[section].push({
         candidateId,
@@ -221,8 +210,8 @@ export default async function handler(req, res) {
 3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
 4. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
 5. 입력에 있는 모든 candidateId를 정확히 한 번씩 반환하며 추가, 누락, 중복하지 않는다.
-6. text는 전체 보고서의 문체에 맞춰 새로 정리하되 해당 항목의 원본 title과 모든 날짜를 정확히 포함한다.
-7. 원본에 없는 사실을 추가하지 않고 목록 기호는 붙이지 않는다.
+6. text의 제목 표현, 날짜 표기와 문장 구성은 사용자 프롬프트에 맞게 자유롭게 정리할 수 있다.
+7. 원본의 핵심 사실 범위 안에서 작성하고 원본에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
 8. 설명문 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {

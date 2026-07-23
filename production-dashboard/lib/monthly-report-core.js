@@ -462,9 +462,7 @@
             throw new Error("GPT 전체 정리 결과의 항목 구성이 원본과 일치하지 않습니다.");
           }
           const generatedText = String(item.text || "").trim().slice(0, 500);
-          if (!generatedText || !generatedText.includes(original.title)) {
-            throw new Error(`GPT 전체 정리 결과에서 원본 제목을 확인할 수 없습니다: ${original.title}`);
-          }
+          if (!generatedText) throw new Error("GPT 전체 정리 결과에 비어 있는 항목이 있습니다.");
           seen.add(candidateId);
           result[section].push({
             ...original,
