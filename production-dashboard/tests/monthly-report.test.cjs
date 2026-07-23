@@ -197,6 +197,6 @@ test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내
   assert.ok(documentXml.indexOf("7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일") < documentXml.indexOf("촬영 진행 / 7월 8일"));
   assert.equal(
     monthlyReportFilename("2026-07"),
-    "영상제작과_문화부_2026년_7월말보고서.docx"
+    "영상제작과_문화부_7월말보고서.docx"
   );
 });

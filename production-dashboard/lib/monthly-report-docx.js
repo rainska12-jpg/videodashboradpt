@@ -253,8 +253,8 @@
   }
 
   function monthlyReportFilename(month) {
-    const { year, monthNumber } = reportPeriod(month);
-    return `영상제작과_문화부_${year}년_${monthNumber}월말보고서.docx`;
+    const { monthNumber } = reportPeriod(month);
+    return `영상제작과_문화부_${monthNumber}월말보고서.docx`;
   }
 
   async function loadTemplateBytes(templateBytes) {
