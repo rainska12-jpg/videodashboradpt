@@ -218,7 +218,7 @@
     items.forEach((item) => {
       if (!["project", "task"].includes(item.itemType)) {
         if (item.included !== false && String(item.text || "").trim()) {
-          lines.push({ text: item.text.trim(), kind: "regular" });
+          lines.push({ text: `- ${item.text.trim()}`, kind: "parent" });
         }
         return;
       }
@@ -232,8 +232,8 @@
         group.parent?.text ||
         `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정`
       ).trim();
-      if (group.parent?.included !== false && parentText) lines.push({ text: parentText, kind: "parent" });
-      includedTasks.forEach((task) => lines.push({ text: `ㄴ ${task.text.trim()}`, kind: "child" }));
+      if (group.parent?.included !== false && parentText) lines.push({ text: `- ${parentText}`, kind: "parent" });
+      includedTasks.forEach((task, index) => lines.push({ text: `${index + 1}) ${task.text.trim()}`, kind: "child" }));
     });
     return lines;
   }

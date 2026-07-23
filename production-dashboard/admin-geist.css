@@ -1255,6 +1255,168 @@
   padding: 24px;
 }
 
+#adminView .monthly-report-stepper {
+  display: grid;
+  grid-template-columns: max-content minmax(36px, 1fr) max-content minmax(36px, 1fr) max-content minmax(36px, 1fr) max-content;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 12px;
+  background: var(--geist-elevated, #fff);
+  padding: 18px 22px;
+}
+
+#adminView .monthly-report-stepper > button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--geist-mute, #777);
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+#adminView .monthly-report-stepper > button:disabled { cursor: default; opacity: .48; }
+#adminView .monthly-report-stepper > button > i {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 50%;
+  background: var(--geist-soft, #f2f2f2);
+  color: var(--geist-mute, #777);
+  font: 700 13px "Geist Mono", monospace;
+  font-style: normal;
+  transition: border-color .18s ease, background .18s ease, color .18s ease, transform .18s ease;
+}
+#adminView .monthly-report-stepper > button > span { min-width: 0; display: grid; gap: 3px; }
+#adminView .monthly-report-stepper > button strong { color: inherit; font-size: 11px; font-weight: 650; white-space: nowrap; }
+#adminView .monthly-report-stepper > button small { color: var(--geist-mute, #777); font-size: 8px; white-space: nowrap; }
+#adminView .monthly-report-stepper > button.is-complete { color: var(--geist-body, #444); }
+#adminView .monthly-report-stepper > button.is-complete > i {
+  border-color: color-mix(in srgb, var(--geist-accent, #00ed64) 45%, var(--geist-hairline, #ddd));
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 16%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, var(--geist-accent, #00ed64) 72%, var(--geist-ink, #111));
+}
+#adminView .monthly-report-stepper > button.is-current { color: var(--geist-ink, #111); }
+#adminView .monthly-report-stepper > button.is-current > i {
+  border-color: var(--geist-accent, #00ed64);
+  background: var(--geist-accent, #00ed64);
+  color: #04150b;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--geist-accent, #00ed64) 18%, transparent);
+  transform: scale(1.04);
+}
+#adminView .monthly-report-stepper > b {
+  height: 2px;
+  display: block;
+  margin: 0 14px;
+  border-radius: 999px;
+  background: var(--geist-hairline, #ddd);
+}
+#adminView .monthly-report-stepper > b.is-complete {
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 52%, var(--geist-hairline, #ddd));
+}
+
+#adminView .monthly-report-stage { display: grid; gap: 18px; }
+#adminView .monthly-report-stage-actions {
+  min-height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--geist-hairline, #ddd);
+  padding: 12px 20px;
+}
+#adminView .monthly-report-stage > .monthly-report-stage-actions {
+  min-height: 0;
+  border: 0;
+  padding: 0;
+}
+#adminView .monthly-report-stage-actions > span {
+  margin-right: auto;
+  color: var(--geist-mute, #777);
+  font-size: 10px;
+}
+#adminView .monthly-report-stage-actions > span b { color: var(--geist-ink, #111); font-size: 12px; }
+
+#adminView .monthly-report-confirmation {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  border: 1px solid color-mix(in srgb, var(--geist-accent, #00ed64) 34%, var(--geist-hairline, #ddd));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--geist-accent, #00ed64) 7%, var(--geist-elevated, #fff));
+  padding: 20px;
+}
+#adminView .monthly-report-confirmation-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--geist-accent, #00ed64);
+  color: #04150b;
+  font: 750 17px "Geist Mono", monospace;
+}
+#adminView .monthly-report-confirmation h3,
+#adminView .monthly-report-output-card h3 {
+  margin: 3px 0 6px;
+  color: var(--geist-ink, #111);
+  font-size: 17px;
+  font-weight: 650;
+}
+#adminView .monthly-report-confirmation p,
+#adminView .monthly-report-output-card header > p:last-child {
+  margin: 0;
+  color: var(--geist-mute, #777);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+#adminView .monthly-report-output-card {
+  overflow: hidden;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 12px;
+  background: var(--geist-elevated, #fff);
+}
+#adminView .monthly-report-output-card > header { padding: 24px; }
+#adminView .monthly-report-output-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--geist-hairline, #ddd);
+  border-bottom: 1px solid var(--geist-hairline, #ddd);
+}
+#adminView .monthly-report-output-grid article {
+  display: grid;
+  gap: 7px;
+  border-right: 1px solid var(--geist-hairline, #ddd);
+  padding: 18px 20px;
+}
+#adminView .monthly-report-output-grid article:last-child { border-right: 0; }
+#adminView .monthly-report-output-grid span,
+#adminView .monthly-report-output-file span { color: var(--geist-mute, #777); font-size: 9px; }
+#adminView .monthly-report-output-grid strong { color: var(--geist-ink, #111); font-size: 14px; font-weight: 650; }
+#adminView .monthly-report-output-file {
+  display: grid;
+  gap: 8px;
+  margin: 20px;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 9px;
+  background: var(--geist-soft, #f2f2f2);
+  padding: 16px;
+}
+#adminView .monthly-report-output-file strong {
+  overflow-wrap: anywhere;
+  color: var(--geist-ink, #111);
+  font: 600 12px "Geist Mono", "Apple SD Gothic Neo", monospace;
+}
+
 #adminView .monthly-report-toolbar,
 #adminView .monthly-report-card-head,
 #adminView .monthly-report-preview-section > header,
@@ -1496,10 +1658,12 @@
 }
 
 #adminView .monthly-report-preview-item > input[type="checkbox"] { position: absolute; opacity: 0; pointer-events: none; }
-#adminView .monthly-report-preview-item > i { width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid #aaa; border-radius: 4px; background: #fff; }
+#adminView .monthly-report-preview-item > i { width: 16px; height: 16px; display: grid; place-items: center; border: 1px solid var(--geist-faint, #aaa); border-radius: 4px; background: var(--geist-elevated, #fff); }
 #adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i { border-color: #00b84f; background: #00c958; }
 #adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i::after { content: "✓"; color: #041a0d; font-size: 10px; font-style: normal; font-weight: 800; }
 #adminView .monthly-report-preview-item > input[type="text"] { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--geist-ink, #111); padding: 3px 0; font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
+#adminView .monthly-report-preview-item > span { min-width: 0; color: var(--geist-ink, #111); font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
+#adminView .monthly-report-preview-item.is-parent > span { font-weight: 650; }
 #adminView .monthly-report-preview-item:focus-within { border-color: #9a9a9a; background: var(--geist-elevated, #fff); }
 #adminView .monthly-report-preview-item.is-excluded { opacity: .48; }
 #adminView .monthly-report-empty { border: 1px dashed var(--geist-hairline, #ddd); border-radius: 7px; color: var(--geist-mute, #777); padding: 18px; font-size: 10px; text-align: center; }
@@ -1508,22 +1672,53 @@
 #adminView .monthly-report-prompt-card summary { cursor: pointer; list-style: none; padding: 16px 20px; }
 #adminView .monthly-report-prompt-card summary::-webkit-details-marker { display: none; }
 #adminView .monthly-report-prompt-card summary > span { color: var(--geist-mute, #777); font-size: 10px; }
+#adminView .monthly-report-prompt-card summary > span::after { content: "열기"; }
 #adminView .monthly-report-prompt-card[open] summary { border-bottom: 1px solid var(--geist-hairline, #ddd); }
-#adminView .monthly-report-prompt-card[open] summary > span { font-size: 0; }
-#adminView .monthly-report-prompt-card[open] summary > span::after { content: "접기"; font-size: 10px; }
+#adminView .monthly-report-prompt-card[open] summary > span::after { content: "접기"; }
 #adminView .monthly-report-prompt-card > div { display: grid; gap: 10px; padding: 18px 20px; }
 #adminView .monthly-report-prompt-card p { margin: 0; color: var(--geist-mute, #777); font-size: 10px; }
 #adminView .monthly-report-prompt-card textarea { width: 100%; resize: vertical; border: 1px solid var(--geist-hairline, #ddd); border-radius: 7px; background: var(--geist-canvas, #fafafa); color: var(--geist-body, #333); padding: 12px; font: 400 11px/1.65 "Geist", "Apple SD Gothic Neo", sans-serif; }
 #adminView .monthly-report-prompt-card footer small { color: var(--geist-mute, #777); font-size: 9px; }
 
 @media (max-width: 900px) {
+  #adminView .monthly-report-stepper {
+    grid-template-columns: repeat(4, minmax(132px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+  }
+  #adminView .monthly-report-stepper > b { display: none; }
   #adminView .monthly-report-source-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   #adminView .monthly-report-source-summary article:nth-child(3) { border-right: 0; }
   #adminView .monthly-report-source-summary article:nth-child(n+4) { border-top: 1px solid var(--geist-hairline, #ddd); }
 }
 
 @media (max-width: 768px) {
+  #adminView.mobile-monthly-report {
+    --geist-canvas: var(--mobile-video-canvas);
+    --geist-elevated: var(--mobile-video-elevated);
+    --geist-soft: var(--mobile-video-soft);
+    --geist-ink: var(--mobile-video-ink);
+    --geist-body: var(--mobile-video-body);
+    --geist-mute: var(--mobile-video-mute);
+    --geist-faint: var(--mobile-video-mute);
+    --geist-hairline: var(--mobile-video-line);
+    --geist-accent: var(--mobile-video-accent);
+    min-width: 0;
+  }
   #adminView .monthly-report-manager { padding: 14px; }
+  #adminView .monthly-report-stepper {
+    margin: 0;
+    grid-template-columns: repeat(4, minmax(118px, 1fr));
+    padding: 14px;
+  }
+  #adminView .monthly-report-stepper > button {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 8px;
+  }
+  #adminView .monthly-report-stepper > button > i {
+    width: 34px;
+    height: 34px;
+  }
   #adminView .monthly-report-toolbar { align-items: stretch; flex-direction: column; }
   #adminView .monthly-report-toolbar > div { align-items: stretch; }
   #adminView .monthly-report-toolbar label { flex: 1; }
@@ -1538,6 +1733,30 @@
   #adminView .monthly-report-card-head > small { text-align: left; }
   #adminView .monthly-report-preview-item { grid-template-columns: 18px minmax(0, 1fr); }
   #adminView .monthly-report-task-children { padding-left: 9px; }
+  #adminView .monthly-report-stage-actions {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+  }
+  #adminView .monthly-report-stage-actions > span {
+    width: 100%;
+    order: -1;
+  }
+  #adminView .monthly-report-confirmation {
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+  #adminView .monthly-report-confirmation-icon {
+    width: 42px;
+    height: 42px;
+  }
+  #adminView .monthly-report-output-card > header { padding: 20px; }
+  #adminView .monthly-report-output-grid { grid-template-columns: 1fr; }
+  #adminView .monthly-report-output-grid article {
+    border-right: 0;
+    border-bottom: 1px solid var(--geist-hairline, #ddd);
+  }
+  #adminView .monthly-report-output-grid article:last-child { border-bottom: 0; }
 }
 
 @keyframes telegram-pulse {

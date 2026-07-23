@@ -380,11 +380,14 @@
   }
 
   function previewItems(sections) {
-    return SECTION_KEYS.flatMap((section) => (sections?.[section] || []).map((item) => ({
+    return SECTION_KEYS.flatMap((section) => (sections?.[section] || [])
+      .filter((item) => item.included !== false)
+      .map((item) => ({
       section,
       sourceIds: [...new Set(item.sourceIds || [])],
       title: String(item.title || ""),
-      dates: uniqueDates(item.dates)
+      dates: uniqueDates(item.dates),
+      text: String(item.text || "").slice(0, 500)
     })));
   }
 
@@ -428,19 +431,21 @@
         const parentSource = taskSource ? sourceById.get(taskSource.projectId) : titledProjectSource;
         const itemType = taskSource ? "task" : section === "activity" && titledProjectSource ? "project" : "standard";
         const department = String(parentSource?.department || "").trim();
+        const defaultText = itemType === "task"
+          ? `${title} / ${formatDates(dates)}`
+          : itemType === "project"
+            ? `${title} / ${department || "발주부서 미지정"} / ${formatDates(dates)}`
+            : dueStyle
+              ? `${title} / 마감일: ${formatDates(dates)}`
+              : `${formatDates(dates)}: ${title}`;
+        const generatedText = String(item.text || "").trim().slice(0, 500);
         result[section].push({
           id: `report-${section}-gpt-${++serial}`,
           section,
           sourceIds,
           title,
           dates,
-          text: itemType === "task"
-            ? `${title} / ${formatDates(dates)}`
-            : itemType === "project"
-              ? `${title} / ${department || "발주부서 미지정"} / ${formatDates(dates)}`
-            : dueStyle
-              ? `${title} / 마감일: ${formatDates(dates)}`
-              : `${formatDates(dates)}: ${title}`,
+          text: generatedText && generatedText.includes(title) ? generatedText : defaultText,
           ...(itemType === "task" ? {
             itemType,
             parentTitle: String(parentSource?.title || "연결 업무 없음"),

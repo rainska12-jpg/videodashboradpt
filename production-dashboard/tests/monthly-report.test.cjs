@@ -163,6 +163,26 @@ test("GPT 정리 후에도 활동내용의 업무·하위 할 일 구조를 복�
   assert.equal(task.text, "촬영 진행 / 7월 8일");
 });
 
+test("체크 해제 항목은 GPT 후보에서 제외하고 프롬프트로 정리된 문구는 유지한다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const fallback = core.buildMonthlyReportPreview(sources, "2026-07");
+  const excluded = fallback.production[0];
+  excluded.included = false;
+  assert.equal(core.previewItems(fallback).some((item) => item.title === excluded.title && item.section === "production"), false);
+
+  const validated = core.validateGeneratedSections({
+    activity: [{
+      sourceIds: ["record-1"],
+      title: "7월 개강 홍보영상",
+      dates: ["2026-07-03"],
+      text: "7월 개강 홍보영상 / 교육팀 / 7월 3일 진행"
+    }],
+    production: [],
+    next: []
+  }, sources, fallback);
+  assert.equal(validated.activity[0].text, "7월 개강 홍보영상 / 교육팀 / 7월 3일 진행");
+});
+
 test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {
   const templateBytes = fs.readFileSync(path.join(__dirname, "../templates/monthly-report-template.docx"));
   const bytes = await createMonthlyReportDocx({
@@ -172,7 +192,8 @@ test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내
     sections: {
       activity: [
         { included: true, itemType: "project", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일" },
-        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "촬영 진행 / 7월 8일" }
+        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "촬영 진행 / 7월 8일" },
+        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "편집 진행 / 7월 15일" }
       ],
       production: [{ included: true, text: "7월 개강 홍보영상 / 마감일: 7월 25일" }],
       next: [{ included: true, text: "8월 4일: 방송실 장비 점검" }]
@@ -192,8 +213,9 @@ test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내
   assert.match(documentXml, /신천기 43\(2026\)년 7월 31일/);
   assert.match(documentXml, /보고자 : 영상제작과장 관리자/);
   assert.match(documentXml, /7월 개강 홍보영상/);
-  assert.match(documentXml, /7월 개강 홍보영상 \/ 교육팀 \/ 7월 3일, 7월 8일/);
-  assert.match(documentXml, /ㄴ 촬영 진행 \/ 7월 8일/);
+  assert.match(documentXml, /- 7월 개강 홍보영상 \/ 교육팀 \/ 7월 3일, 7월 8일/);
+  assert.match(documentXml, /1\) 촬영 진행 \/ 7월 8일/);
+  assert.match(documentXml, /2\) 편집 진행 \/ 7월 15일/);
   assert.ok(documentXml.indexOf("7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일") < documentXml.indexOf("촬영 진행 / 7월 8일"));
   assert.equal(
     monthlyReportFilename("2026-07"),

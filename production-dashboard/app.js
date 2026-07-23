@@ -573,10 +573,12 @@ let monthlyReportMonth = viewPref("monthlyReportMonth", dateKey(new Date()).slic
 let monthlyReportMonthPickerOpen = false;
 let monthlyReportPickerYear = Number(monthlyReportMonth.slice(0, 4)) || new Date().getFullYear();
 let monthlyReportSources = [];
+let monthlyReportDraft = { activity: [], production: [], next: [] };
 let monthlyReportPreview = { activity: [], production: [], next: [] };
 let monthlyReportMessage = "";
 let monthlyReportGeneratedByGpt = false;
 let monthlyReportLoadedMonth = "";
+let monthlyReportStep = 1;
 let activeView = "overview";
 let activeDropdownAnchor = null;
 
@@ -9258,6 +9260,44 @@ function monthlyReportWorkContentCategoryValue() {
   return MANAGEMENT_RECORD_THEMES.find((theme) => String(theme.label || "").replace(/\s+/g, "") === "업무내용")?.value || "";
 }
 
+function cloneMonthlyReportSections(sections) {
+  return Object.fromEntries((window.MonthlyReportCore?.SECTION_KEYS || ["activity", "production", "next"]).map((section) => [
+    section,
+    (sections?.[section] || []).map((item) => ({
+      ...item,
+      sourceIds: [...(item.sourceIds || [])],
+      dates: [...(item.dates || [])]
+    }))
+  ]));
+}
+
+function monthlyReportIncludedCount(sections) {
+  return (window.MonthlyReportCore?.SECTION_KEYS || []).reduce(
+    (total, section) => total + (sections?.[section] || []).filter((item) => item.included !== false && String(item.text || "").trim()).length,
+    0
+  );
+}
+
+function monthlyReportStepAvailable(step) {
+  if (step === 1) return true;
+  if (step === 2) return monthlyReportIncludedCount(monthlyReportDraft) > 0;
+  return monthlyReportGeneratedByGpt;
+}
+
+function selectMonthlyReportStep(step) {
+  const nextStep = Number(step);
+  if (![1, 2, 3, 4].includes(nextStep) || !monthlyReportStepAvailable(nextStep)) return;
+  monthlyReportStep = nextStep;
+  monthlyReportMonthPickerOpen = false;
+  renderAdmin();
+}
+
+function invalidateMonthlyReportResult() {
+  monthlyReportGeneratedByGpt = false;
+  monthlyReportPreview = cloneMonthlyReportSections(monthlyReportDraft);
+  monthlyReportMessage = "선택 항목이 변경되었습니다. 다음 단계에서 보고서를 다시 정리해 주세요.";
+}
+
 function collectMonthlyReportPreview() {
   const core = window.MonthlyReportCore;
   if (!core) {
@@ -9266,16 +9306,20 @@ function collectMonthlyReportPreview() {
   }
   try {
     monthlyReportSources = core.collectMonthlyReportSources(state, monthlyReportMonth, monthlyReportWorkContentCategoryValue());
-    monthlyReportPreview = core.buildMonthlyReportPreview(monthlyReportSources, monthlyReportMonth);
+    monthlyReportDraft = core.buildMonthlyReportPreview(monthlyReportSources, monthlyReportMonth);
+    monthlyReportPreview = cloneMonthlyReportSections(monthlyReportDraft);
     monthlyReportLoadedMonth = monthlyReportMonth;
     monthlyReportGeneratedByGpt = false;
-    const count = core.SECTION_KEYS.reduce((total, key) => total + monthlyReportPreview[key].length, 0);
+    monthlyReportStep = 1;
+    const count = core.SECTION_KEYS.reduce((total, key) => total + monthlyReportDraft[key].length, 0);
     monthlyReportMessage = count ? `제목과 날짜 기준으로 ${count}개 항목을 수집했습니다.` : "선택한 달에 보고서로 정리할 데이터가 없습니다.";
     return true;
   } catch (error) {
     monthlyReportSources = [];
+    monthlyReportDraft = { activity: [], production: [], next: [] };
     monthlyReportPreview = { activity: [], production: [], next: [] };
     monthlyReportLoadedMonth = monthlyReportMonth;
+    monthlyReportStep = 1;
     monthlyReportMessage = error.message || "월말보고서 데이터를 수집하지 못했습니다.";
     return false;
   }
@@ -9324,15 +9368,18 @@ function selectMonthlyReportMonth(value) {
   saveViewPrefs({ monthlyReportMonth });
   collectMonthlyReportPreview();
   renderAdmin();
+  if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
 }
 
-function monthlyReportSectionMarkup(key, title, description) {
-  const items = monthlyReportPreview[key] || [];
+function monthlyReportSectionMarkup(key, title, description, { sections = monthlyReportPreview, scope = "preview", editable = true } = {}) {
+  const items = sections[key] || [];
   const itemMarkup = (item, extraClass = "") => `
-    <label class="monthly-report-preview-item ${extraClass} ${item.included === false ? "is-excluded" : ""}" data-monthly-report-item="${esc(item.id)}">
-      <input type="checkbox" data-monthly-report-include="${esc(item.id)}" ${item.included === false ? "" : "checked"} />
+    <label class="monthly-report-preview-item ${extraClass} ${editable ? "is-editable" : "is-draft"} ${item.included === false ? "is-excluded" : ""}" data-monthly-report-item="${esc(item.id)}" data-monthly-report-scope="${scope}">
+      <input type="checkbox" data-monthly-report-include="${esc(item.id)}" data-monthly-report-scope="${scope}" ${item.included === false ? "" : "checked"} />
       <i aria-hidden="true"></i>
-      <input type="text" data-monthly-report-text="${esc(item.id)}" value="${esc(item.text)}" aria-label="보고서 항목 문구" />
+      ${editable
+        ? `<input type="text" data-monthly-report-text="${esc(item.id)}" data-monthly-report-scope="${scope}" value="${esc(item.text)}" aria-label="보고서 항목 문구" />`
+        : `<span>${esc(item.text)}</span>`}
     </label>
   `;
   let listMarkup = items.map((item) => itemMarkup(item)).join("");
@@ -9377,65 +9424,182 @@ function monthlyReportSectionMarkup(key, title, description) {
   `;
 }
 
-function renderMonthlyReportManager() {
-  ensureMonthlyReportPreview();
-  const prompt = state.monthlyReport?.prompt || window.MonthlyReportCore?.DEFAULT_PROMPT || "";
+function monthlyReportStepperMarkup() {
+  const steps = [
+    [1, "자료 선택", "보고서 초안"],
+    [2, "GPT 정리", "프롬프트 확인"],
+    [3, "미리보기", "항목 수정"],
+    [4, "Word 출력", "파일 생성"]
+  ];
+  return `
+    <nav class="monthly-report-stepper" aria-label="월말보고서 작성 단계">
+      ${steps.map(([step, label, description], index) => {
+        const available = monthlyReportStepAvailable(step);
+        const completed = step < monthlyReportStep || (monthlyReportGeneratedByGpt && step <= 2);
+        return `
+          <button class="${step === monthlyReportStep ? "is-current" : ""} ${completed ? "is-complete" : ""}" data-monthly-report-step="${step}" type="button" ${available ? "" : "disabled"} aria-current="${step === monthlyReportStep ? "step" : "false"}">
+            <i>${completed ? "✓" : step}</i>
+            <span><strong>${label}</strong><small>${description}</small></span>
+          </button>
+          ${index < steps.length - 1 ? `<b class="${completed ? "is-complete" : ""}" aria-hidden="true"></b>` : ""}
+        `;
+      }).join("")}
+    </nav>
+  `;
+}
+
+function monthlyReportSourceSummaryMarkup() {
   const sourceCounts = Object.fromEntries(["video_project", "work_project", "task", "management_record", "studio_schedule"].map((type) => [type, monthlyReportSources.filter((source) => source.sourceType === type).length]));
   return `
-    <div class="monthly-report-manager">
-      <section class="monthly-report-toolbar">
+    <section class="monthly-report-source-summary" aria-label="수집 데이터 요약">
+      <article><span>영상</span><b>${sourceCounts.video_project}</b></article>
+      <article><span>업무</span><b>${sourceCounts.work_project}</b></article>
+      <article><span>할 일</span><b>${sourceCounts.task}</b></article>
+      <article><span>업무내용 기록</span><b>${sourceCounts.management_record}</b></article>
+      <article><span>방송실 일정</span><b>${sourceCounts.studio_schedule}</b></article>
+    </section>
+  `;
+}
+
+function monthlyReportDraftStageMarkup() {
+  const selectedCount = monthlyReportIncludedCount(monthlyReportDraft);
+  return `
+    <section class="monthly-report-stage">
+      <div class="monthly-report-toolbar">
         <div>
           ${monthlyReportMonthPickerMarkup()}
           <button class="pill ghost" data-monthly-report-collect type="button">데이터 다시 수집</button>
         </div>
-        <div class="monthly-report-actions">
-          <button class="pill ghost" data-monthly-report-gpt type="button">GPT로 정리</button>
-          <button class="pill primary" data-monthly-report-download type="button">Word 다운로드</button>
-        </div>
-      </section>
-
-      <section class="monthly-report-source-summary" aria-label="수집 데이터 요약">
-        <article><span>영상</span><b>${sourceCounts.video_project}</b></article>
-        <article><span>업무</span><b>${sourceCounts.work_project}</b></article>
-        <article><span>할 일</span><b>${sourceCounts.task}</b></article>
-        <article><span>업무내용 기록</span><b>${sourceCounts.management_record}</b></article>
-        <article><span>방송실 일정</span><b>${sourceCounts.studio_schedule}</b></article>
-      </section>
-
-      <div class="monthly-report-notice ${monthlyReportGeneratedByGpt ? "is-gpt" : ""}" data-monthly-report-message aria-live="polite">
-        <strong>${monthlyReportGeneratedByGpt ? "GPT 정리 완료" : "원본 데이터 정리"}</strong>
+      </div>
+      ${monthlyReportSourceSummaryMarkup()}
+      <div class="monthly-report-notice" data-monthly-report-message aria-live="polite">
+        <strong>보고서 초안</strong>
         <span>${esc(monthlyReportMessage)}</span>
       </div>
+      <section class="monthly-report-preview-card">
+        <header class="monthly-report-card-head">
+          <div><p class="eyebrow">STEP 1</p><h3>보고서에 포함할 자료를 선택해 주세요</h3></div>
+          <small>선택한 항목만 GPT 정리 단계로 전달됩니다. 상위 업무를 해제하면 연결된 하위 할 일도 함께 제외됩니다.</small>
+        </header>
+        ${monthlyReportSectionMarkup("activity", "활동내용", "업무와 하위 할 일", { sections: monthlyReportDraft, scope: "draft", editable: false })}
+        ${monthlyReportSectionMarkup("production", "제작물현황", "선택한 달에 마감일이 있는 영상", { sections: monthlyReportDraft, scope: "draft", editable: false })}
+        ${monthlyReportSectionMarkup("next", "차월계획", "바로 다음 달에 예정된 업무", { sections: monthlyReportDraft, scope: "draft", editable: false })}
+        <footer class="monthly-report-stage-actions">
+          <span><b>${selectedCount}</b>개 항목 선택됨</span>
+          <button class="pill primary" data-monthly-report-next="2" type="button" ${selectedCount ? "" : "disabled"}>다음 단계</button>
+        </footer>
+      </section>
+    </section>
+  `;
+}
 
-      <details class="monthly-report-prompt-card">
-        <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>월말보고 작성 프롬프트</h3></div><span>열기</span></summary>
+function monthlyReportOrganizeStageMarkup() {
+  const prompt = state.monthlyReport?.prompt || window.MonthlyReportCore?.DEFAULT_PROMPT || "";
+  const selectedCount = monthlyReportIncludedCount(monthlyReportDraft);
+  return `
+    <section class="monthly-report-stage">
+      <section class="monthly-report-confirmation">
+        <div class="monthly-report-confirmation-icon" aria-hidden="true">2</div>
         <div>
-          <p>관리기록 본문·메모·시간 정보는 프롬프트 실행 전 데이터에서 이미 제외됩니다.</p>
-          <textarea data-monthly-report-prompt maxlength="12000" rows="18">${esc(prompt)}</textarea>
-          <footer><small>모든 관리자에게 동일하게 저장됩니다.</small><button class="pill ghost" data-monthly-report-save-prompt type="button">프롬프트 저장</button></footer>
+          <p class="eyebrow">STEP 2</p>
+          <h3>선택한 ${selectedCount}개 항목으로 월말보고서를 정리할까요?</h3>
+          <p>선택하지 않은 항목은 제외됩니다. 정리가 끝난 뒤 미리보기에서 항목을 빼거나 문구를 직접 수정할 수 있습니다.</p>
+        </div>
+      </section>
+      <details class="monthly-report-prompt-card" open>
+        <summary><div><p class="eyebrow">GPT SETTINGS</p><h3>월말보고 작성 프롬프트</h3></div><span aria-hidden="true"></span></summary>
+        <div>
+          <p>아래에 보이는 프롬프트를 그대로 사용합니다. 제목과 날짜는 원본 검증을 거쳐 유지됩니다.</p>
+          <textarea data-monthly-report-prompt maxlength="12000" rows="15">${esc(prompt)}</textarea>
+          <footer><small>관리자 공통 프롬프트</small><button class="pill ghost" data-monthly-report-save-prompt type="button">프롬프트 저장</button></footer>
         </div>
       </details>
+      <footer class="monthly-report-stage-actions">
+        <button class="pill ghost" data-monthly-report-step="1" type="button">이전 단계</button>
+        <button class="pill primary" data-monthly-report-gpt type="button">보고서 정리 시작</button>
+      </footer>
+    </section>
+  `;
+}
 
+function monthlyReportPreviewStageMarkup() {
+  const includedCount = monthlyReportIncludedCount(monthlyReportPreview);
+  return `
+    <section class="monthly-report-stage">
+      <div class="monthly-report-notice is-gpt" data-monthly-report-message aria-live="polite">
+        <strong>GPT 정리 완료</strong>
+        <span>${esc(monthlyReportMessage)}</span>
+      </div>
       <section class="monthly-report-preview-card">
-        <header class="monthly-report-card-head"><div><p class="eyebrow">PREVIEW</p><h3>보고서 미리보기</h3></div><small>체크 해제한 항목은 Word 문서에서 제외됩니다. 문구는 직접 수정할 수 있습니다.</small></header>
-        ${monthlyReportSectionMarkup("activity", "4-1. 활동내용", "업무가 진행된 날짜와 공식 제목")}
-        ${monthlyReportSectionMarkup("production", "4-2. 제작물현황", "선택한 달에 마감일이 있는 영상")}
-        ${monthlyReportSectionMarkup("next", "4-3. 차월계획", "바로 다음 달에 예정된 업무만 표시하며 하위 할 일은 제외")}
+        <header class="monthly-report-card-head">
+          <div><p class="eyebrow">STEP 3</p><h3>월말보고서 미리보기</h3></div>
+          <small>체크 해제한 항목은 Word에서 제외됩니다. 문구는 입력란에서 직접 수정할 수 있습니다.</small>
+        </header>
+        ${monthlyReportSectionMarkup("activity", "활동내용", "상위 업무와 하위 할 일", { sections: monthlyReportPreview, scope: "preview", editable: true })}
+        ${monthlyReportSectionMarkup("production", "제작물현황", "선택한 달에 마감된 제작물", { sections: monthlyReportPreview, scope: "preview", editable: true })}
+        ${monthlyReportSectionMarkup("next", "차월계획", "다음 달에 예정된 상위 업무", { sections: monthlyReportPreview, scope: "preview", editable: true })}
+        <footer class="monthly-report-stage-actions">
+          <button class="pill ghost" data-monthly-report-step="2" type="button">다시 정리</button>
+          <span><b>${includedCount}</b>개 항목 포함</span>
+          <button class="pill primary" data-monthly-report-next="4" type="button" ${includedCount ? "" : "disabled"}>출력 단계로</button>
+        </footer>
       </section>
+    </section>
+  `;
+}
+
+function monthlyReportOutputStageMarkup() {
+  const [year, monthNumber] = monthlyReportMonth.split("-");
+  const user = currentUser();
+  const includedCount = monthlyReportIncludedCount(monthlyReportPreview);
+  const filename = window.MonthlyReportDocx?.monthlyReportFilename(monthlyReportMonth) || `영상제작과_문화부_${Number(monthNumber)}월말보고서.docx`;
+  return `
+    <section class="monthly-report-stage">
+      <section class="monthly-report-output-card">
+        <header><p class="eyebrow">STEP 4</p><h3>월말보고서 출력</h3><p>최종 확인 후 지정된 Word 양식으로 파일을 생성합니다.</p></header>
+        <div class="monthly-report-output-grid">
+          <article><span>보고 월</span><strong>${year}년 ${Number(monthNumber)}월</strong></article>
+          <article><span>보고자</span><strong>${esc(user?.name || "미지정")}</strong></article>
+          <article><span>포함 항목</span><strong>${includedCount}개</strong></article>
+        </div>
+        <div class="monthly-report-output-file"><span>생성 파일명</span><strong>${esc(filename)}</strong></div>
+        <footer class="monthly-report-stage-actions">
+          <button class="pill ghost" data-monthly-report-step="3" type="button">미리보기로 돌아가기</button>
+          <button class="pill primary" data-monthly-report-download type="button" ${includedCount ? "" : "disabled"}>Word 다운로드</button>
+        </footer>
+      </section>
+    </section>
+  `;
+}
+
+function renderMonthlyReportManager() {
+  ensureMonthlyReportPreview();
+  return `
+    <div class="monthly-report-manager">
+      ${monthlyReportStepperMarkup()}
+      ${monthlyReportStep === 1
+        ? monthlyReportDraftStageMarkup()
+        : monthlyReportStep === 2
+          ? monthlyReportOrganizeStageMarkup()
+          : monthlyReportStep === 3
+            ? monthlyReportPreviewStageMarkup()
+            : monthlyReportOutputStageMarkup()}
     </div>
   `;
 }
 
-function monthlyReportFindItem(itemId) {
+function monthlyReportFindItem(itemId, scope = "preview") {
+  const sections = scope === "draft" ? monthlyReportDraft : monthlyReportPreview;
   for (const section of window.MonthlyReportCore?.SECTION_KEYS || []) {
-    const item = monthlyReportPreview[section]?.find((entry) => entry.id === itemId);
+    const item = sections[section]?.find((entry) => entry.id === itemId);
     if (item) return item;
   }
   return null;
 }
 
-async function saveMonthlyReportPrompt() {
-  const input = $("[data-monthly-report-prompt]");
+async function saveMonthlyReportPrompt(button) {
+  const input = button?.closest(".monthly-report-manager")?.querySelector("[data-monthly-report-prompt]")
+    || $("[data-monthly-report-prompt]");
   if (!input) return;
   state.monthlyReport = { prompt: String(input.value || window.MonthlyReportCore?.DEFAULT_PROMPT || "").slice(0, 12000) };
   saveState();
@@ -9443,7 +9607,7 @@ async function saveMonthlyReportPrompt() {
   showToast(remoteSaved === false ? "기기에는 저장했지만 서버 저장을 확인하지 못했습니다." : "월말보고 작성 프롬프트를 저장했습니다.");
 }
 
-async function monthlyReportApi() {
+async function monthlyReportApi(promptValue) {
   const client = getSupabaseClient();
   if (!client) throw new Error("배포된 대시보드에서 로그인한 뒤 GPT 정리를 사용할 수 있습니다.");
   const { data } = await client.auth.getSession();
@@ -9454,9 +9618,9 @@ async function monthlyReportApi() {
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       month: monthlyReportMonth,
-      prompt: state.monthlyReport?.prompt || window.MonthlyReportCore.DEFAULT_PROMPT,
+      prompt: promptValue || state.monthlyReport?.prompt || window.MonthlyReportCore.DEFAULT_PROMPT,
       sources: window.MonthlyReportCore.apiSources(monthlyReportSources),
-      candidates: window.MonthlyReportCore.previewItems(monthlyReportPreview)
+      candidates: window.MonthlyReportCore.previewItems(monthlyReportDraft)
     })
   });
   const result = await response.json().catch(() => ({}));
@@ -9466,28 +9630,40 @@ async function monthlyReportApi() {
 
 async function generateMonthlyReportWithGpt(button) {
   if (!monthlyReportSources.length) return showToast("먼저 보고서 데이터를 수집해 주세요.");
+  const selectedCount = monthlyReportIncludedCount(monthlyReportDraft);
+  if (!selectedCount) return showToast("보고서에 포함할 항목을 먼저 선택해 주세요.");
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = "GPT 정리 중…";
   monthlyReportMessage = "제목과 날짜만 GPT에 전달해 보고서 순서를 정리하고 있습니다.";
-  const message = $("[data-monthly-report-message] span");
-  if (message) message.textContent = monthlyReportMessage;
+  const promptInput = button.closest(".monthly-report-manager")?.querySelector("[data-monthly-report-prompt]")
+    || $("[data-monthly-report-prompt]");
+  const prompt = String(promptInput?.value || state.monthlyReport?.prompt || window.MonthlyReportCore.DEFAULT_PROMPT).slice(0, 12000);
+  state.monthlyReport = { prompt };
+  saveState();
+  if (SUPABASE_ENABLED) saveRemoteDashboardState().catch(() => false);
   try {
-    const result = await monthlyReportApi();
-    const fallback = monthlyReportPreview;
+    const result = await monthlyReportApi(prompt);
+    const fallback = cloneMonthlyReportSections(monthlyReportDraft);
     monthlyReportPreview = window.MonthlyReportCore.validateGeneratedSections(result.sections, monthlyReportSources, fallback);
     monthlyReportGeneratedByGpt = true;
-    monthlyReportMessage = "원본의 제목과 날짜를 검증한 뒤 미리보기에 반영했습니다.";
+    monthlyReportStep = 3;
+    monthlyReportMessage = "선택한 항목을 프롬프트에 따라 정리했습니다. 제목과 날짜는 원본 검증을 거쳤습니다.";
     renderAdmin();
+    if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
     showToast("GPT가 월말보고서를 정리했습니다.");
   } catch (error) {
     monthlyReportGeneratedByGpt = false;
+    monthlyReportStep = 2;
     monthlyReportMessage = `${error.message} 현재 미리보기는 그대로 유지됩니다.`;
     renderAdmin();
+    if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
     showToast(error.message || "GPT 보고서 정리를 완료하지 못했습니다.");
   } finally {
-    button.disabled = false;
-    button.textContent = originalText;
+    if (button.isConnected) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
   }
 }
 
@@ -11961,7 +12137,7 @@ function renderMobileAdminHome() {
   return mobileSubpage("관리자 모드", `
     <section class="mobile-admin-summary"><article><span>승인 대기</span><b>${pending}</b></article><article><span>전체 사용자</span><b>${state.users.length}</b></article><article><span>비활성</span><b>${inactive}</b></article></section>
     <section class="mobile-settings-section"><h3>사용자 관리</h3><div>${mobileMoreRow({ icon: "♙", label: "승인 대기 및 전체 사용자", route: "admin-users", badge: pending ? String(pending) : "" })}</div></section>
-    <section class="mobile-settings-section"><h3>업무 데이터</h3><div>${mobileMoreRow({ icon: "▥", label: "업무 진행 이력", route: "admin-activity" })}</div></section>
+    <section class="mobile-settings-section"><h3>업무 데이터</h3><div>${mobileMoreRow({ icon: "▥", label: "업무 진행 이력", route: "admin-activity" })}${mobileMoreRow({ icon: "▤", label: "월말보고서 작성", route: "admin-report" })}</div></section>
     <section class="mobile-settings-section"><h3>운영 설정</h3><div>${mobileMoreRow({ icon: "➤", label: "텔레그램 봇 관리", route: "admin-telegram" })}${mobileMoreRow({ icon: "◇", label: "담당자·직책 관리", route: "admin-members" })}${mobileMoreRow({ icon: "▤", label: "드롭다운 항목 관리", route: "admin-dropdowns" })}</div></section>
   `);
 }
@@ -11969,6 +12145,11 @@ function renderMobileAdminHome() {
 function renderMobileAdminActivity() {
   if (!isAdminUser()) return renderMobileAdminHome();
   return mobileSubpage("업무 진행 이력", renderAdminActivityManager({ mobile: true }));
+}
+
+function renderMobileMonthlyReport() {
+  if (!isAdminUser()) return renderMobileAdminHome();
+  return mobileSubpage("월말보고서 작성", `<div id="adminView" class="mobile-monthly-report" data-mobile-monthly-report>${renderMonthlyReportManager()}</div>`);
 }
 
 function renderMobileTelegramDigest() {
@@ -12056,6 +12237,7 @@ function renderMobileMoreRoute() {
   if (mobileMoreRoute === "admin-users") return renderMobileAdminUsers();
   if (mobileMoreRoute.startsWith("admin-user:")) return renderMobileAdminUserDetail(mobileMoreRoute.slice(11));
   if (mobileMoreRoute === "admin-activity") return renderMobileAdminActivity();
+  if (mobileMoreRoute === "admin-report") return renderMobileMonthlyReport();
   if (mobileMoreRoute === "admin-telegram") return renderMobileTelegramDigest();
   if (mobileMoreRoute === "admin-dropdowns") return renderMobileAdminDropdowns();
   if (mobileMoreRoute === "admin-members") return renderMobileAdminMembers();
@@ -12125,6 +12307,39 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-more-route]", (button) => navigateMobileMore(button.dataset.mobileMoreRoute));
   bind("[data-mobile-more-back]", () => mobileMoreBack());
   bind("[data-mobile-more-target]", (button) => openMobileSection(button.dataset.mobileMoreTarget));
+  bind("[data-monthly-report-step]", (button) => {
+    const step = Number(button.dataset.monthlyReportStep);
+    if (![1, 2, 3, 4].includes(step) || !monthlyReportStepAvailable(step)) return;
+    monthlyReportStep = step;
+    monthlyReportMonthPickerOpen = false;
+    renderMobileDashboard();
+  });
+  bind("[data-monthly-report-next]", (button) => {
+    const step = Number(button.dataset.monthlyReportNext);
+    if (![1, 2, 3, 4].includes(step) || !monthlyReportStepAvailable(step)) return;
+    monthlyReportStep = step;
+    monthlyReportMonthPickerOpen = false;
+    renderMobileDashboard();
+  });
+  bind("[data-monthly-report-month-trigger]", () => {
+    monthlyReportMonthPickerOpen = !monthlyReportMonthPickerOpen;
+    if (monthlyReportMonthPickerOpen) monthlyReportPickerYear = Number(monthlyReportMonth.slice(0, 4));
+    renderMobileDashboard();
+  });
+  bind("[data-monthly-report-year-step]", (button) => {
+    monthlyReportPickerYear = Math.max(1900, Math.min(2200, monthlyReportPickerYear + Number(button.dataset.monthlyReportYearStep || 0)));
+    renderMobileDashboard();
+  });
+  bind("[data-monthly-report-month-value]", (button) => selectMonthlyReportMonth(button.dataset.monthlyReportMonthValue));
+  bind("[data-monthly-report-current-month]", () => selectMonthlyReportMonth(dateKey(new Date()).slice(0, 7)));
+  bind("[data-monthly-report-collect]", () => {
+    collectMonthlyReportPreview();
+    renderAdmin();
+    renderMobileDashboard();
+  });
+  bind("[data-monthly-report-gpt]", (button) => generateMonthlyReportWithGpt(button));
+  bind("[data-monthly-report-download]", (button) => downloadMonthlyReportWord(button));
+  bind("[data-monthly-report-save-prompt]", (button) => saveMonthlyReportPrompt(button));
   bind("[data-telegram-preview]", (button) => runTelegramDigestAction("preview", button));
   bind("[data-telegram-send]", (button) => runTelegramDigestAction("send", button));
   bind("[data-mobile-admin-user-open]", (button) => navigateMobileMore(`admin-user:${button.dataset.mobileAdminUserOpen}`));
@@ -12159,6 +12374,25 @@ function bindMobileCoreActions(app) {
   });
   app.querySelectorAll("[data-activity-log-filter]").forEach((input) => input.addEventListener("change", () => {
     updateAdminActivityFilter(input.dataset.activityLogFilter, input.value);
+    renderMobileDashboard();
+  }));
+  app.querySelectorAll("[data-monthly-report-prompt]").forEach((input) => input.addEventListener("input", () => {
+    state.monthlyReport = { prompt: String(input.value || "").slice(0, 12000) };
+  }));
+  app.querySelectorAll("[data-monthly-report-text]").forEach((input) => input.addEventListener("input", () => {
+    const item = monthlyReportFindItem(input.dataset.monthlyReportText, input.dataset.monthlyReportScope);
+    if (item) item.text = input.value.slice(0, 500);
+  }));
+  app.querySelectorAll("[data-monthly-report-include]").forEach((input) => input.addEventListener("change", () => {
+    const scope = input.dataset.monthlyReportScope || "preview";
+    const sections = scope === "draft" ? monthlyReportDraft : monthlyReportPreview;
+    if (window.MonthlyReportCore?.setPreviewItemIncluded) {
+      window.MonthlyReportCore.setPreviewItemIncluded(sections, input.dataset.monthlyReportInclude, input.checked);
+    } else {
+      const item = monthlyReportFindItem(input.dataset.monthlyReportInclude, scope);
+      if (item) item.included = input.checked;
+    }
+    if (scope === "draft") invalidateMonthlyReportResult();
     renderMobileDashboard();
   }));
   bind("[data-mobile-notifications-close]", () => openMobileSection(mobilePreviousSection === "notifications" ? "tasks" : mobilePreviousSection));
@@ -15618,6 +15852,16 @@ $("#adminContent").addEventListener("click", (event) => {
     selectMonthlyReportMonth(dateKey(new Date()).slice(0, 7));
     return;
   }
+  const reportStepButton = event.target.closest("[data-monthly-report-step]");
+  if (reportStepButton) {
+    selectMonthlyReportStep(reportStepButton.dataset.monthlyReportStep);
+    return;
+  }
+  const reportNextButton = event.target.closest("[data-monthly-report-next]");
+  if (reportNextButton) {
+    selectMonthlyReportStep(reportNextButton.dataset.monthlyReportNext);
+    return;
+  }
   const collectReportButton = event.target.closest("[data-monthly-report-collect]");
   if (collectReportButton) {
     collectMonthlyReportPreview();
@@ -15635,7 +15879,7 @@ $("#adminContent").addEventListener("click", (event) => {
     return;
   }
   if (event.target.closest("[data-monthly-report-save-prompt]")) {
-    saveMonthlyReportPrompt();
+    saveMonthlyReportPrompt(event.target.closest("[data-monthly-report-save-prompt]"));
     return;
   }
   const colorButton = event.target.closest("[data-option-color-group]");
@@ -15703,26 +15947,38 @@ $("#adminContent").addEventListener("click", (event) => {
 });
 
 $("#adminContent").addEventListener("input", (event) => {
+  const promptInput = event.target.closest("[data-monthly-report-prompt]");
+  if (promptInput) {
+    state.monthlyReport = { prompt: String(promptInput.value || "").slice(0, 12000) };
+    return;
+  }
   const textInput = event.target.closest("[data-monthly-report-text]");
   if (!textInput) return;
-  const item = monthlyReportFindItem(textInput.dataset.monthlyReportText);
+  const item = monthlyReportFindItem(textInput.dataset.monthlyReportText, textInput.dataset.monthlyReportScope);
   if (item) item.text = textInput.value.slice(0, 500);
 });
 
 $("#adminContent").addEventListener("change", async (event) => {
   const reportInclude = event.target.closest("[data-monthly-report-include]");
   if (reportInclude) {
+    const scope = reportInclude.dataset.monthlyReportScope || "preview";
+    const sections = scope === "draft" ? monthlyReportDraft : monthlyReportPreview;
     const changedIds = window.MonthlyReportCore?.setPreviewItemIncluded
-      ? window.MonthlyReportCore.setPreviewItemIncluded(monthlyReportPreview, reportInclude.dataset.monthlyReportInclude, reportInclude.checked)
+      ? window.MonthlyReportCore.setPreviewItemIncluded(sections, reportInclude.dataset.monthlyReportInclude, reportInclude.checked)
       : (() => {
-        const item = monthlyReportFindItem(reportInclude.dataset.monthlyReportInclude);
+        const item = monthlyReportFindItem(reportInclude.dataset.monthlyReportInclude, scope);
         if (item) item.included = reportInclude.checked;
         return [reportInclude.dataset.monthlyReportInclude];
       })();
+    if (scope === "draft") {
+      invalidateMonthlyReportResult();
+      renderAdmin();
+      return;
+    }
     const changedSet = new Set(changedIds);
-    $("#adminContent")?.querySelectorAll("[data-monthly-report-include]").forEach((input) => {
+    $("#adminContent")?.querySelectorAll(`[data-monthly-report-include][data-monthly-report-scope="${scope}"]`).forEach((input) => {
       if (!changedSet.has(input.dataset.monthlyReportInclude)) return;
-      const changedItem = monthlyReportFindItem(input.dataset.monthlyReportInclude);
+      const changedItem = monthlyReportFindItem(input.dataset.monthlyReportInclude, scope);
       if (!changedItem) return;
       input.checked = changedItem.included !== false;
       input.closest("[data-monthly-report-item]")?.classList.toggle("is-excluded", changedItem.included === false);

@@ -78,12 +78,13 @@ function sanitizeCandidates(value, sourceById) {
     const sourceIds = [...new Set((Array.isArray(item?.sourceIds) ? item.sourceIds : []).map((id) => cleanText(id, 160)).filter((id) => sourceById.has(id)))];
     const title = cleanText(item?.title, 240);
     const dates = uniqueDates(item?.dates);
+    const text = cleanText(item?.text, 500);
     if (!SECTION_KEYS.includes(section) || !sourceIds.length || !title) return null;
     const allowedSources = sourceIds.map((id) => sourceById.get(id));
     if (!allowedSources.some((source) => source.title === title)) return null;
     const allowedDates = new Set(allowedSources.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
     if (dates.some((date) => !allowedDates.has(date))) return null;
-    return { section, sourceIds, title, dates };
+    return { section, sourceIds, title, dates, text };
   }).filter(Boolean);
 }
 
@@ -113,12 +114,23 @@ function validateModelResult(value, sources, candidates) {
       const allowedDates = new Set(referenced.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
       const dates = uniqueDates(item?.dates);
       if (dates.some((date) => !allowedDates.has(date))) return;
-      result[section].push({ sourceIds, title, dates });
+      const matchingCandidate = candidatesBySection[section].find((candidate) =>
+        candidate.title === title && candidate.sourceIds.some((id) => sourceIds.includes(id))
+      );
+      const generatedText = cleanText(item?.text, 500);
+      result[section].push({
+        sourceIds,
+        title,
+        dates,
+        text: generatedText.includes(title) ? generatedText : matchingCandidate?.text || title
+      });
     });
 
     const covered = new Set(result[section].flatMap((item) => item.sourceIds));
     candidatesBySection[section].forEach((candidate) => {
-      if (!candidate.sourceIds.some((id) => covered.has(id))) result[section].push({ sourceIds: candidate.sourceIds, title: candidate.title, dates: candidate.dates });
+      if (!candidate.sourceIds.some((id) => covered.has(id))) {
+        result[section].push({ sourceIds: candidate.sourceIds, title: candidate.title, dates: candidate.dates, text: candidate.text });
+      }
     });
   });
   return result;
@@ -150,11 +162,12 @@ export default async function handler(req, res) {
     const schemaItem = {
       type: "object",
       additionalProperties: false,
-      required: ["sourceIds", "title", "dates"],
+      required: ["sourceIds", "title", "dates", "text"],
       properties: {
         sourceIds: { type: "array", minItems: 1, items: { type: "string" } },
         title: { type: "string" },
-        dates: { type: "array", items: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } }
+        dates: { type: "array", items: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" } },
+        text: { type: "string" }
       }
     };
     const response = await fetch("https://api.openai.com/v1/responses", {
@@ -164,7 +177,7 @@ export default async function handler(req, res) {
         model: envValue("OPENAI_MONTHLY_REPORT_MODEL") || "gpt-5.6-luna",
         store: false,
         reasoning: { effort: "low" },
-        instructions: `${prompt}\n\n출력 규칙: 입력 후보를 빠뜨리지 말고 제목과 날짜를 그대로 유지한다. 각 항목은 근거가 되는 sourceIds를 모두 포함한다. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+        instructions: `${prompt}\n\n출력 규칙: 입력 후보를 빠뜨리지 말고 제목과 날짜를 그대로 유지한다. 각 항목은 근거가 되는 sourceIds를 모두 포함한다. text에는 사용자의 프롬프트에 따라 정리한 최종 미리보기 문구를 작성하되 원본 title을 정확히 포함하고 목록 기호는 붙이지 않는다. 원본에 없는 사실은 추가하지 않는다. 설명문 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, sources, candidates }),
         text: {
           verbosity: "low",
