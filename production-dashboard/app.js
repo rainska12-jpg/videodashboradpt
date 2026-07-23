@@ -9491,28 +9491,40 @@ async function generateMonthlyReportWithGpt(button) {
   }
 }
 
-function downloadMonthlyReportWord() {
+async function downloadMonthlyReportWord(button) {
   if (!window.MonthlyReportDocx) return showToast("Word 생성 모듈을 불러오지 못했습니다.");
   const includedCount = window.MonthlyReportCore.SECTION_KEYS.reduce((total, section) => total + (monthlyReportPreview[section] || []).filter((item) => item.included !== false && item.text.trim()).length, 0);
   if (!includedCount) return showToast("Word 문서에 포함할 보고서 항목이 없습니다.");
-  const user = currentUser();
-  const bytes = window.MonthlyReportDocx.createMonthlyReportDocx({
-    month: monthlyReportMonth,
-    sections: monthlyReportPreview,
-    organization: "",
-    author: user?.name || "영상 업무 대시보드"
-  });
-  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  const [reportYear, reportMonthNumber] = monthlyReportMonth.split("-");
-  link.download = `${reportYear}년_${Number(reportMonthNumber)}월_월말보고서.docx`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast("월말보고서 Word 파일을 만들었습니다.");
+  const originalText = button?.textContent || "";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Word 생성 중…";
+  }
+  try {
+    const user = currentUser();
+    const bytes = await window.MonthlyReportDocx.createMonthlyReportDocx({
+      month: monthlyReportMonth,
+      sections: monthlyReportPreview,
+      author: user?.name || "미지정"
+    });
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = window.MonthlyReportDocx.monthlyReportFilename(monthlyReportMonth);
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("지정된 양식으로 월말보고서 Word 파일을 만들었습니다.");
+  } catch (error) {
+    showToast(error.message || "월말보고서 Word 파일을 만들지 못했습니다.");
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = originalText;
+    }
+  }
 }
 
 function renderAdmin() {
@@ -15617,8 +15629,9 @@ $("#adminContent").addEventListener("click", (event) => {
     generateMonthlyReportWithGpt(gptReportButton);
     return;
   }
-  if (event.target.closest("[data-monthly-report-download]")) {
-    downloadMonthlyReportWord();
+  const downloadReportButton = event.target.closest("[data-monthly-report-download]");
+  if (downloadReportButton) {
+    downloadMonthlyReportWord(downloadReportButton);
     return;
   }
   if (event.target.closest("[data-monthly-report-save-prompt]")) {

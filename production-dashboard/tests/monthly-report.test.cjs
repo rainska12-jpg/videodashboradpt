@@ -6,7 +6,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const core = require("../lib/monthly-report-core.js");
-const { createMonthlyReportDocx } = require("../lib/monthly-report-docx.js");
+const { createMonthlyReportDocx, monthlyReportFilename } = require("../lib/monthly-report-docx.js");
 
 function fixtureState() {
   return {
@@ -163,11 +163,12 @@ test("GPT 정리 후에도 활동내용의 업무·하위 할 일 구조를 복�
   assert.equal(task.text, "촬영 진행 / 7월 8일");
 });
 
-test("생성한 Word 파일은 필수 OOXML 구성과 보고서 텍스트를 포함한다", () => {
-  const bytes = createMonthlyReportDocx({
+test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {
+  const templateBytes = fs.readFileSync(path.join(__dirname, "../templates/monthly-report-template.docx"));
+  const bytes = await createMonthlyReportDocx({
     month: "2026-07",
-    organization: "영상제작과",
     author: "관리자",
+    templateBytes,
     sections: {
       activity: [
         { included: true, itemType: "project", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일" },
@@ -183,12 +184,19 @@ test("생성한 Word 파일은 필수 OOXML 구성과 보고서 텍스트를 포
   fs.writeFileSync(file, bytes);
   const list = execFileSync("unzip", ["-l", file], { encoding: "utf8" });
   assert.match(list, /word\/document\.xml/);
-  assert.match(list, /word\/numbering\.xml/);
+  assert.match(list, /word\/theme\/theme1\.xml/);
+  assert.match(list, /word\/fontTable\.xml/);
   const documentXml = execFileSync("unzip", ["-p", file, "word/document.xml"], { encoding: "utf8" });
-  assert.match(documentXml, /2026년 7월 월말보고서/);
+  assert.match(documentXml, /문화부 영상제작과 월말보고서/);
+  assert.match(documentXml, /신천기 43\(2026\)년 7월분/);
+  assert.match(documentXml, /신천기 43\(2026\)년 7월 31일/);
+  assert.match(documentXml, /보고자 : 영상제작과장 관리자/);
   assert.match(documentXml, /7월 개강 홍보영상/);
   assert.match(documentXml, /7월 개강 홍보영상 \/ 교육팀 \/ 7월 3일, 7월 8일/);
-  assert.match(documentXml, /촬영 진행 \/ 7월 8일/);
+  assert.match(documentXml, /ㄴ 촬영 진행 \/ 7월 8일/);
   assert.ok(documentXml.indexOf("7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일") < documentXml.indexOf("촬영 진행 / 7월 8일"));
-  assert.doesNotMatch(documentXml, /해당 없음.*해당 없음.*해당 없음/);
+  assert.equal(
+    monthlyReportFilename("2026-07"),
+    "영상제작과_문화부_2026년_7월말보고서.docx"
+  );
 });

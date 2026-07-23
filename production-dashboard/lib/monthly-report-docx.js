@@ -2,44 +2,29 @@
   const api = factory();
   if (typeof module === "object" && module.exports) module.exports = api;
   root.MonthlyReportDocx = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createMonthlyReportDocx() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createMonthlyReportDocxModule() {
   "use strict";
 
   const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const TEMPLATE_URL = "./templates/monthly-report-template.docx?v=1";
 
   function xml(value) {
-    return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&apos;");
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
   }
 
-  function paragraph(text, style = "Normal", bullet = false) {
-    const numberingId = bullet === "child" ? 2 : bullet ? 1 : 0;
-    const numbering = numberingId ? `<w:numPr><w:ilvl w:val="0"/><w:numId w:val="${numberingId}"/></w:numPr>` : "";
-    return `<w:p><w:pPr><w:pStyle w:val="${style}"/>${numbering}</w:pPr><w:r><w:t xml:space="preserve">${xml(text)}</w:t></w:r></w:p>`;
-  }
-
-  function sectionParagraphs(items, section) {
-    if (section !== "activity") return items.map((item) => paragraph(item.text.trim(), "Normal", true));
-    const groupKeyOf = (item) => item.parentSourceId || `${item.parentTitle || "연결 업무 없음"}\u0000${item.department || ""}`;
-    const groups = new Map();
-    items.filter((item) => ["project", "task"].includes(item.itemType)).forEach((item) => {
-      const key = groupKeyOf(item);
-      if (!groups.has(key)) groups.set(key, { parent: null, tasks: [] });
-      if (item.itemType === "project") groups.get(key).parent = item;
-      else groups.get(key).tasks.push(item);
-    });
-    const renderedGroups = new Set();
-    return items.flatMap((item) => {
-      if (!["project", "task"].includes(item.itemType)) return [paragraph(item.text.trim(), "Normal", true)];
-      const key = groupKeyOf(item);
-      if (renderedGroups.has(key)) return [];
-      renderedGroups.add(key);
-      const group = groups.get(key) || { parent: null, tasks: [] };
-      const parentText = group.parent?.text || `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정`;
-      return [
-        paragraph(parentText, "TaskParent"),
-        ...group.tasks.map((task) => paragraph(task.text.trim(), "Normal", "child"))
-      ];
-    });
+  function decodeXml(value) {
+    return String(value ?? "")
+      .replaceAll("&lt;", "<")
+      .replaceAll("&gt;", ">")
+      .replaceAll("&quot;", '"')
+      .replaceAll("&apos;", "'")
+      .replaceAll("&amp;", "&");
   }
 
   function crc32(bytes) {
@@ -100,54 +85,234 @@
     ]);
   }
 
-  function createMonthlyReportDocx({ month, sections, organization = "", author = "" }) {
-    const [year, monthNumber] = String(month).split("-");
-    const title = `${year}년 ${Number(monthNumber)}월 월말보고서`;
-    const sectionMeta = [
-      ["activity", "4-1. 활동내용"],
-      ["production", "4-2. 제작물현황"],
-      ["next", "4-3. 차월계획"]
-    ];
-    const body = [
-      paragraph(title, "ReportTitle"),
-      organization ? paragraph(organization, "Subtitle") : "",
-      paragraph(`작성일 ${new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", year: "numeric", month: "long", day: "numeric" }).format(new Date())}`, "ReportMeta"),
-      ...sectionMeta.flatMap(([key, label]) => {
-        const items = (sections?.[key] || []).filter((item) => item.included !== false && String(item.text || "").trim());
-        return [paragraph(label, "Heading1"), ...(items.length ? sectionParagraphs(items, key) : [paragraph("해당 없음", "Muted")])];
-      })
-    ].join("");
-    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}<w:sectPr><w:headerReference w:type="default" r:id="rId2"/><w:footerReference w:type="default" r:id="rId3"/><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr></w:body></w:document>`;
-    const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-  <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Apple SD Gothic Neo" w:hAnsi="Apple SD Gothic Neo" w:eastAsia="Apple SD Gothic Neo" w:cs="Apple SD Gothic Neo"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:color w:val="222222"/><w:lang w:val="ko-KR" w:eastAsia="ko-KR"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="120" w:line="264" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
-  <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120" w:line="264" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Apple SD Gothic Neo" w:hAnsi="Apple SD Gothic Neo" w:eastAsia="Apple SD Gothic Neo" w:cs="Apple SD Gothic Neo"/><w:sz w:val="22"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="ReportTitle"><w:name w:val="Report Title"/><w:basedOn w:val="Normal"/><w:next w:val="Subtitle"/><w:qFormat/><w:pPr><w:spacing w:before="0" w:after="80"/><w:keepNext/></w:pPr><w:rPr><w:b/><w:color w:val="111111"/><w:sz w:val="46"/><w:szCs w:val="46"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="100"/></w:pPr><w:rPr><w:color w:val="555555"/><w:sz w:val="26"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="ReportMeta"><w:name w:val="Report Metadata"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="280"/></w:pPr><w:rPr><w:color w:val="777777"/><w:sz w:val="19"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="320" w:after="160"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:color w:val="2E74B5"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="TaskParent"><w:name w:val="Task Parent"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="180" w:after="80"/><w:ind w:left="360"/></w:pPr><w:rPr><w:b/><w:color w:val="35566F"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:style>
-  <w:style w:type="paragraph" w:styleId="Muted"><w:name w:val="Muted"/><w:basedOn w:val="Normal"/><w:rPr><w:color w:val="777777"/><w:i/></w:rPr></w:style>
-</w:styles>`;
-    const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="•"/><w:lvlJc w:val="left"/><w:pPr><w:tabs><w:tab w:val="num" w:pos="720"/></w:tabs><w:ind w:left="720" w:hanging="360"/><w:spacing w:after="160" w:line="280" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Apple SD Gothic Neo" w:hAnsi="Apple SD Gothic Neo" w:eastAsia="Apple SD Gothic Neo"/></w:rPr></w:lvl></w:abstractNum><w:abstractNum w:abstractNumId="1"><w:multiLevelType w:val="singleLevel"/><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="ㄴ"/><w:lvlJc w:val="left"/><w:pPr><w:tabs><w:tab w:val="num" w:pos="900"/></w:tabs><w:ind w:left="900" w:hanging="360"/><w:spacing w:after="140" w:line="280" w:lineRule="auto"/></w:pPr><w:rPr><w:rFonts w:ascii="Apple SD Gothic Neo" w:hAnsi="Apple SD Gothic Neo" w:eastAsia="Apple SD Gothic Neo"/></w:rPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num><w:num w:numId="2"><w:abstractNumId w:val="1"/></w:num></w:numbering>`;
-    const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="4" w:space="6" w:color="D9D9D9"/></w:pBdr></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Apple SD Gothic Neo" w:hAnsi="Apple SD Gothic Neo" w:eastAsia="Apple SD Gothic Neo"/><w:color w:val="777777"/><w:sz w:val="18"/></w:rPr><w:t>월말 업무보고</w:t></w:r></w:p></w:hdr>`;
-    const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:color w:val="777777"/><w:sz w:val="18"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
-    const now = new Date().toISOString();
-    return zipStore({
-      "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`,
-      "_rels/.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>`,
-      "word/document.xml": documentXml,
-      "word/styles.xml": stylesXml,
-      "word/numbering.xml": numberingXml,
-      "word/header1.xml": headerXml,
-      "word/footer1.xml": footerXml,
-      "word/_rels/document.xml.rels": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>`,
-      "docProps/core.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${xml(title)}</dc:title><dc:creator>${xml(author || "영상 업무 대시보드")}</dc:creator><cp:lastModifiedBy>영상 업무 대시보드</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`,
-      "docProps/app.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>영상 업무 대시보드</Application><AppVersion>1.0</AppVersion></Properties>`
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream !== "function") {
+      throw new Error("이 브라우저에서는 Word 양식 압축을 열 수 없습니다. 브라우저를 최신 버전으로 업데이트해 주세요.");
+    }
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  function findEndOfCentralDirectory(bytes, view) {
+    const minimumOffset = Math.max(0, bytes.length - 65557);
+    for (let offset = bytes.length - 22; offset >= minimumOffset; offset -= 1) {
+      if (view.getUint32(offset, true) === 0x06054b50) return offset;
+    }
+    throw new Error("Word 양식의 ZIP 디렉터리를 찾지 못했습니다.");
+  }
+
+  async function unzipFiles(input) {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const eocdOffset = findEndOfCentralDirectory(bytes, view);
+    const entryCount = view.getUint16(eocdOffset + 10, true);
+    let centralOffset = view.getUint32(eocdOffset + 16, true);
+    const files = {};
+
+    for (let index = 0; index < entryCount; index += 1) {
+      if (view.getUint32(centralOffset, true) !== 0x02014b50) {
+        throw new Error("Word 양식의 ZIP 항목이 손상되었습니다.");
+      }
+      const method = view.getUint16(centralOffset + 10, true);
+      const compressedSize = view.getUint32(centralOffset + 20, true);
+      const nameLength = view.getUint16(centralOffset + 28, true);
+      const extraLength = view.getUint16(centralOffset + 30, true);
+      const commentLength = view.getUint16(centralOffset + 32, true);
+      const localOffset = view.getUint32(centralOffset + 42, true);
+      const name = decoder.decode(bytes.subarray(centralOffset + 46, centralOffset + 46 + nameLength));
+      const localNameLength = view.getUint16(localOffset + 26, true);
+      const localExtraLength = view.getUint16(localOffset + 28, true);
+      const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+      const compressed = bytes.slice(dataOffset, dataOffset + compressedSize);
+      if (!name.endsWith("/")) {
+        if (method === 0) files[name] = compressed;
+        else if (method === 8) files[name] = await inflateRaw(compressed);
+        else throw new Error(`Word 양식에서 지원하지 않는 압축 방식입니다: ${method}`);
+      }
+      centralOffset += 46 + nameLength + extraLength + commentLength;
+    }
+    return files;
+  }
+
+  function paragraphText(paragraphXml) {
+    return Array.from(paragraphXml.matchAll(/<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g))
+      .map((match) => decodeXml(match[1]))
+      .join("");
+  }
+
+  function replaceParagraphText(documentXml, originalText, replacementText) {
+    let replaced = false;
+    const output = documentXml.replace(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/g, (paragraphXml) => {
+      if (replaced || paragraphText(paragraphXml) !== originalText) return paragraphXml;
+      let inserted = false;
+      replaced = true;
+      return paragraphXml.replace(/<w:t(?:\s[^>]*)?>[\s\S]*?<\/w:t>/g, () => {
+        if (inserted) return "<w:t></w:t>";
+        inserted = true;
+        return `<w:t xml:space="preserve">${xml(replacementText)}</w:t>`;
+      });
+    });
+    if (!replaced) throw new Error(`Word 양식에서 입력 위치를 찾지 못했습니다: ${originalText}`);
+    return output;
+  }
+
+  function cellParagraph(text, kind, baseParagraphXml) {
+    let paragraphProperties = baseParagraphXml.match(/<w:pPr>[\s\S]*?<\/w:pPr>/)?.[0] || "<w:pPr/>";
+    if (kind === "child") {
+      paragraphProperties = paragraphProperties.replace(
+        /<\/w:pPr>/,
+        '<w:ind w:left="360"/></w:pPr>'
+      );
+    }
+    const bold = kind === "parent" ? "<w:b/>" : "";
+    const color = kind === "empty" ? '<w:color w:val="666666"/>' : "";
+    return `<w:p>${paragraphProperties}<w:r><w:rPr><w:rFonts w:ascii="함초롬바탕" w:eastAsia="함초롬바탕" w:hAnsi="함초롬바탕" w:cs="함초롬바탕"/>${bold}${color}<w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${xml(text)}</w:t></w:r></w:p>`;
+  }
+
+  function replaceTableCell(tableXml, lines) {
+    return tableXml.replace(/<w:tc>([\s\S]*?)<\/w:tc>/, (cellXml, innerXml) => {
+      const cellProperties = innerXml.match(/<w:tcPr>[\s\S]*?<\/w:tcPr>/)?.[0] || "";
+      const baseParagraph = innerXml.match(/<w:p(?:\s[^>]*)?>[\s\S]*?<\/w:p>/)?.[0] || "<w:p><w:pPr/></w:p>";
+      const content = (lines.length ? lines : [{ text: "해당 없음", kind: "empty" }])
+        .map((line) => cellParagraph(line.text, line.kind, baseParagraph))
+        .join("");
+      return `<w:tc>${cellProperties}${content}</w:tc>`;
     });
   }
 
-  return { createMonthlyReportDocx };
+  function replaceReportTables(documentXml, sections) {
+    const tableLines = [
+      buildActivityLines(sections?.activity || []),
+      buildSimpleLines(sections?.production || []),
+      buildSimpleLines(sections?.next || [])
+    ];
+    let tableIndex = 0;
+    const output = documentXml.replace(/<w:tbl>[\s\S]*?<\/w:tbl>/g, (tableXml) => {
+      if (tableIndex >= tableLines.length) return tableXml;
+      return replaceTableCell(tableXml, tableLines[tableIndex++]);
+    });
+    if (tableIndex !== tableLines.length) throw new Error("Word 양식의 보고서 표 3개를 찾지 못했습니다.");
+    return output;
+  }
+
+  function buildSimpleLines(items) {
+    return items
+      .filter((item) => item.included !== false && String(item.text || "").trim())
+      .map((item) => ({ text: item.text.trim(), kind: "regular" }));
+  }
+
+  function buildActivityLines(items) {
+    const projectItems = items.filter((item) => ["project", "task"].includes(item.itemType));
+    const groups = new Map();
+    const groupKeyOf = (item) => item.parentSourceId || `${item.parentTitle || "연결 업무 없음"}\u0000${item.department || ""}`;
+
+    projectItems.forEach((item) => {
+      const key = groupKeyOf(item);
+      if (!groups.has(key)) groups.set(key, { parent: null, tasks: [] });
+      if (item.itemType === "project") groups.get(key).parent = item;
+      else groups.get(key).tasks.push(item);
+    });
+
+    const renderedGroups = new Set();
+    const lines = [];
+    items.forEach((item) => {
+      if (!["project", "task"].includes(item.itemType)) {
+        if (item.included !== false && String(item.text || "").trim()) {
+          lines.push({ text: item.text.trim(), kind: "regular" });
+        }
+        return;
+      }
+      const key = groupKeyOf(item);
+      if (renderedGroups.has(key)) return;
+      renderedGroups.add(key);
+      const group = groups.get(key) || { parent: null, tasks: [] };
+      if (group.parent?.included === false) return;
+      const includedTasks = group.tasks.filter((task) => task.included !== false && String(task.text || "").trim());
+      const parentText = String(
+        group.parent?.text ||
+        `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정`
+      ).trim();
+      if (group.parent?.included !== false && parentText) lines.push({ text: parentText, kind: "parent" });
+      includedTasks.forEach((task) => lines.push({ text: `ㄴ ${task.text.trim()}`, kind: "child" }));
+    });
+    return lines;
+  }
+
+  function reportPeriod(month) {
+    const match = /^(\d{4})-(\d{2})$/.exec(String(month || ""));
+    if (!match) throw new Error("보고 월 형식이 올바르지 않습니다.");
+    const year = Number(match[1]);
+    const monthNumber = Number(match[2]);
+    if (monthNumber < 1 || monthNumber > 12) throw new Error("보고 월 형식이 올바르지 않습니다.");
+    return {
+      year,
+      monthNumber,
+      shincheonjiYear: year - 1983,
+      lastDay: new Date(Date.UTC(year, monthNumber, 0)).getUTCDate()
+    };
+  }
+
+  function monthlyReportFilename(month) {
+    const { year, monthNumber } = reportPeriod(month);
+    return `영상제작과_문화부_${year}년_${monthNumber}월말보고서.docx`;
+  }
+
+  async function loadTemplateBytes(templateBytes) {
+    if (templateBytes) return templateBytes instanceof Uint8Array ? templateBytes : new Uint8Array(templateBytes);
+    if (typeof fetch !== "function") throw new Error("Word 양식 파일을 불러올 수 없습니다.");
+    const response = await fetch(TEMPLATE_URL);
+    if (!response.ok) throw new Error("Word 양식 파일을 불러오지 못했습니다.");
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  function updateCoreProperties(files, month, author) {
+    if (!files["docProps/core.xml"]) return;
+    const { year, monthNumber } = reportPeriod(month);
+    let coreXml = decoder.decode(files["docProps/core.xml"]);
+    coreXml = coreXml.replace(
+      /<dc:title>[\s\S]*?<\/dc:title>/,
+      `<dc:title>${xml(`${year}년 ${monthNumber}월 문화부 영상제작과 월말보고서`)}</dc:title>`
+    );
+    if (author) {
+      coreXml = coreXml.replace(
+        /<dc:creator>[\s\S]*?<\/dc:creator>/,
+        `<dc:creator>${xml(author)}</dc:creator>`
+      );
+    }
+    files["docProps/core.xml"] = encoder.encode(coreXml);
+  }
+
+  async function createMonthlyReportDocx({ month, sections, author = "", templateBytes } = {}) {
+    const period = reportPeriod(month);
+    const files = await unzipFiles(await loadTemplateBytes(templateBytes));
+    if (!files["word/document.xml"]) throw new Error("Word 양식에 본문 파일이 없습니다.");
+
+    let documentXml = decoder.decode(files["word/document.xml"]);
+    documentXml = replaceParagraphText(
+      documentXml,
+      "(신천기 00(0000)년 0월분)",
+      `(신천기 ${period.shincheonjiYear}(${period.year})년 ${period.monthNumber}월분)`
+    );
+    documentXml = replaceParagraphText(
+      documentXml,
+      "신천기 00(0000)년 0월 00일",
+      `신천기 ${period.shincheonjiYear}(${period.year})년 ${period.monthNumber}월 ${period.lastDay}일`
+    );
+    documentXml = replaceParagraphText(
+      documentXml,
+      "보고자 : 영상제작과장 000",
+      `보고자 : 영상제작과장 ${String(author || "").trim() || "미지정"}`
+    );
+    documentXml = replaceReportTables(documentXml, sections || {});
+    files["word/document.xml"] = encoder.encode(documentXml);
+    updateCoreProperties(files, month, author);
+    return zipStore(files);
+  }
+
+  return {
+    createMonthlyReportDocx,
+    monthlyReportFilename,
+    reportPeriod,
+    unzipFiles
+  };
 });
