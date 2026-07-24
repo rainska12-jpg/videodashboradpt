@@ -9375,7 +9375,10 @@ function monthlyReportSectionMarkup(key, title, description, { sections = monthl
       ${editable
         ? `<input type="text" data-monthly-report-text="${esc(item.id)}" data-monthly-report-scope="${scope}" value="${esc(item.text)}" aria-label="보고서 항목 문구" />`
         : `<span>${esc(item.text)}</span>`}
-      ${item.isRecurring ? `<b class="monthly-report-recurrence-badge">↻ ${esc(item.recurrenceLabel || "반복 업무")}</b>` : ""}
+      <aside class="monthly-report-item-badges">
+        <b class="monthly-report-owner-badge">${item.ownerNames?.length ? `담당 ${esc(item.ownerLabel)}` : "담당자 미지정"}</b>
+        ${item.isRecurring ? `<b class="monthly-report-recurrence-badge">↻ ${esc(item.recurrenceLabel || "반복 업무")}</b>` : ""}
+      </aside>
     </label>
   `;
   const typeGroupMarkup = (groupKey, label, detail, groupItems, content) => {
@@ -9418,15 +9421,15 @@ function monthlyReportSectionMarkup(key, title, description, { sections = monthl
       if (renderedGroups.has(groupKey)) return "";
       renderedGroups.add(groupKey);
       const group = groups.get(groupKey) || { parent: null, tasks: [] };
-      const parentText = group.parent?.text || `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정`;
+      const parentText = group.parent?.text || `${item.parentTitle || "연결 업무 없음"} / ${item.department || "발주부서 미지정"} / 일정 미정 / 담당 ${item.ownerLabel || "담당자 미지정"}`;
       return `
         <article class="monthly-report-task-group">
           <div class="monthly-report-task-parent">
-            <span>업무명 / 발주부서 / 업무한 날짜</span>
+            <span>업무명 / 발주부서 / 업무한 날짜 / 담당자</span>
             ${group.parent ? itemMarkup(group.parent, "is-parent") : `<strong>${esc(parentText)}</strong>`}
           </div>
           ${group.tasks.length ? `
-            <div class="monthly-report-task-columns" aria-hidden="true"><span>하위 할 일</span><span>날짜</span></div>
+            <div class="monthly-report-task-columns" aria-hidden="true"><span>하위 할 일</span><span>날짜</span><span>담당자</span></div>
             <div class="monthly-report-task-children">${group.tasks.map((task) => itemMarkup(task)).join("")}</div>
           ` : ""}
         </article>

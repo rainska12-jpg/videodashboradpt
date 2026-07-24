@@ -1846,6 +1846,23 @@
 #adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i::after { content: "✓"; color: #041a0d; font-size: 10px; font-style: normal; font-weight: 800; }
 #adminView .monthly-report-preview-item > input[type="text"] { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--geist-ink, #111); padding: 3px 0; font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
 #adminView .monthly-report-preview-item > span { min-width: 0; color: var(--geist-ink, #111); font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
+#adminView .monthly-report-item-badges {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  min-width: 0;
+}
+#adminView .monthly-report-owner-badge {
+  border: 1px solid color-mix(in srgb, #3f83d4 38%, var(--geist-hairline, #ddd));
+  border-radius: 999px;
+  background: color-mix(in srgb, #3f83d4 9%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, #3f83d4 74%, var(--geist-ink, #111));
+  padding: 3px 7px;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 #adminView .monthly-report-recurrence-badge {
   border: 1px solid color-mix(in srgb, #7c6bd0 44%, var(--geist-hairline, #ddd));
   border-radius: 999px;
@@ -1931,7 +1948,8 @@
   #adminView .monthly-report-document-editor textarea { min-height: 190px; padding: 13px; font-size: 10px; }
   #adminView .monthly-report-document-editor:first-child textarea { min-height: 360px; }
   #adminView .monthly-report-preview-item { grid-template-columns: 18px minmax(0, 1fr); }
-  #adminView .monthly-report-recurrence-badge { grid-column: 2; justify-self: start; white-space: normal; }
+  #adminView .monthly-report-item-badges { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
+  #adminView :is(.monthly-report-owner-badge, .monthly-report-recurrence-badge) { white-space: normal; }
   #adminView .monthly-report-type-group > header > div { display: grid; gap: 2px; }
   #adminView .monthly-report-type-group > header > aside { align-items: flex-end; flex-direction: column; gap: 5px; }
   #adminView .monthly-report-task-children { padding-left: 9px; }

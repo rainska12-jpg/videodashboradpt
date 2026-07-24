@@ -51,6 +51,13 @@ function uniqueDates(values) {
   return [...new Set((Array.isArray(values) ? values : []).map(cleanDate).filter(Boolean))].sort();
 }
 
+function cleanOwnerNames(values) {
+  return [...new Set((Array.isArray(values) ? values : [])
+    .map((name) => cleanText(name, 80))
+    .filter(Boolean))]
+    .slice(0, 30);
+}
+
 function sanitizeSources(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 500).map((item) => {
@@ -69,6 +76,7 @@ function sanitizeSources(value) {
       ...(item?.status ? { status: cleanText(item.status, 80) } : {}),
       ...(item?.department ? { department: cleanText(item.department, 160) } : {}),
       ...(item?.category ? { category: cleanText(item.category, 80) } : {}),
+      ownerNames: cleanOwnerNames(item?.ownerNames),
       ...(item?.isRecurring === true ? {
         isRecurring: true,
         recurrenceSchedule: cleanText(item.recurrenceSchedule, 120),
@@ -96,6 +104,8 @@ function sanitizeCandidates(value, sourceById) {
     const isRecurring = item?.isRecurring === true;
     const recurrenceSchedule = cleanText(item?.recurrenceSchedule, 120);
     const recurrenceLabel = cleanText(item?.recurrenceLabel, 160);
+    const ownerNames = cleanOwnerNames(item?.ownerNames);
+    const ownerLabel = cleanText(item?.ownerLabel, 500);
     const reportGroupValue = cleanText(item?.reportGroup, 20);
     const reportGroup = REPORT_GROUPS.has(reportGroupValue) ? reportGroupValue : section === "activity" ? "work" : section;
     const reportGroupLabel = cleanText(item?.reportGroupLabel, 40);
@@ -108,6 +118,8 @@ function sanitizeCandidates(value, sourceById) {
     if (!allowedSources.some((source) => source.title === title)) return null;
     const allowedDates = new Set(allowedSources.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
     if (dates.some((date) => !allowedDates.has(date))) return null;
+    const allowedOwnerNames = new Set(allowedSources.flatMap((source) => source.ownerNames || []));
+    if (ownerNames.some((name) => !allowedOwnerNames.has(name))) return null;
     return {
       candidateId,
       section,
@@ -123,6 +135,8 @@ function sanitizeCandidates(value, sourceById) {
       isRecurring,
       recurrenceSchedule,
       recurrenceLabel,
+      ownerNames,
+      ownerLabel,
       reportGroup,
       reportGroupLabel,
       sourceKind,
@@ -232,18 +246,19 @@ export default async function handler(req, res) {
 5. sourceKindLabel은 원본이 업무, 영상, 방송실 업무 중 무엇인지 알려 주며 itemRoleLabel은 상위 업무, 하위 업무 등의 역할을 알려 준다. 제목만 보고 유형을 추측하지 말고 이 표식을 기준으로 정리한다.
 6. departmentGroupLabel은 업무·영상 분류 안에서 다시 묶어야 할 발주부서다. 같은 reportGroupLabel 안에서는 같은 departmentGroupLabel끼리 연속 배치하고, 발주부서가 없는 항목은 발주부서 미지정끼리 묶는다.
 7. isRecurring이 true인 항목은 반복 업무이며 recurrenceSchedule과 recurrenceLabel에 매주 무슨 요일, 격주 또는 매월 반복인지 표시되어 있다. 제목만 보고 추측하지 말고 이 값을 기준으로 반복 업무임을 인식한다.
-8. 각 섹션 안에서 보고서 흐름에 맞게 업무를 합치거나 나누고 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
-9. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 자유롭게 생략할 수 있다.
-10. 여러 원본 항목을 하나의 상위 업무나 문장으로 통합할 수 있고 하위 업무를 상위 업무에 흡수할 수도 있다.
-11. 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
-12. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
-13. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다.
-14. activity, production, next에는 각각 해당 영역의 완성된 본문 전체를 하나의 문자열로 반환한다.
-15. 각 문자열 안에서는 줄바꿈과 -, 1), 2) 등의 목록 기호를 사용하여 사용자가 Word에 바로 넣을 수 있는 형식을 만든다.
-16. activity에는 상위 업무를 '- 상위 업무', 하위 업무를 '1) 하위 업무' 형식으로 작성한다.
-17. production과 next도 항목마다 줄을 나누어 작성한다.
-18. 각 문자열에 '활동내용', '제작물 현황', '차월계획' 같은 섹션 제목은 반복해 넣지 않는다.
-19. 설명문이나 코드 블록 없이 지정된 JSON 구조만 반환한다.`,
+8. ownerNames는 해당 항목의 실제 담당자 이름 목록이다. 담당자를 작성할 때는 이 값만 사용하고 비어 있으면 임의로 만들지 않는다. ownerLabel은 자료 선택 화면용 표시값이므로 '담당자 미지정'을 사람 이름으로 작성하지 않는다.
+9. 각 섹션 안에서 보고서 흐름에 맞게 업무를 합치거나 나누고 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
+10. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 자유롭게 생략할 수 있다.
+11. 여러 원본 항목을 하나의 상위 업무나 문장으로 통합할 수 있고 하위 업무를 상위 업무에 흡수할 수도 있다.
+12. 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
+13. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
+14. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜·담당자를 새로 추가하지 않는다.
+15. activity, production, next에는 각각 해당 영역의 완성된 본문 전체를 하나의 문자열로 반환한다.
+16. 각 문자열 안에서는 줄바꿈과 -, 1), 2) 등의 목록 기호를 사용하여 사용자가 Word에 바로 넣을 수 있는 형식을 만든다.
+17. activity에는 상위 업무를 '- 상위 업무', 하위 업무를 '1) 하위 업무' 형식으로 작성한다.
+18. production과 next도 항목마다 줄을 나누어 작성한다.
+19. 각 문자열에 '활동내용', '제작물 현황', '차월계획' 같은 섹션 제목은 반복해 넣지 않는다.
+20. 설명문이나 코드 블록 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",

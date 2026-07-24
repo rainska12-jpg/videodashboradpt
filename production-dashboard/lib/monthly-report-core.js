@@ -220,6 +220,25 @@
     const projectSourceMap = new Map();
     const currentTaskDatesByProject = new Map();
     const relevantProjectIds = new Set();
+    const ownerById = new Map((state.owners || []).map((owner) => [String(owner?.id || owner?.name || ""), String(owner?.name || owner?.id || "").trim()]));
+    const entityById = new Map([
+      ...(state.projects || []).map((project) => [String(project.id || ""), project]),
+      ...(state.works || []).map((work) => [String(work.id || ""), work])
+    ]);
+
+    function entityOwnerNames(entity, fallbackEntity = null) {
+      const ownerValues = Array.isArray(entity?.owners)
+        ? entity.owners
+        : [entity?.owner].filter(Boolean);
+      const fallbackValues = Array.isArray(fallbackEntity?.owners)
+        ? fallbackEntity.owners
+        : [fallbackEntity?.owner].filter(Boolean);
+      const values = ownerValues.length ? ownerValues : fallbackValues;
+      const staffValues = (entity?.staffRows || []).map((row) => row?.owner);
+      return [...new Set([...values, ...staffValues]
+        .map((ownerId) => ownerById.get(String(ownerId || "")) || String(ownerId || "").trim())
+        .filter((name) => name && name !== "미배정" && name !== "__unassigned__"))];
+    }
 
     function pushSource(item) {
       const sourceId = String(item.sourceId || "").trim();
@@ -235,6 +254,7 @@
         ...(item.status ? { status: String(item.status) } : {}),
         ...(item.department ? { department: String(item.department) } : {}),
         ...(item.category ? { category: String(item.category) } : {}),
+        ownerNames: [...new Set((item.ownerNames || []).map((name) => String(name || "").trim()).filter(Boolean))],
         ...(item.isRecurring ? {
           isRecurring: true,
           recurrenceSchedule: String(item.recurrenceSchedule || "반복 주기 미지정"),
@@ -255,6 +275,7 @@
         dueDate,
         status: String(entity.status || ""),
         department: String(entity.client || entity.department || "").trim(),
+        ownerNames: entityOwnerNames(entity),
         reportSections: []
       };
       if (dueDate && inMonth(dueDate, month)) item.reportSections.push("activity");
@@ -287,6 +308,7 @@
         dates: sourceDates,
         dueDate,
         status: task.done && completionDate <= range.end ? "완료" : "미완료",
+        ownerNames: entityOwnerNames(task, entityById.get(String(entityId))),
         isRecurring: Boolean(recurrenceSchedule),
         recurrenceSchedule,
         reportSections: sections
@@ -314,6 +336,7 @@
           title: entity.title,
           dates: [createdDate],
           category: workContentCategoryValue,
+          ownerNames: entityOwnerNames(entity),
           reportSections: ["activity"]
         });
         relevantProjectIds.add(String(entity.id));
@@ -337,6 +360,7 @@
         projectId: linkedId,
         title: event.title || event.trainingType || "방송실 일정",
         dates: [eventDate],
+        ownerNames: entityOwnerNames(event, entityById.get(linkedId)),
         isRecurring: Boolean(recurrenceSchedule),
         recurrenceSchedule,
         reportSections: sections
@@ -390,6 +414,8 @@
       const isRecurring = payload.isRecurring === true;
       const recurrenceSchedule = String(payload.recurrenceSchedule || "").trim();
       const recurrenceLabel = String(payload.recurrenceLabel || (isRecurring ? `반복 업무 · ${recurrenceSchedule || "반복 주기 미지정"}` : "")).trim();
+      const ownerNames = [...new Set((payload.ownerNames || []).map((name) => String(name || "").trim()).filter(Boolean))];
+      const ownerLabel = ownerNames.length ? ownerNames.join(", ") : "담당자 미지정";
       const text = itemType === "task"
         ? `${title} / ${formatDates(dates)}`
         : itemType === "project"
@@ -412,6 +438,8 @@
         isRecurring,
         recurrenceSchedule,
         recurrenceLabel,
+        ownerNames,
+        ownerLabel,
         sourceKind,
         sourceKindLabel: SOURCE_KIND_LABELS[sourceKind] || "",
         itemRoleLabel: itemType === "project"
@@ -447,6 +475,7 @@
         parentTitle: project?.title,
         parentSourceId: project?.sourceId,
         department: project?.department,
+        ownerNames: task.ownerNames,
         sourceKind: sourceKindFromType(project?.sourceType) || "work",
         isRecurring: task.isRecurring === true,
         recurrenceSchedule: task.recurrenceSchedule,
@@ -461,7 +490,8 @@
         sourceIds: new Set([source.sourceId]),
         title: source.title,
         dates: new Set(),
-        sourceKind: sourceKindFromType(source.sourceType) || "work"
+        sourceKind: sourceKindFromType(source.sourceType) || "work",
+        ownerNames: source.ownerNames
       };
       (dates || []).filter((date) => inMonth(date, month)).forEach((date) => entry.dates.add(date));
       entry.sourceIds.add(source.sourceId);
@@ -503,6 +533,7 @@
         itemType: "project",
         parentSourceId: projectId,
         department: project?.department,
+        ownerNames: project?.ownerNames || entry.ownerNames,
         sourceKind: entry.sourceKind
       });
     });
@@ -510,6 +541,7 @@
       sourceIds: [schedule.sourceId],
       title: schedule.title,
       dates: schedule.dates,
+      ownerNames: schedule.ownerNames,
       sourceKind: "studio",
       isRecurring: schedule.isRecurring === true,
       recurrenceSchedule: schedule.recurrenceSchedule,
@@ -521,6 +553,7 @@
         sourceIds: [source.sourceId],
         title: source.title,
         dates: [source.dueDate],
+        ownerNames: source.ownerNames,
         dueStyle: true,
         sourceKind: "video"
       }));
@@ -530,6 +563,7 @@
         sourceIds: [source.sourceId],
         title: source.title,
         dates: [source.dueDate],
+        ownerNames: source.ownerNames,
         sourceKind: sourceKindFromType(source.sourceType)
       }));
 
@@ -551,6 +585,7 @@
       ...(source.status ? { status: source.status } : {}),
       ...(source.department ? { department: source.department } : {}),
       ...(source.category ? { category: source.category } : {}),
+      ownerNames: [...new Set(source.ownerNames || [])],
       ...(source.isRecurring ? {
         isRecurring: true,
         recurrenceSchedule: source.recurrenceSchedule,
@@ -577,6 +612,8 @@
       isRecurring: item.isRecurring === true,
       recurrenceSchedule: String(item.recurrenceSchedule || ""),
       recurrenceLabel: String(item.recurrenceLabel || ""),
+      ownerNames: [...new Set(item.ownerNames || [])],
+      ownerLabel: String(item.ownerLabel || ""),
       reportGroup: String(item.reportGroup || ""),
       reportGroupLabel: String(item.reportGroupLabel || ""),
       sourceKind: String(item.sourceKind || ""),

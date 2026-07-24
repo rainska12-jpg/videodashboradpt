@@ -10,10 +10,16 @@ const { createMonthlyReportDocx, monthlyReportFilename } = require("../lib/month
 
 function fixtureState() {
   return {
+    owners: [
+      { id: "owner-pd", name: "김연아", status: "active" },
+      { id: "owner-work", name: "박지훈", status: "active" },
+      { id: "owner-studio", name: "이수민", status: "active" }
+    ],
     projects: [{
       id: "video-1",
       title: "7월 개강 홍보영상",
       client: "교육팀",
+      owners: ["owner-pd"],
       finalDate: "2026-07-25",
       status: "편집",
       records: [
@@ -27,6 +33,7 @@ function fixtureState() {
       id: "work-1",
       title: "방송실 운영",
       client: "내부",
+      owners: ["owner-work"],
       finalDate: "2026-08-12",
       status: "진행",
       records: [],
@@ -36,7 +43,7 @@ function fixtureState() {
     activityLogs: [],
     staffEvents: [
       { id: "studio-linked", projectId: "video-1", title: "개강 홍보영상 촬영", date: "2026-07-12", startTime: "14:00", endTime: "16:00", room: "방송실 A", memo: "상세 메모" },
-      { id: "studio-free", title: "정기예배 방송실 운영", date: "2026-07-20", startTime: "09:00", room: "본당", memo: "담당자 메모" },
+      { id: "studio-free", title: "정기예배 방송실 운영", date: "2026-07-20", startTime: "09:00", room: "본당", memo: "담당자 메모", owners: ["owner-studio"] },
       { id: "studio-next", title: "8월 방송실 점검", date: "2026-08-04", startTime: "11:00", memo: "다음 달 메모" }
     ]
   };
@@ -71,10 +78,13 @@ test("활동내용을 업무·발주부서·업무 날짜 아래 하위 할 일�
   assert.equal(task.parentTitle, "7월 개강 홍보영상");
   assert.equal(task.parentSourceId, "video-1");
   assert.equal(task.department, "교육팀");
+  assert.deepEqual(task.ownerNames, ["김연아"]);
+  assert.equal(task.ownerLabel, "김연아");
   assert.equal(task.text, "촬영 진행 / 7월 8일");
   assert.deepEqual(task.sourceIds.sort(), ["task-1", "video-1"]);
   assert.equal(project.itemType, "project");
   assert.equal(project.department, "교육팀");
+  assert.deepEqual(project.ownerNames, ["김연아"]);
   assert.equal(project.parentSourceId, "video-1");
   assert.deepEqual(project.dates, ["2026-07-03", "2026-07-08", "2026-07-12", "2026-07-25"]);
   assert.equal(project.text, "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일, 7월 12일, 7월 25일");
@@ -233,6 +243,7 @@ test("반복 할 일과 방송실 일정에 반복 업무·요일을 표시하�
   assert.equal(recurringStudio.recurrenceLabel, "반복 업무 · 매주 월요일·수요일");
   const candidates = core.previewItems(preview);
   assert.equal(candidates.find((item) => item.title === "주간 검수").recurrenceLabel, "반복 업무 · 매주 수요일");
+  assert.equal(candidates.find((item) => item.title === "주간 검수").ownerLabel, "김연아");
 });
 
 test("ISO 타임스탬프는 Asia/Seoul 날짜로 변환한다", () => {
@@ -372,7 +383,9 @@ test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 완�
       reportGroupLabel: "영상",
       sourceKind: "video",
       sourceKindLabel: "영상",
-      itemRoleLabel: "상위 업무"
+      itemRoleLabel: "상위 업무",
+      ownerNames: ["김연아"],
+      ownerLabel: "김연아"
     },
     {
       candidateId: "task-1",
@@ -393,16 +406,19 @@ test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 완�
       itemRoleLabel: "하위 업무",
       isRecurring: true,
       recurrenceSchedule: "매주 수요일",
-      recurrenceLabel: "반복 업무 · 매주 수요일"
+      recurrenceLabel: "반복 업무 · 매주 수요일",
+      ownerNames: ["김연아"],
+      ownerLabel: "김연아"
     }
   ];
   const sourceById = new Map([
-    ["project-1", { sourceId: "project-1", title: "기관 홍보영상", dates: ["2026-07-03"], department: "홍보팀" }],
-    ["task-1", { sourceId: "task-1", title: "촬영 진행", dates: ["2026-07-08"], isRecurring: true, recurrenceSchedule: "매주 수요일", recurrenceLabel: "반복 업무 · 매주 수요일" }]
+    ["project-1", { sourceId: "project-1", title: "기관 홍보영상", dates: ["2026-07-03"], department: "홍보팀", ownerNames: ["김연아"] }],
+    ["task-1", { sourceId: "task-1", title: "촬영 진행", dates: ["2026-07-08"], isRecurring: true, recurrenceSchedule: "매주 수요일", recurrenceLabel: "반복 업무 · 매주 수요일", ownerNames: ["김연아"] }]
   ]);
   const sanitizedCandidates = sanitizeCandidates(candidates, sourceById);
   assert.equal(sanitizedCandidates[0].departmentGroupLabel, "홍보팀");
   assert.equal(sanitizedCandidates[1].recurrenceLabel, "반복 업무 · 매주 수요일");
+  assert.deepEqual(sanitizedCandidates[1].ownerNames, ["김연아"]);
   const draft = wholeReportDraft(sanitizedCandidates);
   assert.equal(draft.activityGroups.length, 1);
   assert.equal(draft.activityGroups[0].parent.candidateId, "project-1");
