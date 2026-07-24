@@ -46,7 +46,7 @@ async function monthlyReportApiInternals() {
   const apiPath = path.join(__dirname, "../api/monthly-report.js");
   const source = fs.readFileSync(apiPath, "utf8")
     .replace("export default async function handler", "async function handler");
-  const testableSource = `${source}\nexport { wholeReportDraft, validateModelResult };`;
+  const testableSource = `${source}\nexport { sanitizeCandidates, wholeReportDraft, validateModelResult };`;
   return import(`data:text/javascript;base64,${Buffer.from(testableSource).toString("base64")}`);
 }
 
@@ -103,16 +103,25 @@ test("초안과 GPT 입력에 업무·영상·방송실 업무·차월 업무 �
   const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
   const preview = core.buildMonthlyReportPreview(sources, "2026-07");
   assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").reportGroupLabel, "업무");
+  assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").departmentGroupLabel, "문화부");
   assert.equal(preview.activity.find((item) => item.title === "7월 개강 홍보영상").reportGroupLabel, "영상");
+  assert.equal(preview.activity.find((item) => item.title === "7월 개강 홍보영상").departmentGroupLabel, "교육팀");
   assert.equal(preview.activity.find((item) => item.title === "촬영 진행").sourceKindLabel, "영상");
+  assert.equal(preview.activity.find((item) => item.title === "촬영 진행").departmentGroupLabel, "교육팀");
   assert.equal(preview.activity.find((item) => item.title === "정기예배 방송실 운영").reportGroupLabel, "방송실 업무");
   assert.equal(preview.next[0].reportGroupLabel, "차월 업무");
   assert.equal(preview.next[0].sourceKindLabel, "업무");
 
   const report = core.wholeReportDraft(preview);
   assert.equal(report.activityGroups.find((group) => group.parent?.title === "월간 행정자료 정리").reportGroupLabel, "업무");
+  assert.equal(report.activityGroups.find((group) => group.parent?.title === "월간 행정자료 정리").departmentGroupLabel, "문화부");
   assert.equal(report.activityGroups.find((group) => group.parent?.title === "7월 개강 홍보영상").reportGroupLabel, "영상");
+  assert.equal(report.activityGroups.find((group) => group.parent?.title === "7월 개강 홍보영상").departmentGroupLabel, "교육팀");
   assert.equal(report.activityGroups.find((group) => group.parent?.title === "정기예배 방송실 운영").reportGroupLabel, "방송실 업무");
+  assert.deepEqual(
+    report.activityGroups.filter((group) => ["업무", "영상"].includes(group.reportGroupLabel)).map((group) => [group.reportGroupLabel, group.departmentGroupLabel]),
+    [["업무", "문화부"], ["영상", "교육팀"]]
+  );
   assert.equal(report.next[0].reportGroupLabel, "차월 업무");
 });
 
@@ -172,6 +181,58 @@ test("상위 업무 체크를 해제하면 같은 업무의 하위 할 일도 �
   core.setPreviewItemIncluded(preview, project.id, true);
   assert.equal(project.included, true);
   assert.equal(task.included, false);
+});
+
+test("업무·영상·방송실·제작물·차월 업무를 분류별로 전체 선택할 수 있다", () => {
+  const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  const videoIds = core.setReportGroupIncluded(preview, "video", false);
+  assert.ok(videoIds.length >= 2);
+  assert.ok(preview.activity.filter((item) => item.reportGroup === "video").every((item) => item.included === false));
+  assert.ok(preview.activity.filter((item) => item.reportGroup === "studio").every((item) => item.included !== false));
+  core.setReportGroupIncluded(preview, "video", true);
+  assert.ok(preview.activity.filter((item) => item.reportGroup === "video").every((item) => item.included === true));
+
+  core.setReportGroupIncluded(preview, "production", false);
+  assert.ok(preview.production.every((item) => item.included === false));
+  core.setReportGroupIncluded(preview, "next", false);
+  assert.ok(preview.next.every((item) => item.included === false));
+});
+
+test("반복 할 일과 방송실 일정에 반복 업무·요일을 표시하고 GPT 후보에도 전달한다", () => {
+  const state = fixtureState();
+  state.tasks.push({
+    id: "recurring-task",
+    projectId: "video-1",
+    text: "주간 검수",
+    dueDate: "2026-07-08",
+    done: true,
+    completedAt: "2026-07-08T10:00:00Z",
+    createdAt: "2026-07-01T00:00:00Z",
+    isRecurring: true,
+    recurrenceGroupId: "task-series",
+    recurrenceType: "weekly",
+    recurrenceStartDate: "2026-07-01",
+    recurrenceWeekdays: [3]
+  });
+  state.staffEvents.push(
+    { id: "studio-repeat-1", seriesId: "studio-series", title: "정기 방송실 점검", date: "2026-07-06" },
+    { id: "studio-repeat-2", seriesId: "studio-series", title: "정기 방송실 점검", date: "2026-07-08" }
+  );
+  const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
+  const recurringTaskSource = sources.find((item) => item.sourceId === "recurring-task");
+  const recurringStudioSource = sources.find((item) => item.sourceId === "studio-repeat-1");
+  assert.equal(recurringTaskSource.recurrenceLabel, "반복 업무 · 매주 수요일");
+  assert.equal(recurringStudioSource.recurrenceLabel, "반복 업무 · 매주 월요일·수요일");
+
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  const recurringTask = preview.activity.find((item) => item.title === "주간 검수");
+  const recurringStudio = preview.activity.find((item) => item.sourceIds.includes("studio-repeat-1"));
+  assert.equal(recurringTask.isRecurring, true);
+  assert.equal(recurringTask.recurrenceSchedule, "매주 수요일");
+  assert.equal(recurringStudio.recurrenceLabel, "반복 업무 · 매주 월요일·수요일");
+  const candidates = core.previewItems(preview);
+  assert.equal(candidates.find((item) => item.title === "주간 검수").recurrenceLabel, "반복 업무 · 매주 수요일");
 });
 
 test("ISO 타임스탬프는 Asia/Seoul 날짜로 변환한다", () => {
@@ -281,8 +342,8 @@ test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 프롬�
   assert.equal(omitted.activity[0].text, missing.activity[0].text);
 });
 
-test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생략과 날짜 표기를 유지한다", async () => {
-  const { wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
+test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 프롬프트의 항목 생략과 날짜 표기를 유지한다", async () => {
+  const { sanitizeCandidates, wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
   const candidates = [
     {
       candidateId: "project-1",
@@ -295,6 +356,7 @@ test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생�
       parentSourceId: "project-1",
       parentTitle: "기관 홍보영상",
       department: "홍보팀",
+      departmentGroupLabel: "홍보팀",
       reportGroup: "video",
       reportGroupLabel: "영상",
       sourceKind: "video",
@@ -312,19 +374,31 @@ test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생�
       parentSourceId: "project-1",
       parentTitle: "기관 홍보영상",
       department: "홍보팀",
+      departmentGroupLabel: "홍보팀",
       reportGroup: "video",
       reportGroupLabel: "영상",
       sourceKind: "video",
       sourceKindLabel: "영상",
-      itemRoleLabel: "하위 업무"
+      itemRoleLabel: "하위 업무",
+      isRecurring: true,
+      recurrenceSchedule: "매주 수요일",
+      recurrenceLabel: "반복 업무 · 매주 수요일"
     }
   ];
-  const draft = wholeReportDraft(candidates);
+  const sourceById = new Map([
+    ["project-1", { sourceId: "project-1", title: "기관 홍보영상", dates: ["2026-07-03"], department: "홍보팀" }],
+    ["task-1", { sourceId: "task-1", title: "촬영 진행", dates: ["2026-07-08"], isRecurring: true, recurrenceSchedule: "매주 수요일", recurrenceLabel: "반복 업무 · 매주 수요일" }]
+  ]);
+  const sanitizedCandidates = sanitizeCandidates(candidates, sourceById);
+  assert.equal(sanitizedCandidates[0].departmentGroupLabel, "홍보팀");
+  assert.equal(sanitizedCandidates[1].recurrenceLabel, "반복 업무 · 매주 수요일");
+  const draft = wholeReportDraft(sanitizedCandidates);
   assert.equal(draft.activityGroups.length, 1);
   assert.equal(draft.activityGroups[0].parent.candidateId, "project-1");
   assert.equal(draft.activityGroups[0].tasks[0].candidateId, "task-1");
   assert.equal(draft.activityGroups[0].reportGroupLabel, "영상");
   assert.equal(draft.activityGroups[0].sourceKindLabel, "영상");
+  assert.equal(draft.activityGroups[0].departmentGroupLabel, "홍보팀");
 
   const valid = validateModelResult({
     activity: [

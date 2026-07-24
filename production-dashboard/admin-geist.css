@@ -1257,7 +1257,7 @@
 
 #adminView .monthly-report-stepper {
   display: grid;
-  grid-template-columns: max-content minmax(36px, 1fr) max-content minmax(36px, 1fr) max-content minmax(36px, 1fr) max-content;
+  grid-template-columns: max-content minmax(48px, 1fr) max-content minmax(48px, 1fr) max-content;
   align-items: center;
   overflow: hidden;
   border: 1px solid var(--geist-hairline, #ddd);
@@ -1638,7 +1638,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#adminView .monthly-report-type-group > header > span {
+#adminView .monthly-report-type-group > header > aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#adminView .monthly-report-type-group > header > aside > span {
   flex: 0 0 auto;
   border: 1px solid var(--geist-hairline, #ddd);
   border-radius: 999px;
@@ -1647,11 +1652,75 @@
   padding: 3px 7px;
   font-size: 8px;
 }
+#adminView .monthly-report-group-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  color: var(--geist-body, #444);
+  font-size: 9px;
+  user-select: none;
+}
+#adminView .monthly-report-group-select > input { position: absolute; opacity: 0; pointer-events: none; }
+#adminView .monthly-report-group-select > i {
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--geist-faint, #aaa);
+  border-radius: 4px;
+  background: var(--geist-elevated, #fff);
+}
+#adminView .monthly-report-group-select > input:checked + i { border-color: #00b84f; background: #00c958; }
+#adminView .monthly-report-group-select > input:checked + i::after {
+  content: "✓";
+  color: #041a0d;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+}
+#adminView .monthly-report-group-select > b { font-weight: 600; white-space: nowrap; }
 #adminView .monthly-report-type-group > div { display: grid; gap: 7px; }
 #adminView .monthly-report-type-group[data-report-group="work"] { border-left: 3px solid #6d7d8c; }
 #adminView .monthly-report-type-group[data-report-group="video"] { border-left: 3px solid #00b84f; }
 #adminView .monthly-report-type-group[data-report-group="studio"] { border-left: 3px solid #7c6bd0; }
+#adminView .monthly-report-type-group[data-report-group="production"] { border-left: 3px solid #3f83d4; }
 #adminView .monthly-report-type-group[data-report-group="next"] { border-left: 3px solid #d39a2c; }
+#adminView .monthly-report-department-group {
+  display: grid;
+  gap: 7px;
+  border-top: 1px solid var(--geist-hairline, #ddd);
+  padding-top: 10px;
+}
+#adminView .monthly-report-department-group:first-child { border-top: 0; padding-top: 2px; }
+#adminView .monthly-report-department-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+#adminView .monthly-report-department-group > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+#adminView .monthly-report-department-group > header span {
+  color: var(--geist-mute, #777);
+  font-size: 8px;
+  font-weight: 600;
+}
+#adminView .monthly-report-department-group > header strong {
+  color: var(--geist-ink, #111);
+  font-size: 10px;
+  font-weight: 700;
+}
+#adminView .monthly-report-department-group > header em {
+  color: var(--geist-mute, #777);
+  font-size: 8px;
+  font-style: normal;
+}
+#adminView .monthly-report-department-group > div { display: grid; gap: 7px; }
 #adminView .monthly-report-task-group {
   display: grid;
   gap: 8px;
@@ -1695,7 +1764,7 @@
 #adminView .monthly-report-task-children .monthly-report-preview-item { background: var(--geist-elevated, #fff); }
 #adminView .monthly-report-preview-item {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border: 1px solid var(--geist-hairline, #ddd);
@@ -1711,6 +1780,16 @@
 #adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i::after { content: "✓"; color: #041a0d; font-size: 10px; font-style: normal; font-weight: 800; }
 #adminView .monthly-report-preview-item > input[type="text"] { min-width: 0; border: 0; outline: 0; background: transparent; color: var(--geist-ink, #111); padding: 3px 0; font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
 #adminView .monthly-report-preview-item > span { min-width: 0; color: var(--geist-ink, #111); font: 500 11px/1.45 "Geist", "Apple SD Gothic Neo", sans-serif; }
+#adminView .monthly-report-recurrence-badge {
+  border: 1px solid color-mix(in srgb, #7c6bd0 44%, var(--geist-hairline, #ddd));
+  border-radius: 999px;
+  background: color-mix(in srgb, #7c6bd0 10%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, #7c6bd0 76%, var(--geist-ink, #111));
+  padding: 3px 7px;
+  font-size: 8px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 #adminView .monthly-report-preview-item.is-parent > span { font-weight: 650; }
 #adminView .monthly-report-preview-item:focus-within { border-color: #9a9a9a; background: var(--geist-elevated, #fff); }
 #adminView .monthly-report-preview-item.is-excluded { opacity: .48; }
@@ -1730,7 +1809,7 @@
 
 @media (max-width: 900px) {
   #adminView .monthly-report-stepper {
-    grid-template-columns: repeat(4, minmax(132px, 1fr));
+    grid-template-columns: repeat(3, minmax(148px, 1fr));
     gap: 12px;
     overflow-x: auto;
   }
@@ -1756,7 +1835,7 @@
   #adminView .monthly-report-manager { padding: 14px; }
   #adminView .monthly-report-stepper {
     margin: 0;
-    grid-template-columns: repeat(4, minmax(118px, 1fr));
+    grid-template-columns: repeat(3, minmax(126px, 1fr));
     padding: 14px;
   }
   #adminView .monthly-report-stepper > button {
@@ -1780,7 +1859,9 @@
   #adminView .monthly-report-card-head { align-items: flex-start; flex-direction: column; }
   #adminView .monthly-report-card-head > small { text-align: left; }
   #adminView .monthly-report-preview-item { grid-template-columns: 18px minmax(0, 1fr); }
+  #adminView .monthly-report-recurrence-badge { grid-column: 2; justify-self: start; white-space: normal; }
   #adminView .monthly-report-type-group > header > div { display: grid; gap: 2px; }
+  #adminView .monthly-report-type-group > header > aside { align-items: flex-end; flex-direction: column; gap: 5px; }
   #adminView .monthly-report-task-children { padding-left: 9px; }
   #adminView .monthly-report-stage-actions {
     flex-wrap: wrap;

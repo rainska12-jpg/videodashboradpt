@@ -19,6 +19,7 @@
     production: "제작물",
     next: "차월 업무"
   };
+  const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
   const DEFAULT_PROMPT = `제공된 원본 데이터만 사용하여 월말보고서를 작성한다.
 
 각 항목을 따로 수정하지 말고 체크된 보고서 전체를 먼저 검토한 뒤 하나의 문서처럼 정리한다.
@@ -30,6 +31,8 @@
 월말보고서에서는 세부 업무 설명보다 날짜와 공식 제목이 중요하다.
 
 결과를 활동내용, 제작물현황, 차월계획으로 구분한다.
+
+활동내용은 업무, 영상, 방송실 업무로 묶고 업무와 영상은 발주부서별로 다시 묶는다.
 
 각 항목에는 실제 날짜와 영상 제목, 업무 제목, 할 일 제목 또는 일정 제목을 정확하게 유지한다.
 
@@ -46,6 +49,8 @@
 같은 프로젝트의 여러 관리기록은 프로젝트별로 묶고 날짜를 중복 제거한 뒤 시간순으로 정리한다.
 
 할 일은 실제 할 일 제목과 작업일 또는 완료일을 사용한다.
+
+반복 할 일과 반복 방송실 일정은 반복 업무로 인식하고 제공된 반복 주기와 요일을 참고한다.
 
 활동내용은 업무명, 발주부서, 업무한 날짜 순서로 작성하고 그 아래에 할 일 제목과 날짜를 배치한다.
 
@@ -122,6 +127,67 @@
     return "";
   }
 
+  function dateWeekday(value) {
+    const date = seoulDateKey(value);
+    if (!date) return -1;
+    return new Date(`${date}T00:00:00+09:00`).getDay();
+  }
+
+  function weekdaySchedule(days, prefix = "매주") {
+    const labels = [...new Set((days || []).map(Number).filter((day) => day >= 0 && day <= 6))]
+      .sort((a, b) => a - b)
+      .map((day) => `${WEEKDAY_LABELS[day]}요일`);
+    return labels.length ? `${prefix} ${labels.join("·")}` : prefix;
+  }
+
+  function taskRecurrenceSchedule(task) {
+    const type = String(task?.recurrenceType || "none");
+    const isRecurring = Boolean(task?.isRecurring || task?.recurrenceGroupId || type !== "none");
+    if (!isRecurring) return "";
+    const dueWeekday = dateWeekday(task?.recurrenceStartDate || task?.dueDate);
+    const weekdays = Array.isArray(task?.recurrenceWeekdays) && task.recurrenceWeekdays.length
+      ? task.recurrenceWeekdays
+      : dueWeekday >= 0 ? [dueWeekday] : [];
+    if (type === "daily") return "매일";
+    if (type === "biweekly") return weekdaySchedule(weekdays, "격주");
+    if (type === "monthly") {
+      if (task?.recurrenceMonthlyMode === "ordinal") {
+        const ordinal = { "-1": "마지막", 1: "첫 번째", 2: "두 번째", 3: "세 번째", 4: "네 번째" }[String(task.recurrenceMonthlyOrdinal || 1)];
+        const weekday = WEEKDAY_LABELS[Number(task.recurrenceMonthlyWeekday)];
+        return weekday ? `매월 ${ordinal} ${weekday}요일` : "매월 반복";
+      }
+      return `매월 ${Number(task?.recurrenceMonthlyDay) || Number(String(task?.recurrenceStartDate || task?.dueDate || "").slice(8, 10)) || ""}일`.replace("매월 일", "매월 반복");
+    }
+    if (type === "custom" && task?.recurrenceCustomFrequency === "monthly") {
+      if (task?.recurrenceMonthlyMode === "ordinal") {
+        const ordinal = { "-1": "마지막", 1: "첫 번째", 2: "두 번째", 3: "세 번째", 4: "네 번째" }[String(task.recurrenceMonthlyOrdinal || 1)];
+        const weekday = WEEKDAY_LABELS[Number(task.recurrenceMonthlyWeekday)];
+        return weekday ? `매월 ${ordinal} ${weekday}요일` : "매월 반복";
+      }
+      return `매월 ${Number(task?.recurrenceMonthlyDay) || ""}일`.replace("매월 일", "매월 반복");
+    }
+    return weekdaySchedule(weekdays);
+  }
+
+  function studioRecurrenceSchedule(state, event) {
+    const seriesId = String(event?.seriesId || "");
+    if (!seriesId) return "";
+    const configuredSeries = (state.recurringTrainings || []).find((series) => String(series.id || "") === seriesId);
+    if (configuredSeries) {
+      const weekday = dateWeekday(configuredSeries.startDate || event.date);
+      if (configuredSeries.repeat === "격주") return weekdaySchedule([weekday], "격주");
+      if (configuredSeries.repeat === "매월") {
+        const day = Number(String(configuredSeries.startDate || event.date || "").slice(8, 10));
+        return day ? `매월 ${day}일` : "매월 반복";
+      }
+      return weekdaySchedule([weekday]);
+    }
+    const weekdays = (state.staffEvents || [])
+      .filter((item) => String(item.seriesId || "") === seriesId)
+      .map((item) => dateWeekday(item.date));
+    return weekdaySchedule(weekdays);
+  }
+
   function monthlyReportManager(users) {
     const managers = (Array.isArray(users) ? users : [])
       .filter((user) => user && user.approved !== false && !["pending", "inactive"].includes(String(user.status || "")))
@@ -169,6 +235,11 @@
         ...(item.status ? { status: String(item.status) } : {}),
         ...(item.department ? { department: String(item.department) } : {}),
         ...(item.category ? { category: String(item.category) } : {}),
+        ...(item.isRecurring ? {
+          isRecurring: true,
+          recurrenceSchedule: String(item.recurrenceSchedule || "반복 주기 미지정"),
+          recurrenceLabel: `반복 업무 · ${String(item.recurrenceSchedule || "반복 주기 미지정")}`
+        } : {}),
         reportSections: [...new Set((item.reportSections || []).filter((key) => SECTION_KEYS.includes(key)))]
       });
     }
@@ -207,6 +278,7 @@
       if (wasIncompleteAtMonthEnd || (dueDate && inMonth(dueDate, range.nextMonth))) sections.push("next");
       if (!sections.length || !titleOf(task)) return;
       const sourceDates = uniqueDates([actualDate, dueDate]);
+      const recurrenceSchedule = taskRecurrenceSchedule(task);
       pushSource({
         sourceType: "task",
         sourceId: task.id,
@@ -215,6 +287,8 @@
         dates: sourceDates,
         dueDate,
         status: task.done && completionDate <= range.end ? "완료" : "미완료",
+        isRecurring: Boolean(recurrenceSchedule),
+        recurrenceSchedule,
         reportSections: sections
       });
       relevantProjectIds.add(String(entityId));
@@ -253,6 +327,7 @@
       const eventDate = seoulDateKey(event.date);
       if (!eventDate || (!inMonth(eventDate, month) && !inMonth(eventDate, range.nextMonth))) return;
       const linkedId = String(event.projectId || event.workId || "");
+      const recurrenceSchedule = studioRecurrenceSchedule(state, event);
       const sections = [];
       if (inMonth(eventDate, month)) sections.push("activity");
       if (inMonth(eventDate, range.nextMonth)) sections.push("next");
@@ -262,6 +337,8 @@
         projectId: linkedId,
         title: event.title || event.trainingType || "방송실 일정",
         dates: [eventDate],
+        isRecurring: Boolean(recurrenceSchedule),
+        recurrenceSchedule,
         reportSections: sections
       });
       if (linkedId) relevantProjectIds.add(linkedId);
@@ -310,6 +387,9 @@
         : section === "next"
           ? "next"
           : sourceKind || "work";
+      const isRecurring = payload.isRecurring === true;
+      const recurrenceSchedule = String(payload.recurrenceSchedule || "").trim();
+      const recurrenceLabel = String(payload.recurrenceLabel || (isRecurring ? `반복 업무 · ${recurrenceSchedule || "반복 주기 미지정"}` : "")).trim();
       const text = itemType === "task"
         ? `${title} / ${formatDates(dates)}`
         : itemType === "project"
@@ -326,6 +406,12 @@
         text,
         reportGroup,
         reportGroupLabel: REPORT_GROUP_LABELS[reportGroup],
+        departmentGroupLabel: section === "activity" && ["work", "video"].includes(reportGroup)
+          ? department || "발주부서 미지정"
+          : "",
+        isRecurring,
+        recurrenceSchedule,
+        recurrenceLabel,
         sourceKind,
         sourceKindLabel: SOURCE_KIND_LABELS[sourceKind] || "",
         itemRoleLabel: itemType === "project"
@@ -361,7 +447,10 @@
         parentTitle: project?.title,
         parentSourceId: project?.sourceId,
         department: project?.department,
-        sourceKind: sourceKindFromType(project?.sourceType) || "work"
+        sourceKind: sourceKindFromType(project?.sourceType) || "work",
+        isRecurring: task.isRecurring === true,
+        recurrenceSchedule: task.recurrenceSchedule,
+        recurrenceLabel: task.recurrenceLabel
       });
     });
 
@@ -421,7 +510,10 @@
       sourceIds: [schedule.sourceId],
       title: schedule.title,
       dates: schedule.dates,
-      sourceKind: "studio"
+      sourceKind: "studio",
+      isRecurring: schedule.isRecurring === true,
+      recurrenceSchedule: schedule.recurrenceSchedule,
+      recurrenceLabel: schedule.recurrenceLabel
     }));
 
     validSources.filter((source) => source.sourceType === "video_project" && source.reportSections.includes("production"))
@@ -458,7 +550,12 @@
       ...(source.dueDate ? { dueDate: source.dueDate } : {}),
       ...(source.status ? { status: source.status } : {}),
       ...(source.department ? { department: source.department } : {}),
-      ...(source.category ? { category: source.category } : {})
+      ...(source.category ? { category: source.category } : {}),
+      ...(source.isRecurring ? {
+        isRecurring: true,
+        recurrenceSchedule: source.recurrenceSchedule,
+        recurrenceLabel: source.recurrenceLabel
+      } : {})
     }));
   }
 
@@ -476,6 +573,10 @@
       parentSourceId: String(item.parentSourceId || ""),
       parentTitle: String(item.parentTitle || ""),
       department: String(item.department || ""),
+      departmentGroupLabel: String(item.departmentGroupLabel || ""),
+      isRecurring: item.isRecurring === true,
+      recurrenceSchedule: String(item.recurrenceSchedule || ""),
+      recurrenceLabel: String(item.recurrenceLabel || ""),
       reportGroup: String(item.reportGroup || ""),
       reportGroupLabel: String(item.reportGroupLabel || ""),
       sourceKind: String(item.sourceKind || ""),
@@ -495,6 +596,7 @@
         activityGroups.set(key, {
           groupTitle: item.parentTitle || item.title,
           department: item.department,
+          departmentGroupLabel: item.departmentGroupLabel,
           reportGroup: item.reportGroup,
           reportGroupLabel: item.reportGroupLabel,
           sourceKind: item.sourceKind,
@@ -507,8 +609,17 @@
       if (item.itemType === "task") group.tasks.push(item);
       else group.parent = item;
     });
+    const reportGroupOrder = { work: 0, video: 1, studio: 2 };
+    const sortedActivityGroups = [...activityGroups.values()].sort((a, b) => {
+      const groupCompare = (reportGroupOrder[a.reportGroup] ?? 99) - (reportGroupOrder[b.reportGroup] ?? 99);
+      if (groupCompare) return groupCompare;
+      const departmentA = a.departmentGroupLabel || "발주부서 미지정";
+      const departmentB = b.departmentGroupLabel || "발주부서 미지정";
+      const departmentCompare = departmentA.localeCompare(departmentB, "ko");
+      return departmentCompare || String(a.groupTitle || "").localeCompare(String(b.groupTitle || ""), "ko");
+    });
     return {
-      activityGroups: [...activityGroups.values()],
+      activityGroups: sortedActivityGroups,
       production: candidates.filter((item) => item.section === "production"),
       next: candidates.filter((item) => item.section === "next")
     };
@@ -528,6 +639,16 @@
       });
     }
     return [...new Set(changedIds)];
+  }
+
+  function setReportGroupIncluded(sections, groupKey, included) {
+    const nextIncluded = included !== false;
+    const items = SECTION_KEYS.flatMap((section) => sections?.[section] || [])
+      .filter((item) => (item.reportGroup || item.sourceKind || (item.section === "activity" ? "work" : item.section)) === groupKey);
+    items.forEach((item) => {
+      item.included = nextIncluded;
+    });
+    return items.map((item) => item.id);
   }
 
   function validateGeneratedSections(generated, sources, fallbackSections, options = {}) {
@@ -634,6 +755,7 @@
     wholeReportDraft,
     monthlyReportManager,
     setPreviewItemIncluded,
+    setReportGroupIncluded,
     validateGeneratedSections
   };
 });

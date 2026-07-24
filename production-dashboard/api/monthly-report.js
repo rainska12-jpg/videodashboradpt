@@ -68,7 +68,12 @@ function sanitizeSources(value) {
       ...(dueDate ? { dueDate } : {}),
       ...(item?.status ? { status: cleanText(item.status, 80) } : {}),
       ...(item?.department ? { department: cleanText(item.department, 160) } : {}),
-      ...(item?.category ? { category: cleanText(item.category, 80) } : {})
+      ...(item?.category ? { category: cleanText(item.category, 80) } : {}),
+      ...(item?.isRecurring === true ? {
+        isRecurring: true,
+        recurrenceSchedule: cleanText(item.recurrenceSchedule, 120),
+        recurrenceLabel: cleanText(item.recurrenceLabel, 160)
+      } : {})
     };
   }).filter(Boolean);
 }
@@ -87,6 +92,10 @@ function sanitizeCandidates(value, sourceById) {
     const parentSourceId = cleanText(item?.parentSourceId, 160);
     const parentTitle = cleanText(item?.parentTitle, 240);
     const department = cleanText(item?.department, 160);
+    const departmentGroupLabel = cleanText(item?.departmentGroupLabel, 160);
+    const isRecurring = item?.isRecurring === true;
+    const recurrenceSchedule = cleanText(item?.recurrenceSchedule, 120);
+    const recurrenceLabel = cleanText(item?.recurrenceLabel, 160);
     const reportGroupValue = cleanText(item?.reportGroup, 20);
     const reportGroup = REPORT_GROUPS.has(reportGroupValue) ? reportGroupValue : section === "activity" ? "work" : section;
     const reportGroupLabel = cleanText(item?.reportGroupLabel, 40);
@@ -110,6 +119,10 @@ function sanitizeCandidates(value, sourceById) {
       parentSourceId,
       parentTitle,
       department,
+      departmentGroupLabel,
+      isRecurring,
+      recurrenceSchedule,
+      recurrenceLabel,
       reportGroup,
       reportGroupLabel,
       sourceKind,
@@ -135,6 +148,7 @@ function wholeReportDraft(candidates) {
       activityGroups.set(key, {
         groupTitle: candidate.parentTitle || candidate.title,
         department: candidate.department,
+        departmentGroupLabel: candidate.departmentGroupLabel || (["work", "video"].includes(candidate.reportGroup) ? candidate.department || "발주부서 미지정" : ""),
         reportGroup: candidate.reportGroup,
         reportGroupLabel: candidate.reportGroupLabel,
         sourceKind: candidate.sourceKind,
@@ -147,8 +161,15 @@ function wholeReportDraft(candidates) {
     if (candidate.itemType === "task") group.tasks.push(candidate);
     else group.parent = candidate;
   });
+  const reportGroupOrder = { work: 0, video: 1, studio: 2 };
+  const sortedActivityGroups = [...activityGroups.values()].sort((a, b) => {
+    const groupCompare = (reportGroupOrder[a.reportGroup] ?? 99) - (reportGroupOrder[b.reportGroup] ?? 99);
+    if (groupCompare) return groupCompare;
+    const departmentCompare = String(a.departmentGroupLabel || "").localeCompare(String(b.departmentGroupLabel || ""), "ko");
+    return departmentCompare || String(a.groupTitle || "").localeCompare(String(b.groupTitle || ""), "ko");
+  });
   return {
-    activityGroups: [...activityGroups.values()],
+    activityGroups: sortedActivityGroups,
     production: candidates.filter((candidate) => candidate.section === "production"),
     next: candidates.filter((candidate) => candidate.section === "next")
   };
@@ -238,15 +259,17 @@ export default async function handler(req, res) {
 3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
 4. reportGroupLabel은 보고서에서 묶어야 할 분류다. 활동내용은 업무, 영상, 방송실 업무끼리 모으고 차월계획은 모두 차월 업무로 묶는다.
 5. sourceKindLabel은 원본이 업무, 영상, 방송실 업무 중 무엇인지 알려 주며 itemRoleLabel은 상위 업무, 하위 업무 등의 역할을 알려 준다. 제목만 보고 유형을 추측하지 말고 이 표식을 기준으로 정리한다.
-6. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
-7. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
-8. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
-9. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
-10. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
-11. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
-12. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
-13. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
-14. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+6. departmentGroupLabel은 업무·영상 분류 안에서 다시 묶어야 할 발주부서다. 같은 reportGroupLabel 안에서는 같은 departmentGroupLabel끼리 연속 배치하고, 발주부서가 없는 항목은 발주부서 미지정끼리 묶는다.
+7. isRecurring이 true인 항목은 반복 업무이며 recurrenceSchedule과 recurrenceLabel에 매주 무슨 요일, 격주 또는 매월 반복인지 표시되어 있다. 제목만 보고 추측하지 말고 이 값을 기준으로 반복 업무임을 인식한다.
+8. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
+9. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
+10. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
+11. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
+12. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
+13. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
+14. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
+15. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
+16. 설명문 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",
