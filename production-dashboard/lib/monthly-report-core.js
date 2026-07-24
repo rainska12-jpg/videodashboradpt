@@ -7,6 +7,18 @@
 
   const SOURCE_TYPES = new Set(["video_project", "work_project", "task", "management_record", "studio_schedule"]);
   const SECTION_KEYS = ["activity", "production", "next"];
+  const SOURCE_KIND_LABELS = {
+    work: "업무",
+    video: "영상",
+    studio: "방송실 업무"
+  };
+  const REPORT_GROUP_LABELS = {
+    work: "업무",
+    video: "영상",
+    studio: "방송실 업무",
+    production: "제작물",
+    next: "차월 업무"
+  };
   const DEFAULT_PROMPT = `제공된 원본 데이터만 사용하여 월말보고서를 작성한다.
 
 각 항목을 따로 수정하지 말고 체크된 보고서 전체를 먼저 검토한 뒤 하나의 문서처럼 정리한다.
@@ -101,6 +113,27 @@
 
   function titleOf(task) {
     return String(task?.title || task?.text || "").trim();
+  }
+
+  function sourceKindFromType(sourceType) {
+    if (sourceType === "video_project") return "video";
+    if (sourceType === "work_project") return "work";
+    if (sourceType === "studio_schedule") return "studio";
+    return "";
+  }
+
+  function monthlyReportManager(users) {
+    const managers = (Array.isArray(users) ? users : [])
+      .filter((user) => user && user.approved !== false && !["pending", "inactive"].includes(String(user.status || "")))
+      .filter((user) => String(user.position || "").replace(/\s+/g, "").endsWith("과장"))
+      .sort((a, b) => {
+        const exactPosition = Number(String(b.position || "").replace(/\s+/g, "") === "과장")
+          - Number(String(a.position || "").replace(/\s+/g, "") === "과장");
+        return exactPosition
+          || (Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
+          || String(a.name || "").localeCompare(String(b.name || ""), "ko");
+      });
+    return managers[0] || null;
   }
 
   function taskCompletionDate(state, entityType, entityId, task) {
@@ -271,6 +304,12 @@
       const parentTitle = String(payload.parentTitle || "").trim();
       const parentSourceId = String(payload.parentSourceId || "").trim();
       const department = String(payload.department || "").trim();
+      const sourceKind = ["work", "video", "studio"].includes(payload.sourceKind) ? payload.sourceKind : "";
+      const reportGroup = section === "production"
+        ? "production"
+        : section === "next"
+          ? "next"
+          : sourceKind || "work";
       const text = itemType === "task"
         ? `${title} / ${formatDates(dates)}`
         : itemType === "project"
@@ -285,6 +324,21 @@
         title,
         dates,
         text,
+        reportGroup,
+        reportGroupLabel: REPORT_GROUP_LABELS[reportGroup],
+        sourceKind,
+        sourceKindLabel: SOURCE_KIND_LABELS[sourceKind] || "",
+        itemRoleLabel: itemType === "project"
+          ? "상위 업무"
+          : itemType === "task"
+            ? "하위 업무"
+            : section === "production"
+              ? "제작물"
+              : section === "next"
+                ? "차월 예정 업무"
+                : sourceKind === "studio"
+                  ? "방송실 일정"
+                  : "독립 항목",
         ...(itemType === "task" ? { itemType, parentTitle: parentTitle || "연결 업무 없음", parentSourceId, department } : {}),
         ...(itemType === "project" ? { itemType, parentTitle: title, parentSourceId, department } : {}),
         included: true
@@ -306,14 +360,20 @@
         itemType: "task",
         parentTitle: project?.title,
         parentSourceId: project?.sourceId,
-        department: project?.department
+        department: project?.department,
+        sourceKind: sourceKindFromType(project?.sourceType) || "work"
       });
     });
 
     const projectActivity = new Map();
     function addProjectActivity(projectId, source, dates) {
       if (!projectId || !source) return false;
-      const entry = projectActivity.get(projectId) || { sourceIds: new Set([source.sourceId]), title: source.title, dates: new Set() };
+      const entry = projectActivity.get(projectId) || {
+        sourceIds: new Set([source.sourceId]),
+        title: source.title,
+        dates: new Set(),
+        sourceKind: sourceKindFromType(source.sourceType) || "work"
+      };
       (dates || []).filter((date) => inMonth(date, month)).forEach((date) => entry.dates.add(date));
       entry.sourceIds.add(source.sourceId);
       projectActivity.set(projectId, entry);
@@ -353,16 +413,33 @@
         dates,
         itemType: "project",
         parentSourceId: projectId,
-        department: project?.department
+        department: project?.department,
+        sourceKind: entry.sourceKind
       });
     });
-    standaloneStudio.forEach((schedule) => add("activity", { sourceIds: [schedule.sourceId], title: schedule.title, dates: schedule.dates }));
+    standaloneStudio.forEach((schedule) => add("activity", {
+      sourceIds: [schedule.sourceId],
+      title: schedule.title,
+      dates: schedule.dates,
+      sourceKind: "studio"
+    }));
 
     validSources.filter((source) => source.sourceType === "video_project" && source.reportSections.includes("production"))
-      .forEach((source) => add("production", { sourceIds: [source.sourceId], title: source.title, dates: [source.dueDate], dueStyle: true }));
+      .forEach((source) => add("production", {
+        sourceIds: [source.sourceId],
+        title: source.title,
+        dates: [source.dueDate],
+        dueStyle: true,
+        sourceKind: "video"
+      }));
 
     validSources.filter((source) => ["video_project", "work_project"].includes(source.sourceType) && source.dueDate && inMonth(source.dueDate, range.nextMonth))
-      .forEach((source) => add("next", { sourceIds: [source.sourceId], title: source.title, dates: [source.dueDate] }));
+      .forEach((source) => add("next", {
+        sourceIds: [source.sourceId],
+        title: source.title,
+        dates: [source.dueDate],
+        sourceKind: sourceKindFromType(source.sourceType)
+      }));
 
     SECTION_KEYS.forEach((section) => sections[section].sort((a, b) => {
       const dateCompare = String(a.dates[0] || "9999-99-99").localeCompare(String(b.dates[0] || "9999-99-99"));
@@ -398,7 +475,12 @@
       itemType: ["project", "task"].includes(item.itemType) ? item.itemType : "standard",
       parentSourceId: String(item.parentSourceId || ""),
       parentTitle: String(item.parentTitle || ""),
-      department: String(item.department || "")
+      department: String(item.department || ""),
+      reportGroup: String(item.reportGroup || ""),
+      reportGroupLabel: String(item.reportGroupLabel || ""),
+      sourceKind: String(item.sourceKind || ""),
+      sourceKindLabel: String(item.sourceKindLabel || ""),
+      itemRoleLabel: String(item.itemRoleLabel || "")
     })));
   }
 
@@ -413,6 +495,10 @@
         activityGroups.set(key, {
           groupTitle: item.parentTitle || item.title,
           department: item.department,
+          reportGroup: item.reportGroup,
+          reportGroupLabel: item.reportGroupLabel,
+          sourceKind: item.sourceKind,
+          sourceKindLabel: item.sourceKindLabel,
           parent: null,
           tasks: []
         });
@@ -546,6 +632,7 @@
     apiSources,
     previewItems,
     wholeReportDraft,
+    monthlyReportManager,
     setPreviewItemIncluded,
     validateGeneratedSections
   };

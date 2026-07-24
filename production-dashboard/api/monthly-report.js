@@ -1,5 +1,7 @@
 const SOURCE_TYPES = new Set(["video_project", "work_project", "task", "management_record", "studio_schedule"]);
 const SECTION_KEYS = ["activity", "production", "next"];
+const REPORT_GROUPS = new Set(["work", "video", "studio", "production", "next"]);
+const SOURCE_KINDS = new Set(["work", "video", "studio"]);
 
 function envValue(...keys) {
   return keys.map((key) => process.env[key]).find(Boolean) || "";
@@ -85,12 +87,35 @@ function sanitizeCandidates(value, sourceById) {
     const parentSourceId = cleanText(item?.parentSourceId, 160);
     const parentTitle = cleanText(item?.parentTitle, 240);
     const department = cleanText(item?.department, 160);
+    const reportGroupValue = cleanText(item?.reportGroup, 20);
+    const reportGroup = REPORT_GROUPS.has(reportGroupValue) ? reportGroupValue : section === "activity" ? "work" : section;
+    const reportGroupLabel = cleanText(item?.reportGroupLabel, 40);
+    const sourceKindValue = cleanText(item?.sourceKind, 20);
+    const sourceKind = SOURCE_KINDS.has(sourceKindValue) ? sourceKindValue : "";
+    const sourceKindLabel = cleanText(item?.sourceKindLabel, 40);
+    const itemRoleLabel = cleanText(item?.itemRoleLabel, 40);
     if (!candidateId || !SECTION_KEYS.includes(section) || !sourceIds.length || !title) return null;
     const allowedSources = sourceIds.map((id) => sourceById.get(id));
     if (!allowedSources.some((source) => source.title === title)) return null;
     const allowedDates = new Set(allowedSources.flatMap((source) => uniqueDates([...(source.dates || []), source.dueDate])));
     if (dates.some((date) => !allowedDates.has(date))) return null;
-    return { candidateId, section, sourceIds, title, dates, text, itemType, parentSourceId, parentTitle, department };
+    return {
+      candidateId,
+      section,
+      sourceIds,
+      title,
+      dates,
+      text,
+      itemType,
+      parentSourceId,
+      parentTitle,
+      department,
+      reportGroup,
+      reportGroupLabel,
+      sourceKind,
+      sourceKindLabel,
+      itemRoleLabel
+    };
   }).filter(Boolean);
   const seen = new Set();
   return candidates.filter((candidate) => {
@@ -110,6 +135,10 @@ function wholeReportDraft(candidates) {
       activityGroups.set(key, {
         groupTitle: candidate.parentTitle || candidate.title,
         department: candidate.department,
+        reportGroup: candidate.reportGroup,
+        reportGroupLabel: candidate.reportGroupLabel,
+        sourceKind: candidate.sourceKind,
+        sourceKindLabel: candidate.sourceKindLabel,
         parent: null,
         tasks: []
       });
@@ -207,15 +236,17 @@ export default async function handler(req, res) {
 1. report 전체를 먼저 읽고 활동내용, 제작물현황, 차월계획을 하나의 월말보고서로 편집한다.
 2. 각 항목을 서로 독립된 문장처럼 처리하지 말고 전체 문체, 표현 방식, 날짜 표기와 순서를 일관되게 맞춘다.
 3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
-4. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
-5. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
-6. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
-7. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
-8. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
-9. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
-10. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
-11. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
-12. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+4. reportGroupLabel은 보고서에서 묶어야 할 분류다. 활동내용은 업무, 영상, 방송실 업무끼리 모으고 차월계획은 모두 차월 업무로 묶는다.
+5. sourceKindLabel은 원본이 업무, 영상, 방송실 업무 중 무엇인지 알려 주며 itemRoleLabel은 상위 업무, 하위 업무 등의 역할을 알려 준다. 제목만 보고 유형을 추측하지 말고 이 표식을 기준으로 정리한다.
+6. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
+7. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
+8. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
+9. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
+10. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
+11. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
+12. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
+13. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
+14. 설명문 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",

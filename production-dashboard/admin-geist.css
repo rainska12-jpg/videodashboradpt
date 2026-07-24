@@ -1604,6 +1604,54 @@
 #adminView .monthly-report-preview-section header > span { border-radius: 999px; background: var(--geist-soft, #f1f1f1); color: var(--geist-body, #444); padding: 4px 8px; font-size: 9px; }
 
 #adminView .monthly-report-preview-list { display: grid; gap: 7px; }
+#adminView .monthly-report-type-group {
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 10px;
+  background: var(--geist-canvas, #fafafa);
+  padding: 12px;
+}
+#adminView .monthly-report-type-group + .monthly-report-type-group { margin-top: 8px; }
+#adminView .monthly-report-type-group > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 2px;
+}
+#adminView .monthly-report-type-group > header > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+#adminView .monthly-report-type-group > header strong {
+  color: var(--geist-ink, #111);
+  font-size: 12px;
+  font-weight: 700;
+}
+#adminView .monthly-report-type-group > header small {
+  overflow: hidden;
+  color: var(--geist-mute, #777);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#adminView .monthly-report-type-group > header > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 999px;
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-body, #444);
+  padding: 3px 7px;
+  font-size: 8px;
+}
+#adminView .monthly-report-type-group > div { display: grid; gap: 7px; }
+#adminView .monthly-report-type-group[data-report-group="work"] { border-left: 3px solid #6d7d8c; }
+#adminView .monthly-report-type-group[data-report-group="video"] { border-left: 3px solid #00b84f; }
+#adminView .monthly-report-type-group[data-report-group="studio"] { border-left: 3px solid #7c6bd0; }
+#adminView .monthly-report-type-group[data-report-group="next"] { border-left: 3px solid #d39a2c; }
 #adminView .monthly-report-task-group {
   display: grid;
   gap: 8px;
@@ -1732,6 +1780,7 @@
   #adminView .monthly-report-card-head { align-items: flex-start; flex-direction: column; }
   #adminView .monthly-report-card-head > small { text-align: left; }
   #adminView .monthly-report-preview-item { grid-template-columns: 18px minmax(0, 1fr); }
+  #adminView .monthly-report-type-group > header > div { display: grid; gap: 2px; }
   #adminView .monthly-report-task-children { padding-left: 9px; }
   #adminView .monthly-report-stage-actions {
     flex-wrap: wrap;

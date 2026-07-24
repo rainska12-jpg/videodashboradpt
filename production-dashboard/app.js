@@ -326,7 +326,7 @@ const defaultOptions = {
   studioStaffOwners: [...defaultOwnerNames],
   trainingTypes: ["자막 송출 교육", "카메라 기초 교육", "라이브 스위처 교육", "장비 점검 교육", "현장 실습"],
   boardPrefixes: ["일반"],
-  positions: ["관리자", "팀장", "PD", "기획", "촬영", "편집", "과원"]
+  positions: ["관리자", "과장", "팀장", "PD", "기획", "촬영", "편집", "과원"]
 };
 
 const OPTION_COLOR_PALETTE = {
@@ -1227,6 +1227,7 @@ function normalizeOptions(source = {}) {
   if (legacyTaskTypes && !Array.isArray(source.workTaskTypes)) normalized.workTaskTypes = [...legacyTaskTypes];
   normalized.staffTypes = normalized.staffTypes.map((value) => ["방송실 스탭", "스탭 배정"].includes(value) ? "방송실 일정" : value);
   normalized.staffTypes = [...new Set(normalized.staffTypes)];
+  if (!normalized.positions.includes("과장")) normalized.positions.splice(Math.min(1, normalized.positions.length), 0, "과장");
   return normalized;
 }
 
@@ -9382,18 +9383,26 @@ function monthlyReportSectionMarkup(key, title, description, { sections = monthl
         : `<span>${esc(item.text)}</span>`}
     </label>
   `;
-  let listMarkup = items.map((item) => itemMarkup(item)).join("");
-  if (key === "activity") {
+  const typeGroupMarkup = (groupKey, label, detail, groupItems, content) => `
+    <section class="monthly-report-type-group" data-report-group="${esc(groupKey)}">
+      <header>
+        <div><strong>${esc(label)}</strong><small>${esc(detail)}</small></div>
+        <span>${groupItems.length}개</span>
+      </header>
+      <div>${content}</div>
+    </section>
+  `;
+  const activityItemsMarkup = (activityItems) => {
     const groupKeyOf = (item) => item.parentSourceId || `${item.parentTitle || "연결 업무 없음"}\u0000${item.department || ""}`;
     const groups = new Map();
-    items.filter((item) => ["project", "task"].includes(item.itemType)).forEach((item) => {
+    activityItems.filter((item) => ["project", "task"].includes(item.itemType)).forEach((item) => {
       const groupKey = groupKeyOf(item);
       if (!groups.has(groupKey)) groups.set(groupKey, { parent: null, tasks: [] });
       if (item.itemType === "project") groups.get(groupKey).parent = item;
       else groups.get(groupKey).tasks.push(item);
     });
     const renderedGroups = new Set();
-    listMarkup = items.map((item) => {
+    return activityItems.map((item) => {
       if (!["project", "task"].includes(item.itemType)) return itemMarkup(item);
       const groupKey = groupKeyOf(item);
       if (renderedGroups.has(groupKey)) return "";
@@ -9413,6 +9422,28 @@ function monthlyReportSectionMarkup(key, title, description, { sections = monthl
         </article>
       `;
     }).join("");
+  };
+  let listMarkup = items.map((item) => itemMarkup(item)).join("");
+  if (key === "activity") {
+    const definitions = [
+      ["work", "업무", "일반 업무와 연결된 하위 업무"],
+      ["video", "영상", "영상 프로젝트와 연결된 하위 업무"],
+      ["studio", "방송실 업무", "프로젝트에 연결되지 않은 방송실 일정"]
+    ];
+    listMarkup = definitions.map(([groupKey, label, detail]) => {
+      const groupItems = items.filter((item) => (item.reportGroup || item.sourceKind || "work") === groupKey);
+      return groupItems.length
+        ? typeGroupMarkup(groupKey, label, detail, groupItems, activityItemsMarkup(groupItems))
+        : "";
+    }).join("");
+  } else if (key === "next" && items.length) {
+    listMarkup = typeGroupMarkup(
+      "next",
+      "차월 업무",
+      "다음 달에 예정된 영상·일반 업무",
+      items,
+      items.map((item) => itemMarkup(item)).join("")
+    );
   }
   return `
     <section class="monthly-report-preview-section" data-monthly-report-section="${key}">
@@ -9550,7 +9581,7 @@ function monthlyReportPreviewStageMarkup() {
 
 function monthlyReportOutputStageMarkup() {
   const [year, monthNumber] = monthlyReportMonth.split("-");
-  const user = currentUser();
+  const manager = window.MonthlyReportCore?.monthlyReportManager(state.users);
   const includedCount = monthlyReportIncludedCount(monthlyReportPreview);
   const filename = window.MonthlyReportDocx?.monthlyReportFilename(monthlyReportMonth) || `영상제작과_문화부_${Number(monthNumber)}월말보고서.docx`;
   return `
@@ -9559,7 +9590,7 @@ function monthlyReportOutputStageMarkup() {
         <header><p class="eyebrow">STEP 4</p><h3>월말보고서 출력</h3><p>최종 확인 후 지정된 Word 양식으로 파일을 생성합니다.</p></header>
         <div class="monthly-report-output-grid">
           <article><span>보고 월</span><strong>${year}년 ${Number(monthNumber)}월</strong></article>
-          <article><span>보고자</span><strong>${esc(user?.name || "미지정")}</strong></article>
+          <article><span>보고자</span><strong>${esc(manager?.name || "과장 미지정")}</strong></article>
           <article><span>포함 항목</span><strong>${includedCount}개</strong></article>
         </div>
         <div class="monthly-report-output-file"><span>생성 파일명</span><strong>${esc(filename)}</strong></div>
@@ -9679,17 +9710,18 @@ async function downloadMonthlyReportWord(button) {
   if (!window.MonthlyReportDocx) return showToast("Word 생성 모듈을 불러오지 못했습니다.");
   const includedCount = window.MonthlyReportCore.SECTION_KEYS.reduce((total, section) => total + (monthlyReportPreview[section] || []).filter((item) => item.included !== false && item.text.trim()).length, 0);
   if (!includedCount) return showToast("Word 문서에 포함할 보고서 항목이 없습니다.");
+  const manager = window.MonthlyReportCore.monthlyReportManager(state.users);
+  if (!manager) return showToast("활성 계정 중 직책이 과장인 사용자를 먼저 지정해 주세요.");
   const originalText = button?.textContent || "";
   if (button) {
     button.disabled = true;
     button.textContent = "Word 생성 중…";
   }
   try {
-    const user = currentUser();
     const bytes = await window.MonthlyReportDocx.createMonthlyReportDocx({
       month: monthlyReportMonth,
       sections: monthlyReportPreview,
-      author: user?.name || "미지정"
+      author: manager.name
     });
     const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
     const url = URL.createObjectURL(blob);

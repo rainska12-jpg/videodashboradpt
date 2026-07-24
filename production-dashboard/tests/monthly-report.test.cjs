@@ -89,6 +89,45 @@ test("연결 방송실 일정은 프로젝트에 통합하고 미연결 일정�
   assert.equal(preview.activity.some((item) => item.title === "정기예배 방송실 운영" && item.dates[0] === "2026-07-20"), true);
 });
 
+test("초안과 GPT 입력에 업무·영상·방송실 업무·차월 업무 분류를 명시한다", () => {
+  const state = fixtureState();
+  state.works.push({
+    id: "work-current",
+    title: "월간 행정자료 정리",
+    client: "문화부",
+    finalDate: "2026-07-18",
+    status: "완료",
+    records: [],
+    tasks: []
+  });
+  const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
+  const preview = core.buildMonthlyReportPreview(sources, "2026-07");
+  assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").reportGroupLabel, "업무");
+  assert.equal(preview.activity.find((item) => item.title === "7월 개강 홍보영상").reportGroupLabel, "영상");
+  assert.equal(preview.activity.find((item) => item.title === "촬영 진행").sourceKindLabel, "영상");
+  assert.equal(preview.activity.find((item) => item.title === "정기예배 방송실 운영").reportGroupLabel, "방송실 업무");
+  assert.equal(preview.next[0].reportGroupLabel, "차월 업무");
+  assert.equal(preview.next[0].sourceKindLabel, "업무");
+
+  const report = core.wholeReportDraft(preview);
+  assert.equal(report.activityGroups.find((group) => group.parent?.title === "월간 행정자료 정리").reportGroupLabel, "업무");
+  assert.equal(report.activityGroups.find((group) => group.parent?.title === "7월 개강 홍보영상").reportGroupLabel, "영상");
+  assert.equal(report.activityGroups.find((group) => group.parent?.title === "정기예배 방송실 운영").reportGroupLabel, "방송실 업무");
+  assert.equal(report.next[0].reportGroupLabel, "차월 업무");
+});
+
+test("월말보고 보고자는 관리자 권한이 아니라 활성 과장 직책으로 찾는다", () => {
+  const manager = core.monthlyReportManager([
+    { id: "admin", name: "출력한 관리자", position: "과원", role: "admin", approved: true, status: "active" },
+    { id: "manager", name: "실제 과장", position: "과장", role: "user", approved: true, status: "approved", sortOrder: 2 },
+    { id: "inactive-manager", name: "퇴직 과장", position: "과장", approved: true, status: "inactive", sortOrder: 1 }
+  ]);
+  assert.equal(manager.id, "manager");
+  assert.equal(core.monthlyReportManager([
+    { id: "admin", name: "출력한 관리자", position: "과원", role: "admin", approved: true, status: "active" }
+  ]), null);
+});
+
 test("선택 월 마감 영상은 현재 상태와 무관하게 제작물현황에 포함한다", () => {
   const sources = core.collectMonthlyReportSources(fixtureState(), "2026-07", "work_content");
   const preview = core.buildMonthlyReportPreview(sources, "2026-07");
@@ -255,7 +294,12 @@ test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생�
       itemType: "project",
       parentSourceId: "project-1",
       parentTitle: "기관 홍보영상",
-      department: "홍보팀"
+      department: "홍보팀",
+      reportGroup: "video",
+      reportGroupLabel: "영상",
+      sourceKind: "video",
+      sourceKindLabel: "영상",
+      itemRoleLabel: "상위 업무"
     },
     {
       candidateId: "task-1",
@@ -267,13 +311,20 @@ test("서버도 전체 업무 묶음을 전달하고 프롬프트의 항목 생�
       itemType: "task",
       parentSourceId: "project-1",
       parentTitle: "기관 홍보영상",
-      department: "홍보팀"
+      department: "홍보팀",
+      reportGroup: "video",
+      reportGroupLabel: "영상",
+      sourceKind: "video",
+      sourceKindLabel: "영상",
+      itemRoleLabel: "하위 업무"
     }
   ];
   const draft = wholeReportDraft(candidates);
   assert.equal(draft.activityGroups.length, 1);
   assert.equal(draft.activityGroups[0].parent.candidateId, "project-1");
   assert.equal(draft.activityGroups[0].tasks[0].candidateId, "task-1");
+  assert.equal(draft.activityGroups[0].reportGroupLabel, "영상");
+  assert.equal(draft.activityGroups[0].sourceKindLabel, "영상");
 
   const valid = validateModelResult({
     activity: [
