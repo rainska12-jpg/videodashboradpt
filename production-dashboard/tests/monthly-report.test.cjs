@@ -515,6 +515,25 @@ test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 완�
   assert.equal(valid.next, "");
 });
 
+test("미리보기 생성 요청은 즉시 2단계 로딩으로 전환하고 중복 실행을 차단한다", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  assert.match(appSource, /if \(monthlyReportGenerating\) return;/);
+  assert.match(appSource, /monthlyReportGenerating = true;[\s\S]*monthlyReportStep = 2;[\s\S]*startMonthlyReportProgress\(\);[\s\S]*renderAdmin\(\);/);
+  assert.match(appSource, /aria-busy="true"/);
+  assert.match(appSource, /data-monthly-report-progress-value/);
+  assert.match(appSource, /Math\.min\(92, nextProgress\)/);
+  assert.match(appSource, /stopMonthlyReportProgress\(true\)/);
+});
+
+test("자료 선택의 보고서 영역과 업무 분류를 각각 접고 펼칠 수 있다", () => {
+  const appSource = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  assert.match(appSource, /data-monthly-report-collapse=/);
+  assert.match(appSource, /data-monthly-report-collapse-content=/);
+  assert.match(appSource, /function toggleMonthlyReportBlock\(button\)/);
+  assert.match(appSource, /const collapseKey = `\$\{scope\}:group:\$\{groupKey\}`/);
+  assert.match(appSource, /const sectionCollapseKey = `\$\{scope\}:section:\$\{key\}`/);
+});
+
 test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {
   const templateBytes = fs.readFileSync(path.join(__dirname, "../templates/monthly-report-template.docx"));
   const bytes = await createMonthlyReportDocx({
