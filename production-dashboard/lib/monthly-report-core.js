@@ -19,6 +19,18 @@
     production: "제작물",
     next: "차월 업무"
   };
+  const DEPARTMENT_SCOPE_LABELS = {
+    assembly: "총회",
+    tribe: "지파",
+    church: "교회",
+    unspecified: "미지정"
+  };
+  const DEPARTMENT_SCOPE_ORDER = {
+    assembly: 0,
+    tribe: 1,
+    church: 2,
+    unspecified: 3
+  };
   const WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"];
   const DEFAULT_PROMPT = `제공된 원본 데이터만 사용하여 월말보고서를 작성한다.
 
@@ -125,6 +137,14 @@
     if (sourceType === "work_project") return "work";
     if (sourceType === "studio_schedule") return "studio";
     return "";
+  }
+
+  function departmentScope(department) {
+    const value = String(department || "").replace(/\s+/g, "");
+    if (value.includes("총회")) return "assembly";
+    if (value.includes("지파")) return "tribe";
+    if (value.includes("교회")) return "church";
+    return "unspecified";
   }
 
   function dateWeekday(value) {
@@ -405,6 +425,7 @@
       const parentTitle = String(payload.parentTitle || "").trim();
       const parentSourceId = String(payload.parentSourceId || "").trim();
       const department = String(payload.department || "").trim();
+      const departmentScopeValue = departmentScope(department);
       const sourceKind = ["work", "video", "studio"].includes(payload.sourceKind) ? payload.sourceKind : "";
       const reportGroup = section === "production"
         ? "production"
@@ -435,6 +456,15 @@
         departmentGroupLabel: section === "activity" && ["work", "video"].includes(reportGroup)
           ? department || "발주부서 미지정"
           : "",
+        departmentScope: section === "activity" && ["work", "video"].includes(reportGroup)
+          ? departmentScopeValue
+          : "",
+        departmentScopeLabel: section === "activity" && ["work", "video"].includes(reportGroup)
+          ? DEPARTMENT_SCOPE_LABELS[departmentScopeValue]
+          : "",
+        departmentOrder: section === "activity" && ["work", "video"].includes(reportGroup)
+          ? DEPARTMENT_SCOPE_ORDER[departmentScopeValue]
+          : 99,
         isRecurring,
         recurrenceSchedule,
         recurrenceLabel,
@@ -609,6 +639,9 @@
       parentTitle: String(item.parentTitle || ""),
       department: String(item.department || ""),
       departmentGroupLabel: String(item.departmentGroupLabel || ""),
+      departmentScope: String(item.departmentScope || ""),
+      departmentScopeLabel: String(item.departmentScopeLabel || ""),
+      departmentOrder: Number.isFinite(Number(item.departmentOrder)) ? Number(item.departmentOrder) : 99,
       isRecurring: item.isRecurring === true,
       recurrenceSchedule: String(item.recurrenceSchedule || ""),
       recurrenceLabel: String(item.recurrenceLabel || ""),
@@ -634,6 +667,9 @@
           groupTitle: item.parentTitle || item.title,
           department: item.department,
           departmentGroupLabel: item.departmentGroupLabel,
+          departmentScope: item.departmentScope,
+          departmentScopeLabel: item.departmentScopeLabel,
+          departmentOrder: item.departmentOrder,
           reportGroup: item.reportGroup,
           reportGroupLabel: item.reportGroupLabel,
           sourceKind: item.sourceKind,
@@ -650,6 +686,8 @@
     const sortedActivityGroups = [...activityGroups.values()].sort((a, b) => {
       const groupCompare = (reportGroupOrder[a.reportGroup] ?? 99) - (reportGroupOrder[b.reportGroup] ?? 99);
       if (groupCompare) return groupCompare;
+      const departmentOrderCompare = Number(a.departmentOrder ?? 99) - Number(b.departmentOrder ?? 99);
+      if (departmentOrderCompare) return departmentOrderCompare;
       const departmentA = a.departmentGroupLabel || "발주부서 미지정";
       const departmentB = b.departmentGroupLabel || "발주부서 미지정";
       const departmentCompare = departmentA.localeCompare(departmentB, "ko");
@@ -800,6 +838,7 @@
     apiSources,
     previewItems,
     wholeReportDraft,
+    departmentScope,
     monthlyReportManager,
     setPreviewItemIncluded,
     setReportGroupIncluded,

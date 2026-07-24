@@ -9441,22 +9441,29 @@ function monthlyReportSectionMarkup(key, title, description, { sections = monthl
     const departments = new Map();
     groupItems.forEach((item) => {
       const department = item.departmentGroupLabel || item.department || "발주부서 미지정";
-      if (!departments.has(department)) departments.set(department, []);
-      departments.get(department).push(item);
+      if (!departments.has(department)) {
+        departments.set(department, {
+          scope: item.departmentScope || "unspecified",
+          scopeLabel: item.departmentScopeLabel || "미지정",
+          order: Number.isFinite(Number(item.departmentOrder)) ? Number(item.departmentOrder) : 99,
+          items: []
+        });
+      }
+      departments.get(department).items.push(item);
     });
     return [...departments.entries()]
-      .sort(([departmentA], [departmentB]) => {
-        if (departmentA === "발주부서 미지정") return 1;
-        if (departmentB === "발주부서 미지정") return -1;
+      .sort(([departmentA, groupA], [departmentB, groupB]) => {
+        const scopeCompare = groupA.order - groupB.order;
+        if (scopeCompare) return scopeCompare;
         return departmentA.localeCompare(departmentB, "ko");
       })
-      .map(([department, departmentItems]) => `
-        <section class="monthly-report-department-group" data-report-department="${esc(department)}">
+      .map(([department, group]) => `
+        <section class="monthly-report-department-group" data-report-department="${esc(department)}" data-report-department-scope="${esc(group.scope)}">
           <header>
-            <div><span>발주부서</span><strong>${esc(department)}</strong></div>
-            <em>${departmentItems.length}개</em>
+            <div><span>발주부서 · ${esc(group.scopeLabel)}</span><strong>${esc(department)}</strong></div>
+            <em>${group.items.length}개</em>
           </header>
-          <div>${activityItemsMarkup(departmentItems)}</div>
+          <div>${activityItemsMarkup(group.items)}</div>
         </section>
       `).join("");
   };

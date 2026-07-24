@@ -2,6 +2,18 @@ const SOURCE_TYPES = new Set(["video_project", "work_project", "task", "manageme
 const SECTION_KEYS = ["activity", "production", "next"];
 const REPORT_GROUPS = new Set(["work", "video", "studio", "production", "next"]);
 const SOURCE_KINDS = new Set(["work", "video", "studio"]);
+const DEPARTMENT_SCOPE_LABELS = {
+  assembly: "총회",
+  tribe: "지파",
+  church: "교회",
+  unspecified: "미지정"
+};
+const DEPARTMENT_SCOPE_ORDER = {
+  assembly: 0,
+  tribe: 1,
+  church: 2,
+  unspecified: 3
+};
 
 function envValue(...keys) {
   return keys.map((key) => process.env[key]).find(Boolean) || "";
@@ -58,6 +70,14 @@ function cleanOwnerNames(values) {
     .slice(0, 30);
 }
 
+function departmentScope(department) {
+  const value = cleanText(department, 160).replace(/\s+/g, "");
+  if (value.includes("총회")) return "assembly";
+  if (value.includes("지파")) return "tribe";
+  if (value.includes("교회")) return "church";
+  return "unspecified";
+}
+
 function sanitizeSources(value) {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 500).map((item) => {
@@ -108,6 +128,9 @@ function sanitizeCandidates(value, sourceById) {
     const ownerLabel = cleanText(item?.ownerLabel, 500);
     const reportGroupValue = cleanText(item?.reportGroup, 20);
     const reportGroup = REPORT_GROUPS.has(reportGroupValue) ? reportGroupValue : section === "activity" ? "work" : section;
+    const departmentScopeValue = section === "activity" && ["work", "video"].includes(reportGroup)
+      ? departmentScope(department)
+      : "";
     const reportGroupLabel = cleanText(item?.reportGroupLabel, 40);
     const sourceKindValue = cleanText(item?.sourceKind, 20);
     const sourceKind = SOURCE_KINDS.has(sourceKindValue) ? sourceKindValue : "";
@@ -132,6 +155,9 @@ function sanitizeCandidates(value, sourceById) {
       parentTitle,
       department,
       departmentGroupLabel,
+      departmentScope: departmentScopeValue,
+      departmentScopeLabel: departmentScopeValue ? DEPARTMENT_SCOPE_LABELS[departmentScopeValue] : "",
+      departmentOrder: departmentScopeValue ? DEPARTMENT_SCOPE_ORDER[departmentScopeValue] : 99,
       isRecurring,
       recurrenceSchedule,
       recurrenceLabel,
@@ -163,6 +189,9 @@ function wholeReportDraft(candidates) {
         groupTitle: candidate.parentTitle || candidate.title,
         department: candidate.department,
         departmentGroupLabel: candidate.departmentGroupLabel || (["work", "video"].includes(candidate.reportGroup) ? candidate.department || "발주부서 미지정" : ""),
+        departmentScope: candidate.departmentScope,
+        departmentScopeLabel: candidate.departmentScopeLabel,
+        departmentOrder: candidate.departmentOrder,
         reportGroup: candidate.reportGroup,
         reportGroupLabel: candidate.reportGroupLabel,
         sourceKind: candidate.sourceKind,
@@ -179,6 +208,8 @@ function wholeReportDraft(candidates) {
   const sortedActivityGroups = [...activityGroups.values()].sort((a, b) => {
     const groupCompare = (reportGroupOrder[a.reportGroup] ?? 99) - (reportGroupOrder[b.reportGroup] ?? 99);
     if (groupCompare) return groupCompare;
+    const departmentOrderCompare = Number(a.departmentOrder ?? 99) - Number(b.departmentOrder ?? 99);
+    if (departmentOrderCompare) return departmentOrderCompare;
     const departmentCompare = String(a.departmentGroupLabel || "").localeCompare(String(b.departmentGroupLabel || ""), "ko");
     return departmentCompare || String(a.groupTitle || "").localeCompare(String(b.groupTitle || ""), "ko");
   });
@@ -244,7 +275,7 @@ export default async function handler(req, res) {
 3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. activity 텍스트에서는 상위 업무 다음 줄에 연결된 하위 업무가 오도록 배치한다.
 4. reportGroupLabel은 보고서에서 묶어야 할 분류다. 활동내용은 업무, 영상, 방송실 업무끼리 모으고 차월계획은 모두 차월 업무로 묶는다.
 5. sourceKindLabel은 원본이 업무, 영상, 방송실 업무 중 무엇인지 알려 주며 itemRoleLabel은 상위 업무, 하위 업무 등의 역할을 알려 준다. 제목만 보고 유형을 추측하지 말고 이 표식을 기준으로 정리한다.
-6. departmentGroupLabel은 업무·영상 분류 안에서 다시 묶어야 할 발주부서다. 같은 reportGroupLabel 안에서는 같은 departmentGroupLabel끼리 연속 배치하고, 발주부서가 없는 항목은 발주부서 미지정끼리 묶는다.
+6. departmentScopeLabel과 departmentOrder는 업무·영상 분류 안에서 적용할 발주부서 상위 분류와 고정 순서다. 각 reportGroupLabel 안에서 반드시 총회(0) → 지파(1) → 교회(2) → 미지정(3) 순서로 작성하고, 같은 분류 안에서는 같은 departmentGroupLabel끼리 연속 배치한다.
 7. isRecurring이 true인 항목은 반복 업무이며 recurrenceSchedule과 recurrenceLabel에 매주 무슨 요일, 격주 또는 매월 반복인지 표시되어 있다. 제목만 보고 추측하지 말고 이 값을 기준으로 반복 업무임을 인식한다.
 8. ownerNames는 해당 항목의 실제 담당자 이름 목록이다. 담당자를 작성할 때는 이 값만 사용하고 비어 있으면 임의로 만들지 않는다. ownerLabel은 자료 선택 화면용 표시값이므로 '담당자 미지정'을 사람 이름으로 작성하지 않는다.
 9. 각 섹션 안에서 보고서 흐름에 맞게 업무를 합치거나 나누고 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.

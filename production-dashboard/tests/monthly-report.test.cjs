@@ -101,19 +101,52 @@ test("연결 방송실 일정은 프로젝트에 통합하고 미연결 일정�
 
 test("초안과 GPT 입력에 업무·영상·방송실 업무·차월 업무 분류를 명시한다", () => {
   const state = fixtureState();
-  state.works.push({
-    id: "work-current",
-    title: "월간 행정자료 정리",
-    client: "문화부",
-    finalDate: "2026-07-18",
-    status: "완료",
-    records: [],
-    tasks: []
-  });
+  state.works.push(
+    {
+      id: "work-current",
+      title: "월간 행정자료 정리",
+      client: "문화부",
+      finalDate: "2026-07-18",
+      status: "완료",
+      records: [],
+      tasks: []
+    },
+    {
+      id: "work-assembly",
+      title: "총회 행사 지원",
+      client: "총회 문화부",
+      finalDate: "2026-07-10",
+      status: "완료",
+      records: [],
+      tasks: []
+    },
+    {
+      id: "work-tribe",
+      title: "지파 교육 지원",
+      client: "서울지파 교육부",
+      finalDate: "2026-07-11",
+      status: "완료",
+      records: [],
+      tasks: []
+    },
+    {
+      id: "work-church",
+      title: "교회 행사 지원",
+      client: "과천교회 문화부",
+      finalDate: "2026-07-12",
+      status: "완료",
+      records: [],
+      tasks: []
+    }
+  );
   const sources = core.collectMonthlyReportSources(state, "2026-07", "work_content");
   const preview = core.buildMonthlyReportPreview(sources, "2026-07");
   assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").reportGroupLabel, "업무");
   assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").departmentGroupLabel, "문화부");
+  assert.equal(preview.activity.find((item) => item.title === "총회 행사 지원").departmentScopeLabel, "총회");
+  assert.equal(preview.activity.find((item) => item.title === "지파 교육 지원").departmentScopeLabel, "지파");
+  assert.equal(preview.activity.find((item) => item.title === "교회 행사 지원").departmentScopeLabel, "교회");
+  assert.equal(preview.activity.find((item) => item.title === "월간 행정자료 정리").departmentScopeLabel, "미지정");
   assert.equal(preview.activity.find((item) => item.title === "7월 개강 홍보영상").reportGroupLabel, "영상");
   assert.equal(preview.activity.find((item) => item.title === "7월 개강 홍보영상").departmentGroupLabel, "교육팀");
   assert.equal(preview.activity.find((item) => item.title === "촬영 진행").sourceKindLabel, "영상");
@@ -129,8 +162,12 @@ test("초안과 GPT 입력에 업무·영상·방송실 업무·차월 업무 �
   assert.equal(report.activityGroups.find((group) => group.parent?.title === "7월 개강 홍보영상").departmentGroupLabel, "교육팀");
   assert.equal(report.activityGroups.find((group) => group.parent?.title === "정기예배 방송실 운영").reportGroupLabel, "방송실 업무");
   assert.deepEqual(
-    report.activityGroups.filter((group) => ["업무", "영상"].includes(group.reportGroupLabel)).map((group) => [group.reportGroupLabel, group.departmentGroupLabel]),
-    [["업무", "문화부"], ["영상", "교육팀"]]
+    report.activityGroups.filter((group) => group.reportGroupLabel === "업무").map((group) => group.departmentScopeLabel),
+    ["총회", "지파", "교회", "미지정"]
+  );
+  assert.deepEqual(
+    report.activityGroups.filter((group) => group.reportGroupLabel === "업무").map((group) => group.departmentOrder),
+    [0, 1, 2, 3]
   );
   assert.equal(report.next[0].reportGroupLabel, "차월 업무");
 });
@@ -426,6 +463,47 @@ test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 완�
   assert.equal(draft.activityGroups[0].reportGroupLabel, "영상");
   assert.equal(draft.activityGroups[0].sourceKindLabel, "영상");
   assert.equal(draft.activityGroups[0].departmentGroupLabel, "홍보팀");
+  assert.equal(draft.activityGroups[0].departmentScopeLabel, "미지정");
+
+  const orderedDepartmentCandidates = [
+    ["church-1", "교회 행사", "과천교회 문화부"],
+    ["assembly-1", "총회 행사", "총회 문화부"],
+    ["tribe-1", "지파 행사", "서울지파 교육부"]
+  ].map(([candidateId, title, department]) => ({
+    candidateId,
+    section: "activity",
+    sourceIds: [candidateId],
+    title,
+    dates: ["2026-07-10"],
+    text: `${title} / ${department} / 7월 10일`,
+    itemType: "project",
+    parentSourceId: candidateId,
+    parentTitle: title,
+    department,
+    departmentGroupLabel: department,
+    reportGroup: "work",
+    reportGroupLabel: "업무",
+    sourceKind: "work",
+    sourceKindLabel: "업무",
+    itemRoleLabel: "상위 업무",
+    ownerNames: [],
+    ownerLabel: "담당자 미지정"
+  }));
+  const orderedDepartmentSources = new Map(orderedDepartmentCandidates.map((candidate) => [
+    candidate.candidateId,
+    {
+      sourceId: candidate.candidateId,
+      title: candidate.title,
+      dates: candidate.dates,
+      department: candidate.department,
+      ownerNames: []
+    }
+  ]));
+  const orderedDepartmentDraft = wholeReportDraft(sanitizeCandidates(orderedDepartmentCandidates, orderedDepartmentSources));
+  assert.deepEqual(
+    orderedDepartmentDraft.activityGroups.map((group) => group.departmentScopeLabel),
+    ["총회", "지파", "교회"]
+  );
 
   const valid = validateModelResult({
     activity: "- 기관 홍보영상 관련 업무\n1) 현장 촬영(7. 8.)",
