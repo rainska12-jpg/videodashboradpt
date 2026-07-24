@@ -1603,6 +1603,72 @@
 #adminView .monthly-report-preview-section header small { color: var(--geist-mute, #777); font-size: 9px; }
 #adminView .monthly-report-preview-section header > span { border-radius: 999px; background: var(--geist-soft, #f1f1f1); color: var(--geist-body, #444); padding: 4px 8px; font-size: 9px; }
 
+#adminView .monthly-report-document-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 18px 20px 20px;
+}
+#adminView .monthly-report-document-editor {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 10px;
+  background: var(--geist-canvas, #fafafa);
+}
+#adminView .monthly-report-document-editor:first-child { grid-column: 1 / -1; }
+#adminView .monthly-report-document-editor > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--geist-hairline, #ddd);
+  background: var(--geist-soft, #f4f4f4);
+  padding: 13px 15px;
+}
+#adminView .monthly-report-document-editor h4 {
+  margin: 0 0 3px;
+  color: var(--geist-ink, #111);
+  font-size: 12px;
+  font-weight: 700;
+}
+#adminView .monthly-report-document-editor header small {
+  color: var(--geist-mute, #777);
+  font-size: 9px;
+  line-height: 1.45;
+}
+#adminView .monthly-report-document-editor header > span {
+  flex: 0 0 auto;
+  border: 1px solid var(--geist-hairline, #ddd);
+  border-radius: 999px;
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-mute, #777);
+  padding: 3px 7px;
+  font-size: 8px;
+}
+#adminView .monthly-report-document-editor header > span b {
+  color: var(--geist-ink, #111);
+  font-weight: 700;
+}
+#adminView .monthly-report-document-editor textarea {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-ink, #111);
+  padding: 16px;
+  font: 500 11px/1.75 "Geist", "Apple SD Gothic Neo", sans-serif;
+  tab-size: 2;
+}
+#adminView .monthly-report-document-editor:first-child textarea { min-height: 430px; }
+#adminView .monthly-report-document-editor textarea:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--geist-accent, #00c958) 52%, transparent);
+}
+#adminView .monthly-report-document-editor textarea::placeholder { color: var(--geist-faint, #aaa); }
+
 #adminView .monthly-report-preview-list { display: grid; gap: 7px; }
 #adminView .monthly-report-type-group {
   display: grid;
@@ -1817,6 +1883,8 @@
   #adminView .monthly-report-source-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   #adminView .monthly-report-source-summary article:nth-child(3) { border-right: 0; }
   #adminView .monthly-report-source-summary article:nth-child(n+4) { border-top: 1px solid var(--geist-hairline, #ddd); }
+  #adminView .monthly-report-document-grid { grid-template-columns: 1fr; }
+  #adminView .monthly-report-document-editor:first-child { grid-column: auto; }
 }
 
 @media (max-width: 768px) {
@@ -1858,6 +1926,10 @@
   #adminView .monthly-report-source-summary article:nth-child(n+3) { border-top: 1px solid var(--geist-hairline, #ddd); }
   #adminView .monthly-report-card-head { align-items: flex-start; flex-direction: column; }
   #adminView .monthly-report-card-head > small { text-align: left; }
+  #adminView .monthly-report-document-grid { gap: 10px; padding: 12px; }
+  #adminView .monthly-report-document-editor > header { padding: 12px; }
+  #adminView .monthly-report-document-editor textarea { min-height: 190px; padding: 13px; font-size: 10px; }
+  #adminView .monthly-report-document-editor:first-child textarea { min-height: 360px; }
   #adminView .monthly-report-preview-item { grid-template-columns: 18px minmax(0, 1fr); }
   #adminView .monthly-report-recurrence-badge { grid-column: 2; justify-self: start; white-space: normal; }
   #adminView .monthly-report-type-group > header > div { display: grid; gap: 2px; }

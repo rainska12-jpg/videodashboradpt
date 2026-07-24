@@ -196,12 +196,14 @@
   }
 
   function buildSimpleLines(items) {
+    if (typeof items === "string") return editableTextLines(items);
     return items
       .filter((item) => item.included !== false && String(item.text || "").trim())
       .map((item) => ({ text: item.text.trim(), kind: "regular" }));
   }
 
   function buildActivityLines(items) {
+    if (typeof items === "string") return editableTextLines(items, true);
     const projectItems = items.filter((item) => ["project", "task"].includes(item.itemType));
     const groups = new Map();
     const groupKeyOf = (item) => item.parentSourceId || `${item.parentTitle || "연결 업무 없음"}\u0000${item.department || ""}`;
@@ -236,6 +238,19 @@
       includedTasks.forEach((task, index) => lines.push({ text: `${index + 1}) ${task.text.trim()}`, kind: "child" }));
     });
     return lines;
+  }
+
+  function editableTextLines(value, activity = false) {
+    const rawLines = String(value || "").replace(/\r\n?/g, "\n").split("\n");
+    while (rawLines.length && !rawLines[0].trim()) rawLines.shift();
+    while (rawLines.length && !rawLines[rawLines.length - 1].trim()) rawLines.pop();
+    return rawLines.map((rawLine) => {
+      const text = rawLine.replace(/\t/g, "    ").trimEnd();
+      if (!text.trim()) return { text: "", kind: "blank" };
+      if (activity && /^\s*(?:\d+[.)]|ㄴ)\s*/.test(text)) return { text, kind: "child" };
+      if (activity && /^\s*[-*•]\s+/.test(text)) return { text, kind: "parent" };
+      return { text, kind: "regular" };
+    });
   }
 
   function reportPeriod(month) {

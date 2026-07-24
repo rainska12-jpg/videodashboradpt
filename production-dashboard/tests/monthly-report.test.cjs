@@ -342,7 +342,18 @@ test("전체 보고서 결과는 순서와 문구를 일괄 반영하고 프롬�
   assert.equal(omitted.activity[0].text, missing.activity[0].text);
 });
 
-test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 프롬프트의 항목 생략과 날짜 표기를 유지한다", async () => {
+test("GPT 완성 문서는 활동내용·제작물 현황·차월계획의 줄바꿈을 그대로 유지한다", () => {
+  const sections = core.validateGeneratedTextSections({
+    activity: "- 기관 홍보영상 관련 업무\n1) 현장 촬영(7. 8.)",
+    production: "- 영상제작과_7. 8._기관 홍보영상",
+    next: "- 8월 홍보영상 제작"
+  });
+  assert.equal(sections.activity, "- 기관 홍보영상 관련 업무\n1) 현장 촬영(7. 8.)");
+  assert.equal(sections.production, "- 영상제작과_7. 8._기관 홍보영상");
+  assert.equal(sections.next, "- 8월 홍보영상 제작");
+});
+
+test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 완성된 섹션 문자열을 허용한다", async () => {
   const { sanitizeCandidates, wholeReportDraft, validateModelResult } = await monthlyReportApiInternals();
   const candidates = [
     {
@@ -401,31 +412,13 @@ test("서버도 전체 업무 묶음과 발주부서 분류를 전달하고 프�
   assert.equal(draft.activityGroups[0].departmentGroupLabel, "홍보팀");
 
   const valid = validateModelResult({
-    activity: [
-      { candidateId: "project-1", text: "기관 홍보영상 / 홍보팀 / 7월 3일 추진" },
-      { candidateId: "task-1", text: "촬영 진행 / 7월 8일 완료" }
-    ],
-    production: [],
-    next: []
-  }, candidates);
-  assert.equal(valid.activity[0].text, "기관 홍보영상 / 홍보팀 / 7월 3일 추진");
-  const omitted = validateModelResult({
-    activity: [{ candidateId: "project-1", text: "기관 홍보영상 관련 업무 / 7.3., 7.8. / 현장 촬영 포함" }],
-    production: [],
-    next: []
-  }, candidates);
-  assert.deepEqual(omitted.activity.map((item) => item.candidateId), ["project-1"]);
-  assert.equal(omitted.activity[0].text, "기관 홍보영상 관련 업무 / 7.3., 7.8. / 현장 촬영 포함");
-  const formatted = validateModelResult({
-    activity: [
-      { candidateId: "project-1", text: "홍보팀 영상 업무 / 7.3. 추진" },
-      { candidateId: "task-1", text: "현장 촬영 / 7.8. 완료" }
-    ],
-    production: [],
-    next: []
-  }, candidates);
-  assert.equal(formatted.activity[0].text, "홍보팀 영상 업무 / 7.3. 추진");
-  assert.equal(formatted.activity[1].text, "현장 촬영 / 7.8. 완료");
+    activity: "- 기관 홍보영상 관련 업무\n1) 현장 촬영(7. 8.)",
+    production: "- 영상제작과_7. 8._기관 홍보영상",
+    next: ""
+  });
+  assert.equal(valid.activity, "- 기관 홍보영상 관련 업무\n1) 현장 촬영(7. 8.)");
+  assert.equal(valid.production, "- 영상제작과_7. 8._기관 홍보영상");
+  assert.equal(valid.next, "");
 });
 
 test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내용을 정확히 입력한다", async () => {
@@ -435,13 +428,9 @@ test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내
     author: "관리자",
     templateBytes,
     sections: {
-      activity: [
-        { included: true, itemType: "project", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일" },
-        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "촬영 진행 / 7월 8일" },
-        { included: true, itemType: "task", parentSourceId: "video-1", parentTitle: "7월 개강 홍보영상", department: "교육팀", text: "편집 진행 / 7월 15일" }
-      ],
-      production: [{ included: true, text: "7월 개강 홍보영상 / 마감일: 7월 25일" }],
-      next: [{ included: true, text: "8월 4일: 방송실 장비 점검" }]
+      activity: "- 7월 개강 홍보영상 관련 업무\n1) 촬영 진행(7. 8.)\n2) 편집 진행(7. 15.)",
+      production: "- 영상제작과_7. 25._7월 개강 홍보영상",
+      next: "- 방송실 장비 점검"
     }
   });
   assert.equal(Buffer.from(bytes.subarray(0, 4)).toString("hex"), "504b0304");
@@ -458,10 +447,12 @@ test("지정 양식 Word 파일에 연월·보고일·보고자와 보고서 내
   assert.match(documentXml, /신천기 43\(2026\)년 7월 31일/);
   assert.match(documentXml, /보고자 : 영상제작과장 관리자/);
   assert.match(documentXml, /7월 개강 홍보영상/);
-  assert.match(documentXml, /- 7월 개강 홍보영상 \/ 교육팀 \/ 7월 3일, 7월 8일/);
-  assert.match(documentXml, /1\) 촬영 진행 \/ 7월 8일/);
-  assert.match(documentXml, /2\) 편집 진행 \/ 7월 15일/);
-  assert.ok(documentXml.indexOf("7월 개강 홍보영상 / 교육팀 / 7월 3일, 7월 8일") < documentXml.indexOf("촬영 진행 / 7월 8일"));
+  assert.match(documentXml, /- 7월 개강 홍보영상 관련 업무/);
+  assert.match(documentXml, /1\) 촬영 진행\(7. 8.\)/);
+  assert.match(documentXml, /2\) 편집 진행\(7. 15.\)/);
+  assert.match(documentXml, /영상제작과_7. 25._7월 개강 홍보영상/);
+  assert.match(documentXml, /- 방송실 장비 점검/);
+  assert.ok(documentXml.indexOf("7월 개강 홍보영상 관련 업무") < documentXml.indexOf("촬영 진행"));
   assert.equal(
     monthlyReportFilename("2026-07"),
     "영상제작과_문화부_7월말보고서.docx"

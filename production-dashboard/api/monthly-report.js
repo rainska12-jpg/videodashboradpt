@@ -185,31 +185,11 @@ function outputText(result) {
   return "";
 }
 
-function validateModelResult(value, candidates) {
-  const candidateById = new Map(candidates.map((candidate) => [candidate.candidateId, candidate]));
-  const result = { activity: [], production: [], next: [] };
-  const seen = new Set();
-  SECTION_KEYS.forEach((section) => {
-    const rawItems = Array.isArray(value?.[section]) ? value[section].slice(0, 500) : [];
-    rawItems.forEach((item) => {
-      const candidateId = cleanText(item?.candidateId, 200);
-      const candidate = candidateById.get(candidateId);
-      if (!candidate || candidate.section !== section || seen.has(candidateId)) {
-        throw new Error("GPT 전체 정리 결과의 항목 구성이 원본과 일치하지 않습니다.");
-      }
-      const generatedText = cleanText(item?.text, 500);
-      if (!generatedText) throw new Error("GPT 전체 정리 결과에 비어 있는 항목이 있습니다.");
-      seen.add(candidateId);
-      result[section].push({
-        candidateId,
-        sourceIds: candidate.sourceIds,
-        title: candidate.title,
-        dates: candidate.dates,
-        text: generatedText
-      });
-    });
-  });
-  return result;
+function validateModelResult(value) {
+  return Object.fromEntries(SECTION_KEYS.map((section) => [
+    section,
+    cleanText(value?.[section], 30000)
+  ]));
 }
 
 function publicError(error) {
@@ -235,15 +215,6 @@ export default async function handler(req, res) {
     const prompt = cleanText(req.body?.prompt, 12000);
     if (!sources.length || !candidates.length) return res.status(400).json({ ok: false, error: "정리할 보고서 데이터가 없습니다." });
 
-    const schemaItem = {
-      type: "object",
-      additionalProperties: false,
-      required: ["candidateId", "text"],
-      properties: {
-        candidateId: { type: "string" },
-        text: { type: "string", minLength: 1 }
-      }
-    };
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -256,20 +227,23 @@ export default async function handler(req, res) {
 전체 정리 규칙:
 1. report 전체를 먼저 읽고 활동내용, 제작물현황, 차월계획을 하나의 월말보고서로 편집한다.
 2. 각 항목을 서로 독립된 문장처럼 처리하지 말고 전체 문체, 표현 방식, 날짜 표기와 순서를 일관되게 맞춘다.
-3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. 출력 activity에서는 상위 업무 다음에 연결된 하위 업무가 오도록 배치한다.
+3. activityGroups의 parent와 tasks는 하나의 상위 업무 묶음이다. activity 텍스트에서는 상위 업무 다음 줄에 연결된 하위 업무가 오도록 배치한다.
 4. reportGroupLabel은 보고서에서 묶어야 할 분류다. 활동내용은 업무, 영상, 방송실 업무끼리 모으고 차월계획은 모두 차월 업무로 묶는다.
 5. sourceKindLabel은 원본이 업무, 영상, 방송실 업무 중 무엇인지 알려 주며 itemRoleLabel은 상위 업무, 하위 업무 등의 역할을 알려 준다. 제목만 보고 유형을 추측하지 말고 이 표식을 기준으로 정리한다.
 6. departmentGroupLabel은 업무·영상 분류 안에서 다시 묶어야 할 발주부서다. 같은 reportGroupLabel 안에서는 같은 departmentGroupLabel끼리 연속 배치하고, 발주부서가 없는 항목은 발주부서 미지정끼리 묶는다.
 7. isRecurring이 true인 항목은 반복 업무이며 recurrenceSchedule과 recurrenceLabel에 매주 무슨 요일, 격주 또는 매월 반복인지 표시되어 있다. 제목만 보고 추측하지 말고 이 값을 기준으로 반복 업무임을 인식한다.
-8. 각 섹션 안에서 보고서 흐름에 맞게 묶음과 항목 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
-9. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 생략할 수 있다.
-10. 여러 항목을 하나로 통합할 때는 대표 candidateId 하나만 반환하고, 통합된 다른 candidateId는 생략한다. 대표 항목의 text에는 생략한 항목의 원본 사실과 날짜를 함께 정리할 수 있다.
-11. 하위 업무를 상위 업무에 흡수하거나 반복 업무의 날짜를 상위 업무에 합칠 때는 상위 업무의 candidateId를 대표로 사용하고, 흡수된 하위 candidateId는 생략한다.
-12. text의 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
-13. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
-14. 반환하는 candidateId는 입력에 존재해야 하고 중복하거나 다른 섹션으로 이동하지 않는다.
-15. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다. 목록 기호는 붙이지 않는다.
-16. 설명문 없이 지정된 JSON 구조만 반환한다.`,
+8. 각 섹션 안에서 보고서 흐름에 맞게 업무를 합치거나 나누고 순서를 조정할 수 있다. 항목을 다른 섹션으로 이동하지 않는다.
+9. 사용자 프롬프트에 따라 중요도가 낮거나 중복되는 항목은 결과에서 자유롭게 생략할 수 있다.
+10. 여러 원본 항목을 하나의 상위 업무나 문장으로 통합할 수 있고 하위 업무를 상위 업무에 흡수할 수도 있다.
+11. 제목 표현, 날짜 표기, 기간 표기, 문장 구성과 상태 표현은 사용자 프롬프트에 맞게 자유롭게 교정할 수 있다.
+12. 제작물 공식 명칭 정리, 제목 속 날짜 제거와 오탈자 교정도 사용자 프롬프트를 따른다.
+13. 입력 전체에 존재하는 사실의 범위 안에서 작성하고, 입력에 없는 업무나 날짜를 새로 추가하지 않는다.
+14. activity, production, next에는 각각 해당 영역의 완성된 본문 전체를 하나의 문자열로 반환한다.
+15. 각 문자열 안에서는 줄바꿈과 -, 1), 2) 등의 목록 기호를 사용하여 사용자가 Word에 바로 넣을 수 있는 형식을 만든다.
+16. activity에는 상위 업무를 '- 상위 업무', 하위 업무를 '1) 하위 업무' 형식으로 작성한다.
+17. production과 next도 항목마다 줄을 나누어 작성한다.
+18. 각 문자열에 '활동내용', '제작물 현황', '차월계획' 같은 섹션 제목은 반복해 넣지 않는다.
+19. 설명문이나 코드 블록 없이 지정된 JSON 구조만 반환한다.`,
         input: JSON.stringify({ month, report: wholeReportDraft(candidates) }),
         text: {
           verbosity: "low",
@@ -281,7 +255,7 @@ export default async function handler(req, res) {
               type: "object",
               additionalProperties: false,
               required: SECTION_KEYS,
-              properties: Object.fromEntries(SECTION_KEYS.map((section) => [section, { type: "array", items: schemaItem }]))
+              properties: Object.fromEntries(SECTION_KEYS.map((section) => [section, { type: "string", maxLength: 30000 }]))
             }
           }
         }
@@ -296,7 +270,7 @@ export default async function handler(req, res) {
     const text = outputText(responseBody);
     if (!text) throw new Error("OpenAI API가 보고서 결과를 반환하지 않았습니다.");
     const generated = JSON.parse(text);
-    return res.status(200).json({ ok: true, mode: "whole_report", allowOmissions: true, sections: validateModelResult(generated, candidates) });
+    return res.status(200).json({ ok: true, mode: "document_sections", sections: validateModelResult(generated) });
   } catch (error) {
     return res.status(500).json({ ok: false, error: publicError(error) });
   }

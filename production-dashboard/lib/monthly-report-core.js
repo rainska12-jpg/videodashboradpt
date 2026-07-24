@@ -651,6 +651,16 @@
     return items.map((item) => item.id);
   }
 
+  function validateGeneratedTextSections(generated) {
+    return Object.fromEntries(SECTION_KEYS.map((section) => [
+      section,
+      String(generated?.[section] || "")
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+        .trim()
+        .slice(0, 30000)
+    ]));
+  }
+
   function validateGeneratedSections(generated, sources, fallbackSections, options = {}) {
     const sourceById = new Map((sources || []).map((source) => [source.sourceId, source]));
     const fallback = fallbackSections || { activity: [], production: [], next: [] };
@@ -756,6 +766,7 @@
     monthlyReportManager,
     setPreviewItemIncluded,
     setReportGroupIncluded,
+    validateGeneratedTextSections,
     validateGeneratedSections
   };
 });
