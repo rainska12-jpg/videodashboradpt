@@ -313,7 +313,9 @@ begin
     select 1 from public.daily_draw_results
     where user_id = v_user_id and draw_date = v_today
   ) then
-    v_score := (get_byte(gen_random_bytes(1), 0) % 100 + 1)::smallint;
+    -- Supabase의 pgcrypto 함수는 extensions 스키마에 설치될 수 있으므로
+    -- 검색 경로에 영향을 받지 않는 PostgreSQL 기본 random()을 사용합니다.
+    v_score := (floor(random() * 100) + 1)::smallint;
 
     select message_row.*
     into v_message
