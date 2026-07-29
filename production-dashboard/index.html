@@ -15,6 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css?v=88" />
+    <link rel="stylesheet" href="./overview-geist.css?v=1" />
     <link rel="stylesheet" href="./work-task.css?v=37" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -146,124 +147,71 @@
 
         <section id="mobileApp" class="mobile-app" aria-label="모바일 대시보드"></section>
 
-        <section id="overviewView" class="view active" aria-label="개요">
-          <div id="mobileOverviewSummary"></div>
-          <div class="hero-panel">
-            <div class="overview-hero-copy">
-              <p class="eyebrow">Production Overview</p>
-              <h2>제작의 흐름을<br />한눈에.</h2>
-              <p>프로젝트, 할 일, 일정과 예산을 하나의 흐름으로 확인하세요.</p>
-              <button class="play-button" data-go="projects" type="button">
-                <span>프로젝트 보기</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h11M11 5l5 5-5 5" /></svg>
-              </button>
+        <section id="overviewView" class="view active overview-dashboard" aria-label="개요">
+          <div class="overview-top-grid">
+            <div class="overview-main-column">
+              <header class="overview-greeting">
+                <p class="eyebrow">TODAY · ASIA/SEOUL</p>
+                <h2 id="overviewGreeting">좋은 하루예요.</h2>
+                <p id="overviewDailyLine">오늘의 제작 흐름을 차분하게 시작해 보세요.</p>
+              </header>
+
+              <section aria-labelledby="overviewSummaryTitle">
+                <div class="overview-heading"><div><p class="eyebrow">SUMMARY</p><h3 id="overviewSummaryTitle">오늘의 요약</h3></div></div>
+                <div id="overviewSummaryCards" class="overview-summary-cards"></div>
+              </section>
             </div>
-            <div class="overview-hero-visual" aria-hidden="true">
-              <div class="overview-mesh"></div>
-              <svg class="overview-flow" viewBox="0 0 520 280">
-                <path d="M56 140h104c28 0 28-58 56-58h88c28 0 28 112 56 112h104" />
-                <path d="M216 82v112" />
-                <circle cx="56" cy="140" r="7" />
-                <circle cx="216" cy="82" r="7" />
-                <circle cx="216" cy="194" r="7" />
-                <circle cx="464" cy="194" r="7" />
-              </svg>
-              <span class="overview-flow-label label-a">Plan</span>
-              <span class="overview-flow-label label-b">Produce</span>
-              <span class="overview-flow-label label-c">Deliver</span>
+
+            <aside id="drawPanel" class="draw-panel" aria-labelledby="drawPanelTitle">
+              <div id="drawPanelContent" class="draw-panel-content"></div>
+            </aside>
+          </div>
+
+          <section class="overview-panel overview-priority" aria-labelledby="overviewPriorityTitle">
+            <div class="overview-heading">
+              <div><p class="eyebrow">PRIORITY</p><h3 id="overviewPriorityTitle">우선 처리할 업무</h3></div>
+              <button class="overview-text-button" data-overview-go-tasks="all" type="button">할 일 보기 <span>↗</span></button>
             </div>
+            <div id="overviewPriorityList" class="overview-list"></div>
+          </section>
+
+          <div class="overview-content-grid">
+            <section class="overview-panel" aria-labelledby="overviewProjectsTitle">
+              <div class="overview-heading">
+                <div><p class="eyebrow">IN PROGRESS</p><h3 id="overviewProjectsTitle">진행 중인 영상</h3></div>
+                <button class="overview-text-button" data-go="projects" type="button">영상 보기 <span>↗</span></button>
+              </div>
+              <div id="overviewProjectList" class="overview-list"></div>
+            </section>
+
+            <section class="overview-panel" aria-labelledby="overviewScheduleTitle">
+              <div class="overview-heading">
+                <div><p class="eyebrow">SCHEDULE</p><h3 id="overviewScheduleTitle">오늘·이번 주 일정</h3></div>
+                <div class="overview-segmented" role="tablist" aria-label="일정 범위">
+                  <button class="active" data-overview-schedule-range="today" type="button" role="tab">오늘</button>
+                  <button data-overview-schedule-range="week" type="button" role="tab">이번 주</button>
+                </div>
+              </div>
+              <div id="overviewScheduleList" class="overview-list"></div>
+            </section>
           </div>
 
-          <div class="overview-section-intro">
-            <div>
-              <p class="eyebrow">Live Metrics</p>
-              <h2>핵심 지표</h2>
+          <section class="overview-panel" aria-labelledby="overviewActivityTitle">
+            <div class="overview-heading">
+              <div><p class="eyebrow">RECENT CHANGES</p><h3 id="overviewActivityTitle">최근 변동 로그</h3></div>
             </div>
-            <p>현재 등록된 제작 데이터를 기준으로 집계됩니다.</p>
-          </div>
+            <div id="overviewActivityList" class="overview-activity-list"></div>
+          </section>
 
-          <div class="kpi-grid">
-            <article class="kpi">
-              <div class="kpi-head">
-                <span>진행 영상</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="3"/><path d="M7 3v14M13 3v14"/></svg>
-              </div>
-              <strong id="activeProjects">0</strong>
-              <small>납품 완료 제외</small>
-            </article>
-            <article class="kpi">
-              <div class="kpi-head">
-                <span>이번 주 마감</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="13" rx="3"/><path d="M6 2v4M14 2v4M3 8h14"/></svg>
-              </div>
-              <strong id="dueThisWeek">0</strong>
-              <small>7일 이내 최종 출고</small>
-            </article>
-            <article class="kpi">
-              <div class="kpi-head">
-                <span>미완료 할 일</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m4 10 4 4 8-9"/></svg>
-              </div>
-              <strong id="openTasks">0</strong>
-              <small>체크 전 업무</small>
-            </article>
-            <article class="kpi">
-              <div class="kpi-head">
-                <span>예산 집행률</span>
-                <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7"/><path d="M7 8.2c0-1.2 1.2-2.2 3-2.2s3 1 3 2.2c0 3.2-6 1.4-6 4.1 0 1.1 1.2 2 3 2s3-.9 3-2M10 4v12"/></svg>
-              </div>
-              <strong id="budgetRate">0%</strong>
-              <small id="budgetText">집행 0원 / 총 0원</small>
-            </article>
-          </div>
-
-          <div class="summary-grid">
-            <article class="panel">
-              <div class="section-head">
-                <div>
-                  <p class="eyebrow">Today</p>
-                  <h2>오늘 처리</h2>
-                </div>
-                <button class="overview-panel-link" data-go="tasks" type="button">할 일 보기 <span>↗</span></button>
-              </div>
-              <div id="todaySummary" class="compact-list"></div>
-            </article>
-
-            <article class="panel">
-              <div class="section-head">
-                <div>
-                  <p class="eyebrow">This Week</p>
-                  <h2>이번 주 마감</h2>
-                </div>
-                <button class="overview-panel-link" data-go="calendar" type="button">일정 보기 <span>↗</span></button>
-              </div>
-              <div id="weekSummary" class="compact-list"></div>
-            </article>
-          </div>
-
-          <div class="overview-grid">
-            <article class="panel">
-              <div class="section-head">
-                <div>
-                  <p class="eyebrow">Stage Mix</p>
-                  <h2>진행 단계</h2>
-                </div>
-                <span class="overview-live-indicator"><i></i> Live</span>
-              </div>
-              <div id="statusMix" class="status-mix"></div>
-            </article>
-
-            <article class="panel">
-              <div class="section-head">
-                <div>
-                  <p class="eyebrow">Upcoming</p>
-                  <h2>다가오는 일정</h2>
-                </div>
-                <button class="overview-panel-link" data-go="projects" type="button">전체 보기 <span>↗</span></button>
-              </div>
-              <div id="upcomingList" class="compact-list"></div>
-            </article>
-          </div>
+          <section class="overview-panel overview-quick" aria-labelledby="overviewQuickTitle">
+            <div class="overview-heading"><div><p class="eyebrow">QUICK ACTION</p><h3 id="overviewQuickTitle">빠른 실행</h3></div></div>
+            <div class="overview-quick-actions">
+              <button data-overview-quick="project" type="button"><span>＋</span><strong>영상 추가</strong><small>새 영상 프로젝트 등록</small></button>
+              <button data-overview-quick="work" type="button"><span>＋</span><strong>업무 추가</strong><small>일반 업무 등록</small></button>
+              <button data-overview-quick="task" type="button"><span>✓</span><strong>할 일 추가</strong><small>바로 처리할 업무 등록</small></button>
+              <button data-overview-quick="schedule" type="button"><span>□</span><strong>일정 추가</strong><small>캘린더 일정 등록</small></button>
+            </div>
+          </section>
         </section>
 
         <section id="projectsView" class="view" aria-label="영상">
@@ -1022,6 +970,19 @@
         <div id="notificationCenterList" class="notification-center-list"></div>
       </div>
     </div>
+    <div id="drawRankingModal" class="modal-shell draw-ranking-modal" aria-hidden="true">
+      <section class="draw-ranking-card" role="dialog" aria-modal="true" aria-labelledby="drawRankingTitle">
+        <header>
+          <div>
+            <p class="eyebrow">TODAY'S DRAW</p>
+            <h2 id="drawRankingTitle">오늘의 제비뽑기 랭킹</h2>
+            <p id="drawRankingSummary">오늘 참여 현황</p>
+          </div>
+          <button id="closeDrawRankingBtn" type="button" aria-label="전체 제비뽑기 랭킹 닫기">×</button>
+        </header>
+        <div id="drawRankingList" class="draw-ranking-list"></div>
+      </section>
+    </div>
     <div id="desktopOrganizationModal" class="modal-shell desktop-organization-modal" aria-hidden="true">
       <section class="desktop-organization-card" role="dialog" aria-modal="true" aria-labelledby="desktopOrganizationTitle">
         <header>
@@ -1052,6 +1013,6 @@
     <script src="/api/env.js"></script>
     <script src="./lib/monthly-report-core.js?v=14"></script>
     <script src="./lib/monthly-report-docx.js?v=7"></script>
-    <script src="./app.js?v=174"></script>
+    <script src="./app.js?v=178"></script>
   </body>
 </html>

@@ -25,10 +25,13 @@ git push -u origin main
 3. 프로젝트 이름과 Database Password(데이터베이스 비밀번호)를 입력합니다.
 4. 프로젝트 생성 후 왼쪽 메뉴에서 SQL Editor(SQL 편집기)를 엽니다.
 5. `supabase/schema.sql` 파일 내용을 전체 복사해 실행합니다.
-6. Authentication(인증) > Users(사용자)에서 관리자 이메일 계정을 직접 만듭니다.
-7. SQL Editor에서 `schema.sql` 맨 아래의 관리자 승인 SQL 예시를 실제 관리자 이메일로 바꿔 실행합니다.
+6. `supabase/daily_draw_migration.sql` 파일 내용을 전체 복사해 실행합니다.
+7. Authentication(인증) > Users(사용자)에서 관리자 이메일 계정을 직접 만듭니다.
+8. SQL Editor에서 `schema.sql` 맨 아래의 관리자 승인 SQL 예시를 실제 관리자 이메일로 바꿔 실행합니다.
 
 기존 Supabase 프로젝트에도 영상·업무 공유 링크 기능을 사용하려면 최신 `supabase/schema.sql` 전체를 SQL Editor에서 다시 실행해야 합니다. 기존 데이터는 유지되고 공유 링크용 테이블과 보안 함수가 추가됩니다.
+
+기존 프로젝트에서 오늘의 제비뽑기를 추가할 때는 `supabase/daily_draw_migration.sql`만 별도로 실행하면 됩니다. 기존 프로필은 기본 조직에 안전하게 연결되며, 점수 생성·문구 선택·14일 중복 방지·조직별 랭킹은 데이터베이스 함수에서 처리됩니다.
 
 ## 3. 환경변수 등록
 
@@ -129,6 +132,7 @@ Word 양식은 `templates/monthly-report-template.docx`에 둡니다. 양식을 
 - `vercel.json`: Vercel 배포 설정
 - `.env.local.example`: 환경변수 예시
 - `supabase/schema.sql`: Supabase 테이블, 트리거, RLS 설정
+- `supabase/daily_draw_migration.sql`: 오늘의 제비뽑기 테이블, 216개 문구, RLS, 보안 함수
 
 ## 주의사항
 

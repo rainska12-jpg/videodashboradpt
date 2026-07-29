@@ -1,8 +1,9 @@
-const CACHE_NAME = "video-work-dashboard-v215";
+const CACHE_NAME = "video-work-dashboard-v216";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/styles.css?v=88",
+  "/overview-geist.css?v=1",
   "/work-task.css?v=37",
   "/work-studio.css",
   "/mobile-studio.css?v=56",
@@ -27,7 +28,7 @@ const CORE_ASSETS = [
   "/lib/monthly-report-core.js?v=14",
   "/lib/monthly-report-docx.js?v=7",
   "/templates/monthly-report-template.docx?v=1",
-  "/app.js?v=174",
+  "/app.js?v=178",
   "/manifest.webmanifest",
   "/icons/icon-192.png",
   "/icons/icon-512.png",

@@ -47,6 +47,7 @@ function profileToUser(profile) {
     avatarPath: profile.avatar_path || profile.avatarPath || "",
     avatarUrl: profile.avatar_url || profile.avatarUrl || "",
     organizationVisible: profile.organization_visible !== false,
+    organizationId: profile.organization_id || profile.organizationId || "",
     sortOrder: Number(profile.sort_order || profile.sortOrder || 0),
     createdAt: profile.created_at || profile.createdAt || "",
     role: profile.role || "user",
@@ -377,6 +378,7 @@ const sampleData = {
   works: [],
   owners: [],
   notifications: [],
+  overviewActivityLogs: [],
   activityLogs: [],
   tasks: [],
   schedules: [],
@@ -852,6 +854,14 @@ let monthlyReportProgressTimer = null;
 let monthlyReportCollapsedBlocks = new Set();
 let activeView = "overview";
 let activeDropdownAnchor = null;
+let overviewScheduleRange = "today";
+let overviewDrawData = null;
+let overviewDrawLoading = false;
+let overviewDrawSubmitting = false;
+let overviewDrawAnimating = false;
+let overviewDrawError = "";
+let overviewDrawLoadKey = "";
+const overviewTaskPending = new Set();
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -1814,6 +1824,16 @@ function normalizeState(data) {
       body: displayStudioTerminology(item.body),
       message: displayStudioTerminology(item.message)
     })) : [],
+    overviewActivityLogs: Array.isArray(data.overviewActivityLogs)
+      ? data.overviewActivityLogs.slice(-200).map((item) => ({
+        id: String(item.id || makeId()),
+        actor: String(item.actor || "사용자"),
+        target: String(item.target || "일정"),
+        description: String(item.description || "변경했습니다."),
+        actionType: String(item.actionType || "schedule_updated"),
+        createdAt: String(item.createdAt || new Date().toISOString())
+      }))
+      : [],
     activityLogs: Array.isArray(data.activityLogs)
       ? pruneActivityLogs(data.activityLogs.map(normalizeActivityLog).filter((item) => item.entityId && item.activityDate))
       : [],
@@ -2881,6 +2901,355 @@ function closeTimePicker() {
   $("#timePickerLayer").classList.remove("open");
   $("#timePickerLayer").innerHTML = "";
   unlockPickerBackground();
+}
+
+function seoulNowParts(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(now).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour || 0)
+  };
+}
+
+function overviewGreetingText() {
+  const user = currentUser();
+  const name = user?.name || user?.username || "사용자";
+  const hour = seoulNowParts().hour;
+  if (hour < 12) return `좋은 아침이에요, ${name}님.`;
+  if (hour < 18) return `좋은 오후예요, ${name}님.`;
+  return `오늘도 수고 많으셨습니다, ${name}님.`;
+}
+
+function overviewWeekKeys(todayKey = seoulNowParts().date) {
+  const base = new Date(`${todayKey}T12:00:00+09:00`);
+  const mondayOffset = (base.getUTCDay() + 6) % 7;
+  const monday = new Date(base);
+  monday.setUTCDate(base.getUTCDate() - mondayOffset);
+  return Array.from({ length: 7 }, (_, index) => {
+    const target = new Date(monday);
+    target.setUTCDate(monday.getUTCDate() + index);
+    return target.toLocaleDateString("en-CA", { timeZone: "Asia/Seoul" });
+  });
+}
+
+function overviewUnreadCount() {
+  const userId = currentUser()?.id;
+  return (state.notifications || []).filter((item) => item.userId === userId && !item.read).length;
+}
+
+function overviewSummary() {
+  const today = seoulNowParts().date;
+  const tasks = taskOverviewItems().filter((item) => !item.task.done);
+  return {
+    todayTasks: tasks.filter((item) => !item.task.noDueDate && item.task.dueDate === today).length,
+    overdueTasks: tasks.filter((item) => !item.task.noDueDate && item.task.dueDate && item.task.dueDate < today).length,
+    todaySchedules: state.schedules.filter((item) => item.date === today).length
+      + state.staffEvents.filter((item) => item.date === today).length,
+    unread: overviewUnreadCount()
+  };
+}
+
+function overviewOwnerLabel(task) {
+  const label = taskOwnersLabel(task);
+  return label && label !== "-" ? label : "미배정";
+}
+
+function overviewPriorityItems() {
+  const today = seoulNowParts().date;
+  return taskOverviewItems()
+    .filter((item) => !item.task.done && !item.task.noDueDate && item.task.dueDate)
+    .sort((a, b) => {
+      const aRank = a.task.dueDate < today ? 0 : a.task.dueDate === today ? 1 : 2;
+      const bRank = b.task.dueDate < today ? 0 : b.task.dueDate === today ? 1 : 2;
+      return aRank - bRank || a.task.dueDate.localeCompare(b.task.dueDate);
+    })
+    .slice(0, 5);
+}
+
+function overviewDueInfo(value) {
+  const today = seoulNowParts().date;
+  if (value < today) return { label: `지연 ${Math.max(1, Math.abs(daysUntil(value)))}일`, className: "overdue" };
+  if (value === today) return { label: "오늘 마감", className: "today" };
+  return { label: formatDate(value), className: "" };
+}
+
+function overviewScheduleItems() {
+  const today = seoulNowParts().date;
+  const keys = overviewScheduleRange === "week" ? overviewWeekKeys(today) : [today];
+  const schedules = state.schedules
+    .filter((item) => keys.includes(item.date))
+    .map((item) => ({
+      id: item.id,
+      source: "calendar",
+      title: item.title,
+      date: item.date,
+      time: item.allDay === false ? `${item.startTime || "09:00"}–${item.endTime || "10:00"}` : "종일",
+      location: item.location || ""
+    }));
+  const studio = state.staffEvents
+    .filter((item) => keys.includes(item.date))
+    .map((item) => ({
+      id: item.id,
+      source: "studio",
+      title: staffReservationTitle(item),
+      date: item.date,
+      time: item.allDay === false ? `${item.startTime || "09:00"}–${item.endTime || "10:00"}` : "종일",
+      location: item.room || ""
+    }));
+  return [...schedules, ...studio].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+}
+
+function overviewRelativeTime(value) {
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return "방금 전";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  const days = Math.floor(hours / 24);
+  return days < 7 ? `${days}일 전` : new Date(value).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
+}
+
+function recordOverviewActivity(target, description, actionType = "schedule_updated") {
+  state.overviewActivityLogs = Array.isArray(state.overviewActivityLogs) ? state.overviewActivityLogs : [];
+  state.overviewActivityLogs.push({
+    id: makeId(),
+    actor: notificationActor().name,
+    target: String(target || "일정"),
+    description: String(description || "변경했습니다."),
+    actionType,
+    createdAt: new Date().toISOString()
+  });
+  state.overviewActivityLogs = state.overviewActivityLogs.slice(-200);
+}
+
+function overviewActivityItems() {
+  const allowedTypes = new Set([
+    "entity_created", "entity_deleted", "status_change", "task_created",
+    "task_updated", "task_deleted", "task_check", "field_change"
+  ]);
+  const activity = (state.activityLogs || [])
+    .filter((log) => allowedTypes.has(log.activityType))
+    .filter((log) => log.activityType !== "field_change" || ["owners", "finalDate", "dueDate"].includes(log.fieldName))
+    .map((log) => ({
+      id: log.id,
+      actor: log.actorName || "사용자",
+      target: adminActivityEntityTitle(log),
+      description: adminActivityDescription(log),
+      createdAt: log.occurredAt
+    }));
+  const scheduleLogs = (state.overviewActivityLogs || []).map((item) => ({
+    id: item.id,
+    actor: item.actor || "사용자",
+    target: item.target || "일정",
+    description: item.description || "변경했습니다.",
+    createdAt: item.createdAt
+  }));
+  return [...activity, ...scheduleLogs]
+    .filter((item) => item.createdAt)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .filter((item, index, list) => list.findIndex((entry) => `${entry.actor}:${entry.description}:${entry.createdAt}` === `${item.actor}:${item.description}:${item.createdAt}`) === index)
+    .slice(0, 10);
+}
+
+function normalizeDrawDashboard(data) {
+  if (!data || typeof data !== "object") return { result: null, ranking: [], members: [], drawDate: seoulNowParts().date };
+  return {
+    result: data.result || null,
+    ranking: Array.isArray(data.ranking) ? data.ranking : [],
+    members: Array.isArray(data.members) ? data.members : [],
+    drawDate: data.drawDate || data.draw_date || seoulNowParts().date
+  };
+}
+
+async function loadOverviewDraw({ force = false } = {}) {
+  const user = currentUser();
+  const loadKey = `${user?.id || "guest"}:${seoulNowParts().date}`;
+  if (!SUPABASE_ENABLED || !currentProfile?.approved) {
+    overviewDrawData = null;
+    overviewDrawLoading = false;
+    overviewDrawLoadKey = loadKey;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    return;
+  }
+  if (overviewDrawLoading || (!force && overviewDrawLoadKey === loadKey && overviewDrawData)) return;
+  overviewDrawLoading = true;
+  overviewDrawError = "";
+  overviewDrawLoadKey = loadKey;
+  renderOverviewDashboard();
+  try {
+    const { data, error } = await getSupabaseClient().rpc("get_today_draw_dashboard");
+    if (error) throw error;
+    overviewDrawData = normalizeDrawDashboard(data);
+  } catch (error) {
+    console.warn("Daily draw dashboard load failed", error);
+    overviewDrawError = String(error?.message || "").includes("get_today_draw_dashboard")
+      ? "Supabase에 제비뽑기 마이그레이션을 먼저 적용해 주세요."
+      : "제비뽑기 정보를 불러오지 못했습니다.";
+  } finally {
+    overviewDrawLoading = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+  }
+}
+
+async function submitOverviewDraw() {
+  if (overviewDrawSubmitting || overviewDrawData?.result) return;
+  if (!SUPABASE_ENABLED || !currentProfile?.approved) {
+    overviewDrawError = "로그인과 Supabase 연결 후 참여할 수 있습니다.";
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    return;
+  }
+  overviewDrawSubmitting = true;
+  overviewDrawError = "";
+  renderOverviewDashboard();
+  if (isMobileViewport()) renderMobileDashboard();
+  try {
+    const { data, error } = await getSupabaseClient().rpc("draw_today", {
+      p_draw_date: seoulNowParts().date
+    });
+    if (error) throw error;
+    const next = normalizeDrawDashboard(data);
+    overviewDrawData = { ...next, ranking: overviewDrawData?.ranking || [], members: overviewDrawData?.members || [] };
+    overviewDrawAnimating = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    overviewDrawSubmitting = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    window.setTimeout(async () => {
+      overviewDrawAnimating = false;
+      await loadOverviewDraw({ force: true });
+    }, overviewDrawAnimating ? 1800 : 0);
+  } catch (error) {
+    console.warn("Daily draw failed", error);
+    overviewDrawError = "결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    overviewDrawSubmitting = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+  }
+}
+
+function drawCompetitionRank(index, rows) {
+  if (!rows[index]?.drawScore) return "";
+  if (index > 0 && rows[index - 1].drawScore === rows[index].drawScore) return drawCompetitionRank(index - 1, rows);
+  return index + 1;
+}
+
+function renderDrawPanel() {
+  const target = $("#drawPanelContent");
+  if (!target) return;
+  const panel = $("#drawPanel");
+  panel?.classList.toggle("is-drawing", overviewDrawAnimating);
+  const result = overviewDrawData?.result;
+  const score = Number(result?.drawScore || result?.draw_score || 0);
+  const message = result?.drawMessage || result?.draw_message || "버튼을 눌러 오늘의 제비 점수를 확인해 보세요.";
+  const ranking = (overviewDrawData?.ranking || []).slice(0, 5);
+  const disabled = overviewDrawSubmitting || overviewDrawAnimating || Boolean(result);
+  const buttonLabel = overviewDrawSubmitting ? "저장 중…" : result ? "오늘 참여 완료" : "제비뽑기";
+  panel?.style.setProperty("--draw-level", String(Math.max(0, Math.min(1, score / 100))));
+  target.innerHTML = `
+    <div class="draw-title"><small>ONE DRAW A DAY</small><h3 id="drawPanelTitle">오늘의 제비뽑기</h3></div>
+    <div class="draw-machine">
+      <div class="draw-gauge" aria-label="${score ? `제비 점수 ${score}점` : "아직 참여하지 않음"}"><i class="draw-gauge-fill"></i></div>
+      <div class="draw-score"><strong>${score || "—"}</strong><span>${score ? "제비 점수" : "미참여"}</span></div>
+    </div>
+    <button class="draw-button ${overviewDrawSubmitting ? "is-pressed" : ""}" data-draw-submit type="button" ${disabled ? "disabled" : ""}>${buttonLabel}</button>
+    <p class="draw-message">${esc(message)}</p>
+    ${overviewDrawError ? `<p class="draw-error">${esc(overviewDrawError)}</p>` : ""}
+    <div class="draw-ranking-mini">
+      <h4>오늘의 제비뽑기 랭킹</h4>
+      ${overviewDrawLoading
+        ? '<div class="draw-rank-row"><span>…</span><span>불러오는 중</span><b></b></div>'
+        : ranking.length
+          ? ranking.map((row, index) => `<div class="draw-rank-row ${row.isMe || row.is_me ? "is-me" : ""}"><b>${esc(row.rank || drawCompetitionRank(index, ranking))}</b><span>${esc(row.name || "구성원")}${row.isMe || row.is_me ? " · 나" : ""}</span><strong>${Number(row.drawScore || row.draw_score)}점</strong></div>`).join("")
+          : '<div class="draw-rank-row"><span>—</span><span>첫 참여를 기다립니다</span><b></b></div>'}
+    </div>
+    <button class="draw-ranking-all" data-draw-ranking-open type="button">전체 보기</button>
+  `;
+}
+
+function renderDrawRankingModal() {
+  const rows = overviewDrawData?.members || [];
+  const participating = rows.filter((row) => Number(row.drawScore || row.draw_score) > 0).length;
+  const summary = $("#drawRankingSummary");
+  const list = $("#drawRankingList");
+  if (summary) summary.textContent = `오늘 참여 ${participating} / ${rows.length}명`;
+  if (!list) return;
+  list.innerHTML = rows.length
+    ? rows.map((row, index) => {
+      const score = Number(row.drawScore || row.draw_score || 0);
+      const isMe = row.isMe || row.is_me;
+      return `<article class="${isMe ? "is-me" : ""} ${score ? "" : "is-pending"}"><b>${score ? esc(row.rank || drawCompetitionRank(index, rows)) : "·"}</b><span>${esc(row.name || "구성원")}${isMe ? " · 나" : ""}</span><strong>${score ? `${score}점` : "미참여"}</strong></article>`;
+    }).join("")
+    : '<div class="overview-empty">활성 구성원 정보를 불러오지 못했습니다.</div>';
+}
+
+function openDrawRanking(open = true) {
+  const modal = $("#drawRankingModal");
+  if (!modal) return;
+  if (open) renderDrawRankingModal();
+  modal.classList.toggle("open", open);
+  modal.setAttribute("aria-hidden", String(!open));
+}
+
+function renderOverviewDashboard() {
+  const view = $("#overviewView");
+  if (!view) return;
+  const today = seoulNowParts().date;
+  const summary = overviewSummary();
+  $("#overviewGreeting").textContent = overviewGreetingText();
+  $("#overviewDailyLine").textContent = overviewDrawData?.result?.drawMessage
+    || overviewDrawData?.result?.draw_message
+    || "우선순위 하나를 선명하게 정하면 오늘의 편집점도 또렷해집니다.";
+  $("#overviewSummaryCards").innerHTML = [
+    ["오늘 할 일", summary.todayTasks, "today", "오늘 마감 기준"],
+    ["지연된 할 일", summary.overdueTasks, "overdue", "마감일 경과"],
+    ["오늘 일정", summary.todaySchedules, "schedule", "캘린더 + 방송실"],
+    ["읽지 않은 알림", summary.unread, "notifications", "새 변경사항"]
+  ].map(([label, count, action, hint]) => `<button class="overview-summary-card ${action === "overdue" && count ? "is-alert" : ""}" data-overview-summary="${action}" type="button"><span>${label}</span><b>${count}</b><small>${hint} ↗</small></button>`).join("");
+
+  const priority = overviewPriorityItems();
+  $("#overviewPriorityList").innerHTML = priority.length
+    ? priority.map((item) => {
+      const due = overviewDueInfo(item.task.dueDate);
+      return `<article class="overview-row"><label class="overview-task-check"><input data-overview-priority-check="${esc(item.id)}" data-overview-priority-source="${esc(item.source)}" type="checkbox" ${overviewTaskPending.has(item.id) ? "disabled" : ""} /><span class="overview-row-main"><strong>${esc(item.task.text || "제목 없는 할 일")}</strong><small>${esc(item.sourceTitle)} · 담당 ${esc(overviewOwnerLabel(item.task))}</small></span></label><span class="overview-row-meta"><i class="overview-due-pill ${due.className}">${esc(due.label)}</i></span></article>`;
+    }).join("")
+    : '<div class="overview-empty">임박하거나 지연된 할 일이 없습니다.</div>';
+
+  const projects = state.projects
+    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted)
+    .sort((a, b) => String(a.finalDate || "9999-12-31").localeCompare(String(b.finalDate || "9999-12-31")))
+    .slice(0, 6);
+  $("#overviewProjectList").innerHTML = projects.length
+    ? projects.map((project) => `<button class="overview-row" data-overview-project="${esc(project.id)}" type="button"><span class="overview-row-main"><strong>${esc(project.title)}</strong><small>${esc(project.status || "단계 미설정")}</small></span><span class="overview-row-meta">${project.finalDate ? esc(formatDate(project.finalDate)) : "마감일 없음"} <b>›</b></span></button>`).join("")
+    : '<div class="overview-empty">진행 중인 영상이 없습니다.</div>';
+
+  const schedules = overviewScheduleItems();
+  $$("[data-overview-schedule-range]").forEach((button) => {
+    const active = button.dataset.overviewScheduleRange === overviewScheduleRange;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  $("#overviewScheduleList").innerHTML = schedules.length
+    ? schedules.slice(0, overviewScheduleRange === "today" ? 6 : 10).map((item) => `<button class="overview-row" data-overview-schedule-source="${item.source}" type="button"><span class="overview-row-main"><strong>${esc(item.title)}</strong><small>${esc(item.date === today ? "오늘" : formatDate(item.date))} · ${esc(item.time)}${item.location ? ` · ${esc(item.location)}` : ""}</small></span><span class="overview-row-meta"><i class="overview-source-pill ${item.source === "studio" ? "studio" : ""}">${item.source === "studio" ? "방송실" : "일정"}</i><b>›</b></span></button>`).join("")
+    : `<div class="overview-empty">${overviewScheduleRange === "today" ? "오늘" : "이번 주"} 등록된 일정이 없습니다.</div>`;
+
+  const logs = overviewActivityItems();
+  $("#overviewActivityList").innerHTML = logs.length
+    ? logs.map((item) => `<article class="overview-activity-row"><span class="overview-activity-avatar">${esc((item.actor || "사").slice(0, 1))}</span><p><strong>${esc(item.actor)}님</strong>이 <strong>‘${esc(item.target)}’</strong> ${esc(item.description)}</p><time>${esc(overviewRelativeTime(item.createdAt))}</time></article>`).join("")
+    : '<div class="overview-empty">최근 업무 변동이 없습니다.</div>';
+  renderDrawPanel();
+  if (!overviewDrawLoading && overviewDrawLoadKey !== `${currentUser()?.id || "guest"}:${today}`) loadOverviewDraw();
 }
 
 function renderKpis() {
@@ -7241,6 +7610,7 @@ function addSchedule() {
           eventDate: schedule.date,
           targetView: "calendar"
         });
+        recordOverviewActivity(schedule.title, "일정을 수정했습니다.", "schedule_updated");
       }
     }
   } else {
@@ -7254,6 +7624,7 @@ function addSchedule() {
       eventDate: schedule.date,
       targetView: "calendar"
     });
+    recordOverviewActivity(schedule.title, "일정을 등록했습니다.", "schedule_created");
   }
   saveState();
   closeScheduleModal();
@@ -7342,6 +7713,7 @@ function addStaffSchedule() {
           eventDate: event.date,
           targetView: "studio"
         });
+        recordOverviewActivity(event.title, "방송실 일정을 수정했습니다.", "studio_reservation_updated");
       }
     }
     saveState();
@@ -7386,6 +7758,7 @@ function addStaffSchedule() {
     eventDate: staffScheduleDraft.date,
     targetView: "studio"
   });
+  recordOverviewActivity(title, staffScheduleDraft.repeatEnabled ? "방송실 반복 일정을 등록했습니다." : "방송실 일정을 등록했습니다.", staffScheduleDraft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created");
   saveState();
   closeStaffScheduleModal();
   renderAll();
@@ -10865,7 +11238,7 @@ function exportCsv() {
 
 
 
-let mobileActiveSection = viewPref("mobileStartSection", "tasks");
+let mobileActiveSection = viewPref("mobileStartSection", "overview");
 let mobileTaskFilter = viewPref("mobileTaskFilter", "all");
 let mobileTaskSort = viewPref("mobileTaskSort", taskOverviewSort);
 let mobileTaskHideDone = viewPref("mobileTaskHideDone", true);
@@ -10913,7 +11286,7 @@ function isMobileViewport() {
 }
 
 function mobileTitleForView(view) {
-  return { projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 일정", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
+  return { overview: "개요", projects: "영상", works: "업무", tasks: "할 일", calendar: "캘린더", studio: "방송실 일정", board: "게시판", admin: "관리자", notifications: "알림", settings: "더보기" }[view] || "영상";
 }
 
 function unreadNotifications() {
@@ -12413,6 +12786,7 @@ function saveMobileStudioReservation() {
     const previousOwners = event.owners || [event.owner].filter(Boolean);
     Object.assign(event, eventData);
     notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 일정을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 일정 수정", eventDate: event.date, targetView: "studio" });
+    recordOverviewActivity(eventData.title, "방송실 일정을 수정했습니다.", "studio_reservation_updated");
     mobileStudioDetailId = event.id;
   } else {
     const base = mobileStudioDateObject(draft.date);
@@ -12433,6 +12807,7 @@ function saveMobileStudioReservation() {
       state.staffEvents.push({ id, ...eventData, date: dateKey(date), seriesId });
     });
     notifyOwners(owners, `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 일정${draft.repeatEnabled ? " 반복 일정" : ""}을 생성했습니다.`, { type: "staff", staffEventId: firstId, actionType: draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created", title: draft.repeatEnabled ? "반복 일정 생성" : "방송실 일정 생성", eventDate: draft.date, targetView: "studio" });
+    recordOverviewActivity(eventData.title, draft.repeatEnabled ? "방송실 반복 일정을 등록했습니다." : "방송실 일정을 등록했습니다.", draft.repeatEnabled ? "recurring_schedule_created" : "studio_reservation_created");
     mobileStudioDate = draft.date;
   }
   saveState();
@@ -12564,6 +12939,7 @@ function renderMobileMoreInline() {
         <span><strong>${esc(user?.name || user?.username || "사용자")}</strong><small>${esc([user?.position, user?.department || (user?.role === "admin" ? "관리자" : "일반 사용자")].filter(Boolean).join(" · "))}</small></span>
         <b>프로필 수정</b>
       </button>
+      <section><h3>대시보드</h3><div>${mobileMoreRow({ icon: "◇", label: "개요", target: "overview" })}</div></section>
       <section><h3>조직</h3><div>${mobileMoreRow({ icon: "♙", label: "조직도", route: "organization" })}</div></section>
       <section><h3>협업</h3><div>
         ${mobileMoreRow({ icon: "▤", label: "게시판", target: "board" })}
@@ -12754,7 +13130,7 @@ function renderMobilePreferences() {
     <section class="mobile-settings-section"><h3>계정 및 프로필</h3><div>${mobileMoreRow({ icon: "♙", label: "프로필 관리", route: "profile" })}<div class="mobile-info-row"><span>로그인 계정</span><b>${esc(user?.email || user?.username || "-")}</b></div></div></section>
     <section class="mobile-settings-section"><h3>화면 설정</h3><div><label class="mobile-setting-toggle"><span>다크 모드</span><input data-theme-setting type="checkbox" ${settings.darkMode ? "checked" : ""} /><i></i></label></div></section>
     <section class="mobile-settings-section"><h3>알림</h3><div>${Object.entries(notificationLabels).map(([key, label]) => `<label class="mobile-setting-toggle"><span>${esc(label)}</span><input data-notification-setting="${key}" type="checkbox" ${settings[key] !== false ? "checked" : ""} /><i></i></label>`).join("")}</div></section>
-    <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="tasks" ${viewPref("mobileStartSection", "tasks") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "tasks") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "tasks") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "tasks") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
+    <section class="mobile-settings-section"><h3>앱 설정</h3><div><label class="mobile-select-row"><span>앱 시작 화면</span><select data-mobile-start-section><option value="overview" ${viewPref("mobileStartSection", "overview") === "overview" ? "selected" : ""}>개요</option><option value="tasks" ${viewPref("mobileStartSection", "overview") === "tasks" ? "selected" : ""}>할 일</option><option value="projects" ${viewPref("mobileStartSection", "overview") === "projects" ? "selected" : ""}>영상</option><option value="works" ${viewPref("mobileStartSection", "overview") === "works" ? "selected" : ""}>업무</option><option value="calendar" ${viewPref("mobileStartSection", "overview") === "calendar" ? "selected" : ""}>캘린더</option></select></label><label class="mobile-setting-toggle"><span>완료된 할 일 기본 숨김</span><input data-mobile-default-hide-done type="checkbox" ${mobileTaskHideDone ? "checked" : ""} /><i></i></label></div></section>
     <section class="mobile-settings-section"><h3>앱 정보</h3><div><div class="mobile-info-row"><span>버전</span><b>v56</b></div></div></section>
     <button class="mobile-logout-button" data-mobile-more-route="logout" type="button">로그아웃</button>
   `);
@@ -12927,6 +13303,38 @@ function bindMobileCoreActions(app) {
       });
     });
   };
+
+  bind("[data-mobile-overview-summary]", (button) => {
+    const action = button.dataset.mobileOverviewSummary;
+    if (["today", "overdue"].includes(action)) {
+      taskOverviewFilter = action;
+      saveViewPrefs({ taskOverviewFilter });
+      openMobileSection("tasks");
+    } else if (action === "schedule") openMobileSection("calendar");
+    else openMobileSection("notifications");
+  });
+  bind("[data-mobile-overview-project]", (button) => openProjectDetail(button.dataset.mobileOverviewProject));
+  bind("[data-mobile-overview-schedule]", (button) => openMobileSection(button.dataset.mobileOverviewSchedule));
+  bind("[data-mobile-overview-quick]", (button) => openMobileAddSheet(button.dataset.mobileOverviewQuick));
+  bind("[data-mobile-draw-submit]", () => submitOverviewDraw());
+  bind("[data-mobile-draw-ranking]", () => openDrawRanking(true));
+  app.querySelectorAll("[data-mobile-overview-task-check]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const item = taskOverviewItems().find((entry) =>
+        entry.id === checkbox.dataset.mobileOverviewTaskCheck
+        && entry.source === checkbox.dataset.mobileOverviewTaskSource
+      );
+      if (!item || !item.canManage) {
+        checkbox.checked = false;
+        showToast("담당자 또는 관리자만 할 일을 변경할 수 있습니다.");
+        return;
+      }
+      setTaskCompletionState(item.task, true);
+      notifyTaskCompletion(item.source, item.task, true);
+      saveState();
+      renderAll();
+    });
+  });
 
   bind("[data-mobile-task-filter]", (button) => {
     mobileTaskFilter = button.dataset.mobileTaskFilter;
@@ -13423,6 +13831,50 @@ function bindMobileCoreActions(app) {
   }));
 }
 
+function renderMobileOverview() {
+  const summary = overviewSummary();
+  const result = overviewDrawData?.result;
+  const score = Number(result?.drawScore || result?.draw_score || 0);
+  const priority = overviewPriorityItems().slice(0, 5);
+  const projects = state.projects
+    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted)
+    .sort((a, b) => String(a.finalDate || "9999-12-31").localeCompare(String(b.finalDate || "9999-12-31")))
+    .slice(0, 4);
+  const schedules = overviewScheduleItems().slice(0, 5);
+  const ranking = (overviewDrawData?.ranking || []).slice(0, 5);
+  return `
+    <div class="mobile-overview">
+      <section class="mobile-overview-greeting">
+        <span>TODAY · ASIA/SEOUL</span>
+        <h2>${esc(overviewGreetingText())}</h2>
+        <p>${esc(result?.drawMessage || result?.draw_message || "오늘 할 일 하나부터 또렷하게 시작해 보세요.")}</p>
+      </section>
+      <div class="mobile-overview-summary">
+        ${[["오늘 할 일", summary.todayTasks, "today"], ["지연", summary.overdueTasks, "overdue"], ["오늘 일정", summary.todaySchedules, "schedule"], ["새 알림", summary.unread, "notifications"]].map(([label, count, action]) => `<button data-mobile-overview-summary="${action}" type="button"><span>${label}</span><b>${count}</b></button>`).join("")}
+      </div>
+      <section class="mobile-draw-card ${overviewDrawAnimating ? "is-drawing" : ""}" style="--mobile-draw-level:${Math.max(0, Math.min(1, score / 100))}">
+        <header><span>ONE DRAW A DAY</span><h3>오늘의 제비뽑기</h3></header>
+        <div class="mobile-draw-machine"><div class="mobile-draw-gauge"><i></i></div><div><strong>${score || "—"}</strong><span>${score ? "제비 점수" : "미참여"}</span></div></div>
+        <button data-mobile-draw-submit type="button" ${overviewDrawSubmitting || overviewDrawAnimating || result ? "disabled" : ""}>${overviewDrawSubmitting ? "저장 중…" : result ? "오늘 참여 완료" : "제비뽑기"}</button>
+        <p>${esc(result?.drawMessage || result?.draw_message || "버튼을 눌러 오늘의 한마디를 확인하세요.")}</p>
+        ${overviewDrawError ? `<em>${esc(overviewDrawError)}</em>` : ""}
+        <div class="mobile-draw-ranking">${ranking.map((row, index) => `<span class="${row.isMe || row.is_me ? "is-me" : ""}"><b>${esc(row.rank || drawCompetitionRank(index, ranking))}</b><i>${esc(row.name || "구성원")}</i><strong>${Number(row.drawScore || row.draw_score)}점</strong></span>`).join("") || "<small>아직 참여자가 없습니다.</small>"}</div>
+        <button data-mobile-draw-ranking class="mobile-draw-ranking-button" type="button">전체 보기</button>
+      </section>
+      <section class="mobile-overview-panel"><header><span>PRIORITY</span><h3>우선 처리할 업무</h3></header><div>
+        ${priority.length ? priority.map((item) => `<label class="mobile-overview-task"><input data-mobile-overview-task-check="${esc(item.id)}" data-mobile-overview-task-source="${esc(item.source)}" type="checkbox" /><span><strong>${esc(item.task.text || "제목 없는 할 일")}</strong><small>${esc(item.sourceTitle)} · ${esc(overviewDueInfo(item.task.dueDate).label)}</small></span></label>`).join("") : '<p class="mobile-overview-empty">임박한 할 일이 없습니다.</p>'}
+      </div></section>
+      <section class="mobile-overview-panel"><header><span>IN PROGRESS</span><h3>진행 중인 영상</h3></header><div>
+        ${projects.length ? projects.map((project) => `<button class="mobile-overview-row" data-mobile-overview-project="${esc(project.id)}" type="button"><span><strong>${esc(project.title)}</strong><small>${esc(project.status || "단계 미설정")}</small></span><b>${project.finalDate ? esc(formatDate(project.finalDate)) : "마감 없음"}</b></button>`).join("") : '<p class="mobile-overview-empty">진행 중인 영상이 없습니다.</p>'}
+      </div></section>
+      <section class="mobile-overview-panel"><header><span>SCHEDULE</span><h3>오늘 일정</h3></header><div>
+        ${schedules.length ? schedules.map((item) => `<button class="mobile-overview-row" data-mobile-overview-schedule="${item.source === "studio" ? "studio" : "calendar"}" type="button"><span><strong>${esc(item.title)}</strong><small>${esc(item.time)} · ${item.source === "studio" ? "방송실" : "캘린더"}</small></span><b>›</b></button>`).join("") : '<p class="mobile-overview-empty">오늘 등록된 일정이 없습니다.</p>'}
+      </div></section>
+      <section class="mobile-overview-panel"><header><span>QUICK ACTION</span><h3>빠른 실행</h3></header><div class="mobile-overview-quick">${[["project", "영상 추가"], ["work", "업무 추가"], ["task", "할 일 추가"], ["schedule", "일정 추가"]].map(([mode, label]) => `<button data-mobile-overview-quick="${mode}" type="button">＋ ${label}</button>`).join("")}</div></section>
+    </div>
+  `;
+}
+
 function renderMobileDashboard() {
   const app = $("#mobileApp");
   if (!app) return;
@@ -13431,7 +13883,7 @@ function renderMobileDashboard() {
   app.dataset.mobileMoreRoute = mobileMoreRoute;
   $("#mobileViewTitle") && ($("#mobileViewTitle").textContent = mobileTitleForView(current));
   $("#mobileFabWrap")?.classList.toggle("calendar-mode", current === "calendar");
-  $("#mobileFabWrap")?.classList.toggle("is-hidden", ["settings", "notifications", "board", "studio"].includes(current));
+  $("#mobileFabWrap")?.classList.toggle("is-hidden", ["overview", "settings", "notifications", "board", "studio"].includes(current));
   $$(".mobile-tab").forEach((button) => {
     const section = button.dataset.mobileSection;
     button.classList.toggle("active", section === current);
@@ -13452,6 +13904,7 @@ function renderMobileDashboard() {
       : `<div class="empty">새 알림이 없습니다.</div>`;
   }
   const renderers = {
+    overview: renderMobileOverview,
     projects: renderMobileProjectCards,
     works: renderMobileWorkCards,
     tasks: renderMobileTasks,
@@ -13505,7 +13958,7 @@ function performOpenMobileSection(section) {
     boardViewerPostId = null;
   }
   document.body.classList.toggle("mobile-pc-view", section === "admin");
-  if (["projects", "works", "tasks", "calendar", "board", "notifications", "settings"].includes(section)) {
+  if (["overview", "projects", "works", "tasks", "calendar", "board", "notifications", "settings"].includes(section)) {
     if (section === "notifications" && mobileActiveSection !== "notifications") mobilePreviousSection = mobileActiveSection || "tasks";
     mobileActiveSection = section;
     if (section === "settings") {
@@ -14258,6 +14711,7 @@ function submitMobileAddForm(form) {
       eventDate: schedule.date,
       targetView: "calendar"
     });
+    recordOverviewActivity(schedule.title, "일정을 등록했습니다.", "schedule_created");
     saveState();
     closeMobileAddSheet();
     mobileActiveSection = "calendar";
@@ -14267,10 +14721,7 @@ function submitMobileAddForm(form) {
 
 function renderAll() {
   applyUserTheme();
-  renderKpis();
-  renderWorkSummary();
-  renderStatusMix();
-  renderUpcoming();
+  renderOverviewDashboard();
   renderProjectList();
   renderWorkList();
   renderTasks();
@@ -15109,6 +15560,102 @@ createMobileEdgeSwipeBack();
 $("#mobileLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $("#mobileInlineLogoutBtn")?.addEventListener("click", () => $("#logoutBtn")?.click());
 $$("[data-go]").forEach((button) => button.addEventListener("click", () => setView(button.dataset.go)));
+
+$("#overviewView")?.addEventListener("click", async (event) => {
+  const summaryAction = event.target.closest("[data-overview-summary]")?.dataset.overviewSummary;
+  if (summaryAction) {
+    if (summaryAction === "today" || summaryAction === "overdue") {
+      taskOverviewFilter = summaryAction;
+      saveViewPrefs({ taskOverviewFilter });
+      setView("tasks");
+      renderTasks();
+    } else if (summaryAction === "schedule") {
+      selectedCalendarDate = seoulNowParts().date;
+      saveViewPrefs({ selectedCalendarDate });
+      setView("calendar");
+      renderCalendar();
+    } else {
+      notificationSettingsOpen = false;
+      openNotificationCenter(true);
+    }
+    return;
+  }
+  const taskFilter = event.target.closest("[data-overview-go-tasks]")?.dataset.overviewGoTasks;
+  if (taskFilter) {
+    taskOverviewFilter = taskFilter;
+    saveViewPrefs({ taskOverviewFilter });
+    setView("tasks");
+    renderTasks();
+    return;
+  }
+  const range = event.target.closest("[data-overview-schedule-range]")?.dataset.overviewScheduleRange;
+  if (range) {
+    overviewScheduleRange = range === "week" ? "week" : "today";
+    renderOverviewDashboard();
+    return;
+  }
+  const projectId = event.target.closest("[data-overview-project]")?.dataset.overviewProject;
+  if (projectId) {
+    openProjectDetail(projectId);
+    return;
+  }
+  const scheduleSource = event.target.closest("[data-overview-schedule-source]")?.dataset.overviewScheduleSource;
+  if (scheduleSource) {
+    setView(scheduleSource === "studio" ? "studio" : "calendar");
+    return;
+  }
+  const quick = event.target.closest("[data-overview-quick]")?.dataset.overviewQuick;
+  if (quick) {
+    if (quick === "project") addProject();
+    if (quick === "work") addWork();
+    if (quick === "task") {
+      setView("tasks");
+      showToast("영상 또는 업무 상세에서 연결할 할 일을 추가할 수 있습니다.");
+    }
+    if (quick === "schedule") openScheduleModal(seoulNowParts().date);
+    return;
+  }
+  if (event.target.closest("[data-draw-submit]")) {
+    await submitOverviewDraw();
+    return;
+  }
+  if (event.target.closest("[data-draw-ranking-open]")) openDrawRanking(true);
+});
+
+$("#overviewView")?.addEventListener("change", async (event) => {
+  const checkbox = event.target.closest("[data-overview-priority-check]");
+  if (!checkbox) return;
+  const item = taskOverviewItems().find((entry) =>
+    entry.id === checkbox.dataset.overviewPriorityCheck
+    && entry.source === checkbox.dataset.overviewPrioritySource
+  );
+  if (!item || !item.canManage) {
+    checkbox.checked = false;
+    showToast("담당자 또는 관리자만 할 일을 변경할 수 있습니다.");
+    return;
+  }
+  const previous = Boolean(item.task.done);
+  overviewTaskPending.add(item.id);
+  setTaskCompletionState(item.task, true);
+  notifyTaskCompletion(item.source, item.task, true);
+  saveState();
+  renderOverviewDashboard();
+  if (SUPABASE_ENABLED) {
+    const saved = await saveRemoteDashboardState();
+    if (!saved) {
+      setTaskCompletionState(item.task, previous);
+      saveState();
+      showToast("완료 상태를 서버에 저장하지 못했습니다.");
+    }
+  }
+  overviewTaskPending.delete(item.id);
+  renderAll();
+});
+
+$("#closeDrawRankingBtn")?.addEventListener("click", () => openDrawRanking(false));
+$("#drawRankingModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "drawRankingModal") openDrawRanking(false);
+});
 
 $("#addProjectBtn").addEventListener("click", addProject);
 $("#addWorkBtn").addEventListener("click", addWork);
