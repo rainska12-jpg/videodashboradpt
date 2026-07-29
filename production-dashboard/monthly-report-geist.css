@@ -1,0 +1,860 @@
+/*
+ * Monthly report UI refinement
+ * Visual overrides only. The authoring flow, state and report data stay in app.js.
+ */
+
+#adminView .monthly-report-manager {
+  --report-accent: var(--geist-accent, #00ed64);
+  --report-accent-ink: #063516;
+  --report-radius-control: 6px;
+  --report-radius-card: 12px;
+  --report-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+  gap: 20px;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px;
+  color: var(--geist-ink, #171717);
+}
+
+/* Step navigation */
+#adminView .monthly-report-stepper {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  overflow: visible;
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  background: var(--geist-elevated, #fff);
+  padding: 8px;
+  box-shadow: var(--report-shadow);
+}
+
+#adminView .monthly-report-stepper > b {
+  display: none;
+}
+
+#adminView .monthly-report-stepper > button {
+  min-height: 64px;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0 14px;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+#adminView .monthly-report-stepper > button:not(:disabled):hover {
+  background: var(--geist-soft, #f2f2f2);
+}
+
+#adminView .monthly-report-stepper > button > i {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--geist-soft, #f2f2f2);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+#adminView .monthly-report-stepper > button > span {
+  gap: 2px;
+}
+
+#adminView .monthly-report-stepper > button strong {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+
+#adminView .monthly-report-stepper > button small {
+  font-size: 10px;
+}
+
+#adminView .monthly-report-stepper > button.is-current {
+  border-color: color-mix(in srgb, var(--report-accent) 42%, var(--geist-hairline, #ebebeb));
+  background: color-mix(in srgb, var(--report-accent) 9%, var(--geist-elevated, #fff));
+}
+
+#adminView .monthly-report-stepper > button.is-current > i {
+  border-color: var(--report-accent);
+  background: var(--report-accent);
+  color: var(--report-accent-ink);
+  box-shadow: none;
+}
+
+#adminView .monthly-report-stepper > button.is-complete > i {
+  border-color: color-mix(in srgb, var(--report-accent) 48%, var(--geist-hairline, #ebebeb));
+  background: color-mix(in srgb, var(--report-accent) 14%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, var(--report-accent) 68%, var(--geist-ink, #171717));
+}
+
+/* Common controls */
+#adminView .monthly-report-manager .pill {
+  min-height: 42px;
+  border-radius: var(--report-radius-control);
+  padding: 0 15px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.15px;
+  box-shadow: none;
+}
+
+#adminView .monthly-report-manager .pill.ghost {
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-ink, #171717);
+}
+
+#adminView .monthly-report-manager .pill.ghost:hover {
+  border-color: var(--geist-faint, #a1a1a1);
+  background: var(--geist-soft, #f2f2f2);
+}
+
+#adminView .monthly-report-manager .pill.primary {
+  border: 1px solid var(--report-accent);
+  background: var(--report-accent);
+  color: var(--report-accent-ink);
+}
+
+#adminView .monthly-report-manager .pill.primary:hover {
+  border-color: color-mix(in srgb, var(--report-accent) 82%, #000);
+  background: color-mix(in srgb, var(--report-accent) 90%, #000);
+}
+
+#adminView .monthly-report-manager .pill:disabled {
+  border-color: var(--geist-hairline, #ebebeb);
+  background: var(--geist-soft, #f2f2f2);
+  color: var(--geist-faint, #a1a1a1);
+  opacity: 1;
+}
+
+/* Source selection toolbar */
+#adminView .monthly-report-stage {
+  gap: 16px;
+}
+
+#adminView .monthly-report-toolbar {
+  min-height: 64px;
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  background: var(--geist-elevated, #fff);
+  padding: 10px 12px;
+  box-shadow: var(--report-shadow);
+}
+
+#adminView .monthly-report-toolbar > div {
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+#adminView .monthly-report-toolbar label,
+#adminView .monthly-report-month-control {
+  gap: 7px;
+  color: var(--geist-mute, #8f8f8f);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#adminView .monthly-report-month-trigger {
+  min-width: 196px;
+  min-height: 42px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-control);
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+#adminView .monthly-report-month-trigger:hover,
+#adminView .monthly-report-month-trigger[aria-expanded="true"] {
+  border-color: var(--geist-faint, #a1a1a1);
+}
+
+#adminView .monthly-report-month-trigger:focus-visible,
+#adminView .monthly-report-manager :is(button, textarea, input):focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--report-accent) 56%, transparent);
+  outline-offset: 2px;
+}
+
+#adminView .monthly-report-month-popover {
+  width: 300px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.04), 0 12px 28px -8px rgba(0, 0, 0, 0.18);
+}
+
+#adminView .monthly-report-month-popover > header {
+  min-height: 52px;
+  padding: 9px 12px;
+}
+
+#adminView .monthly-report-month-popover > header strong {
+  font-size: 13px;
+}
+
+#adminView .monthly-report-month-popover > header button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-control);
+  background: var(--geist-elevated, #fff);
+  font-size: 18px;
+}
+
+#adminView .monthly-report-month-grid {
+  gap: 8px;
+  padding: 14px;
+}
+
+#adminView .monthly-report-month-grid button {
+  min-height: 40px;
+  border-radius: var(--report-radius-control);
+  font-size: 12px;
+}
+
+#adminView .monthly-report-month-grid button.selected {
+  border-color: var(--report-accent);
+  background: var(--report-accent);
+  color: var(--report-accent-ink);
+}
+
+#adminView .monthly-report-month-popover > footer button {
+  color: color-mix(in srgb, var(--report-accent) 68%, var(--geist-ink, #171717));
+  font-size: 11px;
+}
+
+/* Summary and notices */
+#adminView .monthly-report-source-summary {
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  box-shadow: var(--report-shadow);
+}
+
+#adminView .monthly-report-source-summary article {
+  min-height: 76px;
+  align-content: center;
+  gap: 5px;
+  padding: 14px 18px;
+}
+
+#adminView .monthly-report-source-summary span {
+  color: var(--geist-mute, #8f8f8f);
+  font-size: 11px;
+}
+
+#adminView .monthly-report-source-summary b {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+}
+
+#adminView .monthly-report-notice {
+  min-height: 44px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: 8px;
+  background: var(--geist-soft, #f2f2f2);
+  padding: 11px 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#adminView .monthly-report-notice strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+#adminView .monthly-report-notice.is-gpt {
+  border-color: color-mix(in srgb, var(--report-accent) 35%, var(--geist-hairline, #ebebeb));
+  background: color-mix(in srgb, var(--report-accent) 8%, var(--geist-elevated, #fff));
+}
+
+/* Prompt, source list and cards */
+#adminView .monthly-report-preview-card,
+#adminView .monthly-report-prompt-card,
+#adminView .monthly-report-output-card {
+  overflow: hidden;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  background: var(--geist-elevated, #fff);
+  box-shadow: var(--report-shadow);
+}
+
+#adminView .monthly-report-prompt-card summary {
+  min-height: 68px;
+  padding: 14px 18px;
+}
+
+#adminView .monthly-report-card-head {
+  min-height: 84px;
+  padding: 18px 20px;
+}
+
+#adminView .monthly-report-prompt-card h3,
+#adminView .monthly-report-card-head h3,
+#adminView .monthly-report-output-card h3 {
+  margin-top: 3px;
+  color: var(--geist-ink, #171717);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.45px;
+}
+
+#adminView .monthly-report-prompt-card summary > span,
+#adminView .monthly-report-card-head > small {
+  color: var(--geist-mute, #8f8f8f);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+#adminView .monthly-report-card-head > small {
+  max-width: 540px;
+}
+
+#adminView .monthly-report-prompt-card > div {
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+#adminView .monthly-report-prompt-card p {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+#adminView .monthly-report-prompt-card textarea {
+  min-height: 220px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: 8px;
+  background: var(--geist-canvas, #fafafa);
+  color: var(--geist-body, #4d4d4d);
+  padding: 14px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+#adminView .monthly-report-prompt-card textarea:focus {
+  border-color: color-mix(in srgb, var(--report-accent) 58%, var(--geist-hairline, #ebebeb));
+  outline: 0;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--report-accent) 10%, transparent);
+}
+
+#adminView .monthly-report-prompt-card footer small {
+  font-size: 10px;
+}
+
+#adminView .monthly-report-preview-section {
+  padding: 16px 18px 18px;
+}
+
+#adminView .monthly-report-preview-section > header {
+  margin-bottom: 12px;
+}
+
+#adminView .monthly-report-preview-section h4 {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+#adminView .monthly-report-preview-section header small {
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+#adminView .monthly-report-section-actions > span,
+#adminView .monthly-report-type-group > header > aside > span,
+#adminView .monthly-report-document-editor header > span {
+  border: 1px solid var(--geist-hairline, #ebebeb);
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-body, #4d4d4d);
+  font-size: 9px;
+}
+
+#adminView .monthly-report-collapse-toggle {
+  min-height: 30px;
+  border-radius: var(--report-radius-control);
+  font-size: 9px;
+}
+
+#adminView .monthly-report-type-group,
+#adminView .monthly-report-task-group {
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: 10px;
+  background: var(--geist-canvas, #fafafa);
+}
+
+#adminView .monthly-report-type-group {
+  gap: 12px;
+  padding: 14px;
+}
+
+#adminView .monthly-report-type-group > header strong {
+  font-size: 13px;
+}
+
+#adminView .monthly-report-type-group > header small,
+#adminView .monthly-report-department-group > header :is(span, em) {
+  font-size: 10px;
+}
+
+#adminView .monthly-report-department-group > header strong {
+  font-size: 11px;
+}
+
+#adminView .monthly-report-preview-item {
+  min-height: 42px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: 7px;
+  background: var(--geist-elevated, #fff);
+  padding: 8px 11px;
+}
+
+#adminView .monthly-report-preview-item > i,
+#adminView .monthly-report-group-select > i {
+  width: 17px;
+  height: 17px;
+  border-color: var(--geist-faint, #a1a1a1);
+  border-radius: 4px;
+}
+
+#adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i,
+#adminView .monthly-report-group-select > input:checked + i {
+  border-color: var(--report-accent);
+  background: var(--report-accent);
+}
+
+#adminView .monthly-report-preview-item > input[type="checkbox"]:checked + i::after,
+#adminView .monthly-report-group-select > input:checked + i::after {
+  color: var(--report-accent-ink);
+}
+
+#adminView .monthly-report-preview-item > :is(input[type="text"], span) {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#adminView .monthly-report-preview-item:focus-within {
+  border-color: color-mix(in srgb, var(--report-accent) 50%, var(--geist-hairline, #ebebeb));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--report-accent) 8%, transparent);
+}
+
+#adminView .monthly-report-owner-badge,
+#adminView .monthly-report-recurrence-badge {
+  border-color: var(--geist-hairline, #ebebeb);
+  background: var(--geist-soft, #f2f2f2);
+  color: var(--geist-body, #4d4d4d);
+  padding: 3px 7px;
+  font-size: 9px;
+}
+
+#adminView .monthly-report-recurrence-badge {
+  border-color: color-mix(in srgb, var(--report-accent) 34%, var(--geist-hairline, #ebebeb));
+  background: color-mix(in srgb, var(--report-accent) 8%, var(--geist-elevated, #fff));
+  color: color-mix(in srgb, var(--report-accent) 66%, var(--geist-ink, #171717));
+}
+
+#adminView .monthly-report-stage-actions {
+  min-height: 66px;
+  gap: 10px;
+  border-top: 1px solid var(--geist-hairline, #ebebeb);
+  background: var(--geist-canvas, #fafafa);
+  padding: 12px 18px;
+}
+
+#adminView .monthly-report-stage-actions > span {
+  color: var(--geist-mute, #8f8f8f);
+  font-size: 11px;
+}
+
+#adminView .monthly-report-stage-actions > span b {
+  font-size: 13px;
+}
+
+/* Preview editors and output */
+#adminView .monthly-report-document-grid {
+  gap: 12px;
+  padding: 16px 18px 18px;
+}
+
+#adminView .monthly-report-document-editor {
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: 10px;
+  background: var(--geist-elevated, #fff);
+}
+
+#adminView .monthly-report-document-editor > header {
+  min-height: 62px;
+  border-color: var(--geist-hairline, #ebebeb);
+  background: var(--geist-canvas, #fafafa);
+  padding: 12px 14px;
+}
+
+#adminView .monthly-report-document-editor h4 {
+  font-size: 13px;
+}
+
+#adminView .monthly-report-document-editor header small {
+  font-size: 10px;
+}
+
+#adminView .monthly-report-document-editor textarea {
+  min-height: 210px;
+  background: var(--geist-elevated, #fff);
+  color: var(--geist-ink, #171717);
+  padding: 15px;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+#adminView .monthly-report-document-editor:first-child textarea {
+  min-height: 420px;
+}
+
+#adminView .monthly-report-document-editor textarea:focus {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--report-accent) 58%, transparent);
+}
+
+#adminView .monthly-report-output-card > header {
+  padding: 22px;
+}
+
+#adminView .monthly-report-output-grid article {
+  min-height: 86px;
+  justify-content: center;
+  padding: 18px 20px;
+}
+
+#adminView .monthly-report-output-grid span,
+#adminView .monthly-report-output-file span {
+  font-size: 10px;
+}
+
+#adminView .monthly-report-output-grid strong {
+  font-size: 15px;
+}
+
+#adminView .monthly-report-output-file {
+  min-height: 70px;
+  padding: 15px 20px;
+}
+
+#adminView .monthly-report-output-file strong {
+  font-size: 13px;
+}
+
+/* Generation feedback */
+#adminView .monthly-report-generation-stage {
+  min-height: 520px;
+}
+
+#adminView .monthly-report-generation-card {
+  max-width: 680px;
+  border-color: var(--geist-hairline, #ebebeb);
+  border-radius: var(--report-radius-card);
+  background: var(--geist-elevated, #fff);
+  padding: 48px 42px 38px;
+  box-shadow: var(--report-shadow);
+}
+
+#adminView .monthly-report-generation-copy h3 {
+  font-size: 22px;
+  letter-spacing: -0.65px;
+}
+
+#adminView .monthly-report-generation-copy > p:last-child {
+  font-size: 12px;
+}
+
+#adminView .monthly-report-progress {
+  height: 7px;
+  background: var(--geist-soft, #f2f2f2);
+}
+
+#adminView .monthly-report-progress > i {
+  background: var(--report-accent);
+}
+
+#adminView .monthly-report-confirmation,
+#adminView .monthly-report-output-card {
+  border-color: var(--geist-hairline, #ebebeb);
+  box-shadow: var(--report-shadow);
+}
+
+/* Dark mode */
+body[data-theme="dark"] #adminView .monthly-report-manager {
+  --report-accent-ink: #03250e;
+  --report-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
+}
+
+body[data-theme="dark"] #adminView .monthly-report-stepper > button.is-current {
+  border-color: color-mix(in srgb, var(--report-accent) 45%, var(--geist-hairline, #2b332e));
+  background: color-mix(in srgb, var(--report-accent) 10%, var(--geist-elevated, #101512));
+}
+
+body[data-theme="dark"] #adminView .monthly-report-manager :is(
+  .monthly-report-toolbar,
+  .monthly-report-stepper,
+  .monthly-report-source-summary,
+  .monthly-report-preview-card,
+  .monthly-report-prompt-card,
+  .monthly-report-output-card,
+  .monthly-report-generation-card
+) {
+  box-shadow: none;
+}
+
+body[data-theme="dark"] #adminView .monthly-report-notice.is-gpt {
+  background: color-mix(in srgb, var(--report-accent) 9%, var(--geist-elevated, #101512));
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  #adminView .monthly-report-stepper {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+  }
+
+  #adminView .monthly-report-stepper > button {
+    min-width: 0;
+  }
+
+  #adminView .monthly-report-source-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  #adminView .monthly-report-manager {
+    gap: 14px;
+    padding: 12px 12px calc(24px + env(safe-area-inset-bottom));
+  }
+
+  #adminView .monthly-report-stepper {
+    gap: 4px;
+    padding: 5px;
+  }
+
+  #adminView .monthly-report-stepper > button {
+    min-height: 56px;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 6px;
+    padding: 0 7px;
+  }
+
+  #adminView .monthly-report-stepper > button > i {
+    width: 24px;
+    height: 24px;
+    font-size: 9px;
+  }
+
+  #adminView .monthly-report-stepper > button strong {
+    overflow: hidden;
+    font-size: 11px;
+    text-overflow: ellipsis;
+  }
+
+  #adminView .monthly-report-stepper > button small {
+    display: none;
+  }
+
+  #adminView .monthly-report-toolbar {
+    align-items: stretch;
+    min-height: 0;
+    padding: 10px;
+  }
+
+  #adminView .monthly-report-toolbar > div {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    width: 100%;
+  }
+
+  #adminView .monthly-report-month-control,
+  #adminView .monthly-report-month-trigger {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #adminView .monthly-report-source-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #adminView .monthly-report-source-summary article {
+    min-height: 68px;
+    padding: 12px 14px;
+  }
+
+  #adminView .monthly-report-source-summary article:nth-child(odd) {
+    border-right: 1px solid var(--geist-hairline, #ebebeb);
+  }
+
+  #adminView .monthly-report-source-summary article:nth-child(even) {
+    border-right: 0;
+  }
+
+  #adminView .monthly-report-source-summary article:last-child {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+
+  #adminView .monthly-report-source-summary span {
+    font-size: 10px;
+  }
+
+  #adminView .monthly-report-source-summary b {
+    font-size: 19px;
+  }
+
+  #adminView .monthly-report-notice {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  #adminView .monthly-report-prompt-card summary,
+  #adminView .monthly-report-card-head {
+    align-items: flex-start;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  #adminView .monthly-report-card-head {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  #adminView .monthly-report-card-head > small {
+    max-width: none;
+    text-align: left;
+  }
+
+  #adminView .monthly-report-prompt-card h3,
+  #adminView .monthly-report-card-head h3,
+  #adminView .monthly-report-output-card h3 {
+    font-size: 16px;
+  }
+
+  #adminView .monthly-report-prompt-card > div {
+    padding: 14px;
+  }
+
+  #adminView .monthly-report-prompt-card textarea {
+    min-height: 190px;
+    font-size: 12px;
+  }
+
+  #adminView .monthly-report-prompt-card footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #adminView .monthly-report-preview-section {
+    padding: 14px;
+  }
+
+  #adminView .monthly-report-type-group > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  #adminView .monthly-report-type-group > header > aside {
+    width: 100%;
+    align-items: center;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  #adminView .monthly-report-preview-item {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  #adminView .monthly-report-item-badges {
+    grid-column: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  #adminView .monthly-report-stage-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px;
+  }
+
+  #adminView .monthly-report-stage-actions > span {
+    grid-column: 1 / -1;
+    width: 100%;
+    order: -1;
+  }
+
+  #adminView .monthly-report-stage-actions > .pill:only-of-type {
+    grid-column: 1 / -1;
+  }
+
+  #adminView .monthly-report-document-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  #adminView .monthly-report-document-editor:first-child {
+    grid-column: auto;
+  }
+
+  #adminView .monthly-report-document-editor textarea,
+  #adminView .monthly-report-document-editor:first-child textarea {
+    min-height: 260px;
+    font-size: 12px;
+  }
+
+  #adminView .monthly-report-output-card > header {
+    padding: 18px;
+  }
+
+  #adminView .monthly-report-generation-stage {
+    min-height: 430px;
+  }
+
+  #adminView .monthly-report-generation-card {
+    padding: 36px 20px 28px;
+  }
+}
+
+@media (max-width: 390px) {
+  #adminView .monthly-report-stepper > button {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  #adminView .monthly-report-stepper > button > span {
+    width: 100%;
+  }
+
+  #adminView .monthly-report-toolbar > div {
+    grid-template-columns: 1fr;
+  }
+
+  #adminView .monthly-report-toolbar .pill {
+    width: 100%;
+  }
+
+  #adminView .monthly-report-stage-actions {
+    grid-template-columns: 1fr;
+  }
+
+  #adminView .monthly-report-stage-actions > span,
+  #adminView .monthly-report-stage-actions > .pill:only-of-type {
+    grid-column: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #adminView .monthly-report-manager *,
+  #adminView .monthly-report-manager *::before,
+  #adminView .monthly-report-manager *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
