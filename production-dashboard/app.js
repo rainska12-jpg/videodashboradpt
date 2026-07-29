@@ -3071,6 +3071,28 @@ function normalizeDrawDashboard(data) {
   };
 }
 
+function dailyDrawErrorMessage(error, action = "load") {
+  const errorText = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(" ");
+  if (/PGRST202|PGRST205|schema cache|Could not find the function/i.test(errorText)) {
+    return "Supabase SQL Editor에서 daily_draw_migration.sql을 다시 실행한 뒤 새로고침해 주세요.";
+  }
+  if (/organization required|organization_id|null value/i.test(errorText)) {
+    return "사용자 조직 정보가 없습니다. 제비뽑기 마이그레이션을 다시 실행해 주세요.";
+  }
+  if (/approved user required|JWT|not authenticated/i.test(errorText)) {
+    return "로그인 세션을 확인한 뒤 다시 시도해 주세요.";
+  }
+  if (/permission denied|42501|row-level security/i.test(errorText)) {
+    return "제비뽑기 권한 설정이 적용되지 않았습니다. 마이그레이션을 다시 실행해 주세요.";
+  }
+  if (/active draw message not found/i.test(errorText)) {
+    return "제비뽑기 문구 데이터가 없습니다. 마이그레이션의 문구 등록 부분을 다시 실행해 주세요.";
+  }
+  return action === "save"
+    ? "결과를 저장하지 못했습니다. 네트워크 연결을 확인하고 다시 시도해 주세요."
+    : "제비뽑기 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
 async function loadOverviewDraw({ force = false } = {}) {
   const user = currentUser();
   const loadKey = `${user?.id || "guest"}:${seoulNowParts().date}`;
@@ -3093,9 +3115,7 @@ async function loadOverviewDraw({ force = false } = {}) {
     overviewDrawData = normalizeDrawDashboard(data);
   } catch (error) {
     console.warn("Daily draw dashboard load failed", error);
-    overviewDrawError = String(error?.message || "").includes("get_today_draw_dashboard")
-      ? "Supabase에 제비뽑기 마이그레이션을 먼저 적용해 주세요."
-      : "제비뽑기 정보를 불러오지 못했습니다.";
+    overviewDrawError = dailyDrawErrorMessage(error, "load");
   } finally {
     overviewDrawLoading = false;
     renderOverviewDashboard();
@@ -3116,11 +3136,10 @@ async function submitOverviewDraw() {
   renderOverviewDashboard();
   if (isMobileViewport()) renderMobileDashboard();
   try {
-    const { data, error } = await getSupabaseClient().rpc("draw_today", {
-      p_draw_date: seoulNowParts().date
-    });
+    const { data, error } = await getSupabaseClient().rpc("draw_today");
     if (error) throw error;
     const next = normalizeDrawDashboard(data);
+    if (!next.result) throw new Error("empty draw result");
     overviewDrawData = { ...next, ranking: overviewDrawData?.ranking || [], members: overviewDrawData?.members || [] };
     overviewDrawAnimating = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     overviewDrawSubmitting = false;
@@ -3132,7 +3151,7 @@ async function submitOverviewDraw() {
     }, overviewDrawAnimating ? 1800 : 0);
   } catch (error) {
     console.warn("Daily draw failed", error);
-    overviewDrawError = "결과를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+    overviewDrawError = dailyDrawErrorMessage(error, "save");
     overviewDrawSubmitting = false;
     renderOverviewDashboard();
     if (isMobileViewport()) renderMobileDashboard();

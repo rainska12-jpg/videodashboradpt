@@ -26,7 +26,8 @@ test("1일 1회, 한국 날짜, 트랜잭션 잠금과 변경 금지를 적용�
 
 test("클라이언트는 서버 RPC 결과만 확정하고 사용자 화면에는 제비뽑기 명칭을 쓴다", () => {
   assert.match(app, /\.rpc\("draw_today"/);
-  assert.match(app, /p_draw_date: seoulNowParts\(\)\.date/);
+  assert.match(migration, /create function public\.draw_today\(\)/);
+  assert.match(migration, /notify pgrst, 'reload schema'/);
   assert.match(html, /오늘의 제비뽑기/);
   assert.doesNotMatch(`${app}\n${html}`, /오늘의 운세|운세 측정|운세 점수|운세 랭킹|미측정/);
 });

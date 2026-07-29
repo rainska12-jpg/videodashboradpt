@@ -280,7 +280,11 @@ begin
 end;
 $$;
 
-create or replace function public.draw_today(p_draw_date date default null)
+-- 이전 버전의 기본 인수 함수가 PostgREST에서 no-arg 호출과 충돌하지 않게 제거합니다.
+drop function if exists public.draw_today(date);
+drop function if exists public.draw_today();
+
+create function public.draw_today()
 returns jsonb
 language plpgsql
 volatile
@@ -297,10 +301,6 @@ begin
   if v_user_id is null or not public.is_approved_user() then
     raise exception 'approved user required';
   end if;
-  if p_draw_date is not null and p_draw_date <> v_today then
-    raise exception 'draw date must match today in Asia/Seoul';
-  end if;
-
   v_org_id := public.current_organization_id();
   if v_org_id is null then
     raise exception 'organization required';
@@ -364,10 +364,13 @@ $$;
 
 revoke all on function public.current_organization_id() from public;
 revoke all on function public.get_today_draw_dashboard() from public;
-revoke all on function public.draw_today(date) from public;
+revoke all on function public.draw_today() from public;
 grant execute on function public.current_organization_id() to authenticated;
 grant execute on function public.get_today_draw_dashboard() to authenticated;
-grant execute on function public.draw_today(date) to authenticated;
+grant execute on function public.draw_today() to authenticated;
 
 comment on table public.daily_draw_results is
   '사용자별 한국 날짜 기준 1일 1회 제비뽑기 결과. UPDATE/DELETE 경로를 제공하지 않는다.';
+
+-- 새 RPC 시그니처를 Supabase REST API가 즉시 다시 읽게 합니다.
+notify pgrst, 'reload schema';
