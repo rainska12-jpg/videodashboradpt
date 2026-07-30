@@ -1,0 +1,413 @@
+/* Overview v3 refinement. Functional selectors and bindings are unchanged. */
+#overviewView.overview-dashboard {
+  --ov-surface: #fff;
+  --ov-soft: #f4f4f4;
+  --ov-ink: #171717;
+  --ov-body: #4d4d4d;
+  --ov-muted: #8f8f8f;
+  --ov-line: #ebebeb;
+  --ov-accent: #00ed64;
+  --ov-accent-deep: #00a849;
+  --ov-accent-soft: #eafff2;
+  --ov-danger: #d93036;
+  --ov-danger-soft: #fff1f1;
+  gap: 16px;
+  color: var(--ov-ink);
+}
+
+body[data-theme="dark"] #overviewView.overview-dashboard {
+  --ov-surface: #111512;
+  --ov-soft: #191e1b;
+  --ov-ink: #f2f5f3;
+  --ov-body: #c1c8c4;
+  --ov-muted: #89928d;
+  --ov-line: #29302c;
+  --ov-accent-soft: #0d2b18;
+  --ov-danger: #ff7b80;
+  --ov-danger-soft: #2b1719;
+}
+
+#overviewView .overview-top-grid {
+  grid-template-columns: minmax(0, 1fr) 248px;
+  gap: 16px;
+}
+
+#overviewView .overview-main-column { gap: 20px; }
+#overviewView .overview-greeting,
+#overviewView .overview-panel,
+#overviewView .draw-panel {
+  border-color: var(--ov-line);
+  border-radius: 12px;
+  background: var(--ov-surface);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .035);
+}
+
+#overviewView .overview-greeting {
+  position: relative;
+  overflow: hidden;
+  padding: 28px 30px;
+  background: var(--ov-surface);
+}
+
+#overviewView .overview-greeting::after,
+#overviewView .draw-panel::after {
+  content: "";
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 237, 100, .17), rgba(0, 237, 100, 0) 70%);
+  pointer-events: none;
+}
+
+#overviewView .overview-greeting::after {
+  top: -74px;
+  right: -66px;
+  width: 200px;
+  height: 200px;
+}
+
+#overviewView .overview-greeting > * { position: relative; z-index: 1; }
+#overviewView .overview-greeting h2 {
+  margin: 6px 0 8px;
+  color: var(--ov-ink);
+  font-size: clamp(28px, 3vw, 40px);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -1.8px;
+}
+
+#overviewView .overview-greeting > p:last-child { color: var(--ov-body); line-height: 1.55; }
+#overviewView .overview-heading { margin-bottom: 12px; }
+#overviewView .overview-heading .eyebrow,
+#overviewView .overview-greeting .eyebrow { color: var(--ov-muted); font-size: 10px; letter-spacing: .04em; }
+#overviewView .overview-heading h3 { color: var(--ov-ink); font-weight: 600; }
+#overviewView .overview-summary-cards { gap: 8px; }
+#overviewView .overview-summary-card {
+  min-height: 96px;
+  padding: 14px 15px;
+  gap: 6px;
+  border-color: var(--ov-line);
+  border-radius: 12px;
+  background: var(--ov-surface);
+  color: var(--ov-ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .025);
+  transition: border-color .16s ease, background-color .16s ease;
+}
+
+#overviewView .overview-summary-card:hover {
+  border-color: color-mix(in srgb, var(--ov-accent-deep) 42%, var(--ov-line));
+  background: color-mix(in srgb, var(--ov-accent-soft) 48%, var(--ov-surface));
+  transform: none;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .025);
+}
+
+#overviewView .overview-summary-card span { color: var(--ov-body); font-weight: 600; }
+#overviewView .overview-summary-card b { color: var(--ov-ink); font-size: 30px; }
+#overviewView .overview-summary-card small { color: var(--ov-muted); }
+#overviewView .overview-summary-card.is-alert b { color: var(--ov-danger); }
+#overviewView .overview-panel { padding: 20px; }
+#overviewView .overview-content-grid { gap: 16px; }
+#overviewView .overview-text-button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--ov-line);
+  border-radius: 6px;
+  background: var(--ov-surface);
+  color: var(--ov-body);
+}
+
+#overviewView .overview-text-button:hover { border-color: var(--ov-ink); color: var(--ov-ink); }
+#overviewView .overview-row { border-color: var(--ov-line); }
+#overviewView button.overview-row { color: var(--ov-ink); }
+#overviewView button.overview-row:hover { background: var(--ov-soft); }
+#overviewView .overview-row-main strong { color: var(--ov-ink); font-weight: 600; }
+#overviewView .overview-row-main small,
+#overviewView .overview-row-meta { color: var(--ov-muted); }
+#overviewView .overview-task-check input { accent-color: var(--ov-accent); color-scheme: light; }
+body[data-theme="dark"] #overviewView .overview-task-check input { color-scheme: dark; }
+#overviewView .overview-due-pill,
+#overviewView .overview-source-pill {
+  border: 1px solid var(--ov-line);
+  background: var(--ov-soft);
+  color: var(--ov-body);
+  font-style: normal;
+}
+
+#overviewView .overview-due-pill.overdue { background: var(--ov-danger-soft); color: var(--ov-danger); }
+#overviewView .overview-segmented { border: 1px solid var(--ov-line); background: var(--ov-soft); }
+#overviewView .overview-segmented button { color: var(--ov-muted); }
+#overviewView .overview-segmented button.active {
+  background: var(--ov-surface);
+  color: var(--ov-ink);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .06);
+}
+
+#overviewView .overview-empty { color: var(--ov-muted); }
+#overviewView .overview-activity-row { border-color: var(--ov-line); }
+#overviewView .overview-activity-avatar { background: var(--ov-accent-soft); color: var(--ov-accent-deep); }
+#overviewView .overview-activity-row p { color: var(--ov-body); }
+#overviewView .overview-activity-row p strong { color: var(--ov-ink); }
+#overviewView .overview-activity-row time { color: var(--ov-muted); }
+#overviewView .overview-quick-actions { gap: 8px; }
+#overviewView .overview-quick-actions button {
+  min-height: 64px;
+  border-color: var(--ov-line);
+  border-radius: 10px;
+  background: var(--ov-surface);
+  color: var(--ov-ink);
+}
+
+#overviewView .overview-quick-actions button:hover {
+  border-color: var(--ov-accent-deep);
+  background: var(--ov-accent-soft);
+}
+
+#overviewView .overview-quick-actions button > span {
+  border-radius: 8px;
+  background: var(--ov-accent-soft);
+  color: var(--ov-accent-deep);
+}
+
+#overviewView .overview-quick-actions small { color: var(--ov-muted); }
+#overviewView .draw-panel { min-height: 400px; overflow: hidden; background: var(--ov-surface); }
+#overviewView .draw-panel::before { display: none; }
+#overviewView .draw-panel::after {
+  top: -70px;
+  left: 50%;
+  width: 210px;
+  height: 190px;
+  transform: translateX(-50%);
+}
+
+#overviewView .draw-panel-content { padding: 18px 16px 16px; }
+#overviewView .draw-title { text-align: left; }
+#overviewView .draw-title small,
+#overviewView .draw-message,
+#overviewView .draw-ranking-mini h4,
+#overviewView .draw-rank-row { color: var(--ov-muted); }
+#overviewView .draw-title h3,
+#overviewView .draw-score strong { color: var(--ov-ink); }
+#overviewView .draw-machine { min-height: 120px; }
+#overviewView .draw-gauge {
+  width: 34px;
+  height: 118px;
+  border: 1px solid var(--ov-line);
+  background: var(--ov-soft);
+  box-shadow: none;
+}
+
+#overviewView .draw-gauge-fill {
+  background: linear-gradient(to top, var(--ov-accent-deep), var(--ov-accent));
+  box-shadow: none;
+}
+
+#overviewView .draw-button {
+  min-height: 40px;
+  border-radius: 8px;
+  background: var(--ov-accent);
+  box-shadow: none;
+}
+
+#overviewView .draw-button:active,
+#overviewView .draw-button.is-pressed { transform: none; box-shadow: none; }
+#overviewView .draw-rank-row.is-me { background: var(--ov-accent-soft); color: var(--ov-ink); }
+#overviewView .draw-ranking-all { color: var(--ov-accent-deep); }
+body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-quick-actions button > span, .draw-ranking-all) { color: #57f391; }
+
+@media (max-width: 1120px) {
+  #overviewView .overview-top-grid { grid-template-columns: minmax(0, 1fr) 228px; }
+}
+
+@media (max-width: 900px) {
+  #overviewView .overview-top-grid,
+  #overviewView .overview-content-grid { grid-template-columns: 1fr; }
+}
+
+/* Explicit mobile tokens prevent the old dark-only fallback. */
+@media (max-width: 768px) {
+  body:has(#mobileApp[data-mobile-section="overview"]) {
+    --ov-canvas: #fafafa;
+    --ov-surface: #fff;
+    --ov-soft: #f3f3f3;
+    --ov-ink: #171717;
+    --ov-body: #4d4d4d;
+    --ov-muted: #8f8f8f;
+    --ov-line: #e8e8e8;
+    --ov-accent: #00ed64;
+    --ov-accent-deep: #00a849;
+    --ov-accent-soft: #eafff2;
+    --ov-danger: #d93036;
+    background: var(--ov-canvas);
+    color: var(--ov-ink);
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) {
+    --ov-canvas: #0b0e0c;
+    --ov-surface: #111512;
+    --ov-soft: #191e1b;
+    --ov-ink: #f2f5f3;
+    --ov-body: #c1c8c4;
+    --ov-muted: #89928d;
+    --ov-line: #29302c;
+    --ov-accent-soft: #0d2b18;
+    --ov-danger: #ff7b80;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .main {
+    padding: calc(82px + env(safe-area-inset-top)) 16px calc(112px + env(safe-area-inset-bottom));
+    background: var(--ov-canvas);
+    color: var(--ov-ink);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-topbar.mobile-v2 {
+    min-height: 64px;
+    padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    border-bottom: 1px solid var(--ov-line);
+    background: color-mix(in srgb, var(--ov-canvas) 94%, transparent);
+    color: var(--ov-ink);
+    backdrop-filter: blur(18px);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-topbar.mobile-v2 strong {
+    color: var(--ov-ink);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -1px;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-icon-btn {
+    min-width: 58px;
+    min-height: 40px;
+    border: 1px solid var(--ov-line);
+    border-radius: 6px;
+    background: var(--ov-surface);
+    color: var(--ov-body);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .03);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-tabbar.mobile-v2 {
+    border-top: 1px solid var(--ov-line);
+    background: color-mix(in srgb, var(--ov-surface) 96%, transparent);
+    box-shadow: 0 -8px 26px rgba(0, 0, 0, .035);
+    backdrop-filter: blur(18px);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-tab { color: var(--ov-muted); }
+  body:has(#mobileApp[data-mobile-section="overview"]) .mobile-tab.active {
+    background: var(--ov-accent-soft);
+    color: var(--ov-accent-deep);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp.mobile-app {
+    gap: 12px;
+    color: var(--ov-ink);
+  }
+
+  #mobileApp .mobile-overview { gap: 12px; color: var(--ov-ink); }
+  #mobileApp .mobile-overview-greeting,
+  #mobileApp .mobile-overview-panel,
+  #mobileApp .mobile-draw-card,
+  #mobileApp .mobile-overview-summary button {
+    border-color: var(--ov-line);
+    border-radius: 12px;
+    background: var(--ov-surface);
+    color: var(--ov-ink);
+    box-shadow: 0 1px 1px rgba(0, 0, 0, .035);
+  }
+
+  #mobileApp .mobile-overview-greeting {
+    position: relative;
+    overflow: hidden;
+    padding: 18px;
+    background: var(--ov-surface);
+  }
+
+  #mobileApp .mobile-overview-greeting::after {
+    content: "";
+    position: absolute;
+    top: -60px;
+    right: -58px;
+    width: 165px;
+    height: 165px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 237, 100, .17), rgba(0, 237, 100, 0) 70%);
+    pointer-events: none;
+  }
+
+  #mobileApp .mobile-overview-greeting > * { position: relative; z-index: 1; }
+  #mobileApp .mobile-overview-greeting > span,
+  #mobileApp .mobile-overview-panel header > span,
+  #mobileApp .mobile-draw-card header > span {
+    color: var(--ov-muted);
+    font-size: 9px;
+    letter-spacing: .06em;
+  }
+
+  #mobileApp .mobile-overview-greeting h2 {
+    color: var(--ov-ink);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 30px;
+    letter-spacing: -1px;
+  }
+
+  #mobileApp .mobile-overview-greeting p { color: var(--ov-body); }
+  #mobileApp .mobile-overview-summary button { min-height: 60px; padding: 12px 13px; }
+  #mobileApp .mobile-overview-summary span { color: var(--ov-body); font-weight: 600; }
+  #mobileApp .mobile-overview-summary b { color: var(--ov-ink); font-weight: 600; }
+  #mobileApp .mobile-overview-panel { padding: 16px; }
+  #mobileApp .mobile-overview-panel h3 { color: var(--ov-ink); font-weight: 600; }
+  #mobileApp .mobile-overview-task,
+  #mobileApp .mobile-overview-row { border-color: var(--ov-line); }
+  #mobileApp .mobile-overview-task input { accent-color: var(--ov-accent); color-scheme: light; }
+  body[data-theme="dark"] #mobileApp .mobile-overview-task input { color-scheme: dark; }
+  #mobileApp .mobile-overview-task strong,
+  #mobileApp .mobile-overview-row strong { color: var(--ov-ink); font-weight: 600; }
+  #mobileApp .mobile-overview-task small,
+  #mobileApp .mobile-overview-row small,
+  #mobileApp .mobile-overview-row > b,
+  #mobileApp .mobile-overview-empty { color: var(--ov-muted); }
+  #mobileApp .mobile-overview-row { background: transparent; color: var(--ov-ink); }
+  #mobileApp .mobile-overview-quick button {
+    border-color: var(--ov-line);
+    border-radius: 8px;
+    background: var(--ov-surface);
+    color: var(--ov-ink);
+    font-weight: 600;
+  }
+
+  #mobileApp .mobile-overview-quick button:active {
+    border-color: var(--ov-accent-deep);
+    background: var(--ov-accent-soft);
+  }
+
+  #mobileApp .mobile-draw-card { gap: 10px; padding: 17px; background: var(--ov-surface); }
+  #mobileApp .mobile-draw-card header { text-align: left; }
+  #mobileApp .mobile-draw-card header h3 { color: var(--ov-ink); font-weight: 600; }
+  #mobileApp .mobile-draw-gauge {
+    width: 38px;
+    height: 132px;
+    border: 1px solid var(--ov-line);
+    background: var(--ov-soft);
+  }
+
+  #mobileApp .mobile-draw-gauge i {
+    background: linear-gradient(to top, var(--ov-accent-deep), var(--ov-accent));
+  }
+
+  #mobileApp .mobile-draw-machine strong { color: var(--ov-ink); font-size: 48px; font-weight: 600; }
+  #mobileApp .mobile-draw-machine span,
+  #mobileApp .mobile-draw-card > p,
+  #mobileApp .mobile-draw-ranking > span,
+  #mobileApp .mobile-draw-ranking small { color: var(--ov-muted); }
+  #mobileApp .mobile-draw-card > button:not(.mobile-draw-ranking-button) {
+    border-radius: 8px;
+    background: var(--ov-accent);
+    font-weight: 700;
+  }
+
+  #mobileApp .mobile-draw-card > em { color: var(--ov-danger); }
+  #mobileApp .mobile-draw-ranking > span.is-me { background: var(--ov-accent-soft); color: var(--ov-ink); }
+  #mobileApp .mobile-draw-ranking-button { color: var(--ov-accent-deep); }
+  body[data-theme="dark"] #mobileApp .mobile-draw-ranking-button { color: #57f391; }
+}
