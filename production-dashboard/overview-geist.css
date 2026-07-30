@@ -1,8 +1,11 @@
 /* Personalized overview and server-backed daily draw. */
 #overviewView.overview-dashboard {
   --overview-border: rgba(0, 0, 0, .09);
-  display: grid;
   gap: 18px;
+}
+
+#overviewView.overview-dashboard.active {
+  display: grid;
 }
 
 #overviewView .overview-top-grid {
