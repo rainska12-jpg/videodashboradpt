@@ -411,3 +411,184 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
   #mobileApp .mobile-draw-ranking-button { color: var(--ov-accent-deep); }
   body[data-theme="dark"] #mobileApp .mobile-draw-ranking-button { color: #57f391; }
 }
+
+/* Mobile overview hardening: keep checkbox geometry and draw modal theme isolated. */
+@media (max-width: 768px) {
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task {
+    grid-template-columns: 22px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task > input[type="checkbox"] {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    display: inline-grid !important;
+    place-content: center !important;
+    align-self: center !important;
+    flex: 0 0 20px !important;
+    width: 20px !important;
+    min-width: 20px !important;
+    max-width: 20px !important;
+    height: 20px !important;
+    min-height: 20px !important;
+    max-height: 20px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1.5px solid #8f8f8f !important;
+    border-radius: 5px !important;
+    background: var(--ov-surface) !important;
+    color: var(--ov-ink) !important;
+    box-shadow: none !important;
+    color-scheme: light !important;
+    transform: none !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task > input[type="checkbox"]::after {
+    content: "" !important;
+    width: 9px !important;
+    height: 5px !important;
+    border: 0 !important;
+    border-left: 2px solid #041a0d !important;
+    border-bottom: 2px solid #041a0d !important;
+    background: transparent !important;
+    transform: rotate(-45deg) scale(0) !important;
+    transform-origin: center !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task > input[type="checkbox"]:checked {
+    border-color: var(--ov-accent) !important;
+    background: var(--ov-accent) !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task > input[type="checkbox"]:checked::after {
+    transform: rotate(-45deg) scale(1) !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task > input[type="checkbox"] {
+    border-color: #66716b !important;
+    background: #111512 !important;
+    color-scheme: dark !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-modal {
+    align-items: end !important;
+    padding: 0 !important;
+    background: rgba(23, 23, 23, .34) !important;
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card {
+    width: 100% !important;
+    max-height: min(78svh, 680px) !important;
+    border: 1px solid #ebebeb !important;
+    border-bottom: 0 !important;
+    border-radius: 18px 18px 0 0 !important;
+    background: #ffffff !important;
+    color: #171717 !important;
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, .12) !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header {
+    align-items: flex-start !important;
+    padding: 20px 20px 16px !important;
+    border-bottom: 1px solid #ebebeb !important;
+    background: #ffffff !important;
+    color: #171717 !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header .eyebrow {
+    color: #8f8f8f !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header h2 {
+    color: #171717 !important;
+    font-size: 20px !important;
+    font-weight: 600 !important;
+    letter-spacing: -.4px !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header p:last-child {
+    color: #6f6f6f !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header button {
+    flex: 0 0 40px !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    max-width: 40px !important;
+    height: 40px !important;
+    min-height: 40px !important;
+    max-height: 40px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 1px solid #ebebeb !important;
+    border-radius: 50% !important;
+    background: #f7f7f7 !important;
+    color: #171717 !important;
+    box-shadow: none !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list {
+    max-height: calc(78svh - 116px) !important;
+    padding: 8px 16px calc(18px + env(safe-area-inset-bottom)) !important;
+    overflow-y: auto !important;
+    background: #ffffff !important;
+    color: #171717 !important;
+    overscroll-behavior: contain;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article {
+    min-height: 52px !important;
+    border-bottom: 1px solid #ebebeb !important;
+    background: transparent !important;
+    color: #171717 !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-me {
+    border-bottom-color: transparent !important;
+    background: #eafff2 !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article :is(b, span, strong) {
+    color: #171717 !important;
+  }
+
+  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-pending strong {
+    color: #8f8f8f !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card,
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header,
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list {
+    border-color: #29302c !important;
+    background: #111512 !important;
+    color: #f2f5f3 !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header h2,
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article :is(b, span, strong) {
+    color: #f2f5f3 !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header p:last-child,
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header .eyebrow,
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-pending strong {
+    color: #89928d !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header button {
+    border-color: #29302c !important;
+    background: #191e1b !important;
+    color: #f2f5f3 !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article {
+    border-bottom-color: #29302c !important;
+  }
+
+  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-me {
+    background: #0d2b18 !important;
+  }
+}
