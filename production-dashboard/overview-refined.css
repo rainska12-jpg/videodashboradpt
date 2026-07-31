@@ -733,3 +733,120 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
       "draw";
   }
 }
+
+/* Compact horizontal daily draw card. Desktop only; mobile renderer is unchanged. */
+@media (min-width: 769px) {
+  #overviewView .draw-panel-content {
+    grid-template-columns: minmax(0, 1.15fr) minmax(142px, .85fr);
+    grid-template-areas:
+      "title ranking"
+      "machine ranking"
+      "message ranking"
+      "action more";
+    grid-template-rows: auto auto minmax(24px, 1fr) auto;
+    align-items: stretch;
+    column-gap: 16px;
+    row-gap: 5px;
+  }
+
+  #overviewView .draw-title h3 {
+    margin-top: 4px;
+    font-size: 16px;
+  }
+
+  #overviewView .draw-machine {
+    grid-area: machine;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "score gauge";
+    gap: 10px;
+    min-height: 0;
+    height: auto;
+  }
+
+  #overviewView .draw-gauge {
+    grid-area: gauge;
+    align-self: center;
+    width: 100%;
+    height: 14px;
+    border-width: 1px;
+    border-radius: 999px;
+  }
+
+  #overviewView .draw-gauge-fill {
+    inset: 3px;
+    border-radius: 999px;
+    background: linear-gradient(to right, var(--ov-accent-deep), var(--ov-accent));
+    transform: scaleX(var(--draw-level, 0));
+    transform-origin: left;
+  }
+
+  #overviewView .draw-panel.is-drawing .draw-gauge-fill {
+    animation: drawPunchHorizontal 1.7s cubic-bezier(.18, .8, .25, 1) both;
+  }
+
+  #overviewView .draw-score {
+    grid-area: score;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    text-align: left;
+  }
+
+  #overviewView .draw-score strong {
+    font-size: 24px;
+    letter-spacing: -.04em;
+  }
+
+  #overviewView .draw-score span {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  #overviewView .draw-button {
+    grid-area: action;
+    align-self: end;
+    min-height: 32px;
+  }
+
+  #overviewView .draw-ranking-mini {
+    grid-area: ranking;
+    display: grid;
+    align-content: start;
+    gap: 3px;
+    min-width: 0;
+    padding-left: 14px;
+    border-left: 1px solid var(--ov-line);
+  }
+
+  #overviewView .draw-ranking-mini h4 {
+    margin: 0 0 3px;
+    color: var(--ov-body);
+    font-size: 9px;
+  }
+
+  #overviewView .draw-rank-row {
+    min-height: 25px;
+    padding: 3px 5px;
+    font-size: 9px;
+  }
+
+  #overviewView .draw-ranking-all {
+    grid-area: more;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1120px) {
+  #overviewView .draw-panel-content {
+    grid-template-columns: minmax(0, 1fr) minmax(132px, .86fr);
+  }
+}
+
+@keyframes drawPunchHorizontal {
+  0% { transform: scaleX(0); }
+  48% { transform: scaleX(.99); }
+  61% { transform: scaleX(.91); }
+  70% { transform: scaleX(1); }
+  79% { transform: scaleX(.94); }
+  87% { transform: scaleX(.99); }
+  100% { transform: scaleX(var(--draw-level)); }
+}

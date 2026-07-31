@@ -3172,7 +3172,7 @@ function renderDrawPanel() {
   const result = overviewDrawData?.result;
   const score = Number(result?.drawScore || result?.draw_score || 0);
   const message = result?.drawMessage || result?.draw_message || "버튼을 눌러 오늘의 제비 점수를 확인해 보세요.";
-  const ranking = (overviewDrawData?.ranking || []).slice(0, 5);
+  const ranking = (overviewDrawData?.ranking || []).slice(0, 3);
   const disabled = overviewDrawSubmitting || overviewDrawAnimating || Boolean(result);
   const buttonLabel = overviewDrawSubmitting ? "저장 중…" : result ? "오늘 참여 완료" : "제비뽑기";
   panel?.style.setProperty("--draw-level", String(Math.max(0, Math.min(1, score / 100))));
