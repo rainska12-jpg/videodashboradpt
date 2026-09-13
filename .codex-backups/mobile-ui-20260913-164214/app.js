@@ -2637,18 +2637,9 @@ function openMultiDropdown(anchor, options, selected, onChange, formatOptionLabe
   });
 }
 
-function closeDropdownOnScroll(event) {
-  const layer = $("#dropdownLayer");
-  if (!layer?.classList.contains("open")) return;
-  // Keep the options usable while scrolling inside the dropdown itself.
-  if (event.target instanceof Node && layer.contains(event.target)) return;
-  closeDropdown();
-}
-
-document.addEventListener("scroll", closeDropdownOnScroll, { capture: true, passive: true });
 window.addEventListener("resize", repositionActiveDropdown);
 window.visualViewport?.addEventListener("resize", repositionActiveDropdown);
-window.visualViewport?.addEventListener("scroll", closeDropdownOnScroll);
+window.visualViewport?.addEventListener("scroll", repositionActiveDropdown);
 
 function renderDateButton({ target, value, onSelect, compact = false, disabled = false }) {
   if (!target) return;
@@ -14405,6 +14396,11 @@ async function saveMobileProfile(form) {
     showToast("프로필을 저장하지 못했습니다. 관리자에게 문의해주세요.");
   }
 }
+
+document.addEventListener("gesturestart", (event) => event.preventDefault(), { passive: false });
+document.addEventListener("touchmove", (event) => {
+  if (event.touches.length > 1) event.preventDefault();
+}, { passive: false });
 
 function closeMobileAddSheet({ navigate = true } = {}) {
   if (navigate && mobileAddMode === "task" && history.state?.mobileTaskCreate) {

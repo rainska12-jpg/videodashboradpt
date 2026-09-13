@@ -2637,18 +2637,9 @@ function openMultiDropdown(anchor, options, selected, onChange, formatOptionLabe
   });
 }
 
-function closeDropdownOnScroll(event) {
-  const layer = $("#dropdownLayer");
-  if (!layer?.classList.contains("open")) return;
-  // Keep the options usable while scrolling inside the dropdown itself.
-  if (event.target instanceof Node && layer.contains(event.target)) return;
-  closeDropdown();
-}
-
-document.addEventListener("scroll", closeDropdownOnScroll, { capture: true, passive: true });
 window.addEventListener("resize", repositionActiveDropdown);
 window.visualViewport?.addEventListener("resize", repositionActiveDropdown);
-window.visualViewport?.addEventListener("scroll", closeDropdownOnScroll);
+window.visualViewport?.addEventListener("scroll", repositionActiveDropdown);
 
 function renderDateButton({ target, value, onSelect, compact = false, disabled = false }) {
   if (!target) return;

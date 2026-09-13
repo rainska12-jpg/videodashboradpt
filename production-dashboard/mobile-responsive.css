@@ -1,0 +1,177 @@
+/* Shared mobile corrections, loaded after the screen-specific styles. */
+@media (max-width: 768px) {
+  .auth-overlay {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    align-items: safe center;
+    padding-top: max(12px, env(safe-area-inset-top));
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  /* Keep text fields readable without focus zoom on mobile browsers. */
+  body :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]), textarea, select) {
+    min-width: 0;
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  #mobileApp,
+  #mobileAddForm .mobile-add-body,
+  #mobileAddForm .mobile-add-body > section {
+    min-width: 0;
+  }
+
+  #mobileAddForm .mobile-add-body {
+    min-height: 0;
+  }
+
+  #mobileApp .mobile-filter-chips {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  #mobileApp .mobile-filter-chips button {
+    min-width: 0;
+    padding-inline: 6px;
+  }
+
+  .mobile-topbar.mobile-v2 .mobile-icon-btn,
+  #mobileApp :is(.mobile-filter-chips button, .mobile-sort-trigger, .mobile-owner-filter-trigger, .mobile-hide-done-toggle),
+  #mobileAddForm header button {
+    min-height: 44px;
+  }
+
+  /* Registration sheets must cover the fixed bottom navigation (z-index 180). */
+  #mobileAddSheet.open {
+    z-index: 220;
+  }
+
+  body:has(#mobileAddSheet.open) {
+    overflow: hidden;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) {
+    max-height: 94dvh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border: 1px solid var(--mobile-video-line);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    box-shadow: var(--mobile-video-float);
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) header {
+    grid-template-columns: 56px minmax(0, 1fr) 84px;
+    gap: 8px;
+    border-bottom: 1px solid var(--mobile-video-line);
+    background: var(--mobile-video-elevated);
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) header strong {
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) header button {
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    padding-inline: 6px;
+    background: var(--mobile-video-elevated);
+    color: var(--mobile-video-body);
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) .mobile-add-body section {
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 12px;
+    background: var(--mobile-video-elevated);
+    box-shadow: var(--mobile-video-shadow);
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) :is(h3, .mobile-add-body label) {
+    color: var(--mobile-video-body);
+    font-weight: 500;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) :is(input, select, textarea, .mobile-check-list label) {
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    box-shadow: none;
+  }
+
+  body[data-theme="dark"] #mobileAddForm:is([data-mode="project"], [data-mode="work"]) :is(input, select, textarea) {
+    color-scheme: dark;
+  }
+
+  #mobileAddForm[data-mode="work"] :is(.mobile-task-date-field, .mobile-schedule-time-field) > span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--mobile-video-body);
+    font-size: 12px;
+  }
+
+  #mobileAddForm[data-mode="work"] :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    border: 1px solid var(--mobile-video-line);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--mobile-video-canvas);
+    color: var(--mobile-video-ink);
+    font-size: 13px;
+    text-align: left;
+  }
+
+  #mobileAddForm[data-mode="work"] :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger) svg {
+    flex: 0 0 16px;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.5;
+  }
+
+  #mobileAddForm[data-mode="work"] :is(.mobile-task-date-trigger, .mobile-schedule-time-trigger):disabled {
+    opacity: 0.45;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) .mobile-check-list label,
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) .mobile-toggle-line {
+    color: var(--mobile-video-body) !important;
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) footer {
+    border-top: 1px solid var(--mobile-video-line);
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+    background: var(--mobile-video-elevated);
+  }
+
+  #mobileAddForm:is([data-mode="project"], [data-mode="work"]) :is(header button[type="submit"], footer button) {
+    min-height: 44px;
+    border-color: var(--mobile-video-accent);
+    border-radius: 6px;
+    background: var(--mobile-video-accent);
+    color: #06140a;
+    font-size: 12px;
+    font-weight: 600;
+  }
+}
+
+@media (max-width: 380px) {
+  #mobileApp :is(.mobile-video-summary-card, .mobile-work-summary-card, .mobile-task-summary-card) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #mobileApp :is(.mobile-video-summary-card, .mobile-work-summary-card, .mobile-task-summary-card) > div:last-child {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
