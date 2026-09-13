@@ -28,14 +28,13 @@ body[data-theme="dark"] #overviewView.overview-dashboard {
 }
 
 #overviewView .overview-top-grid {
-  grid-template-columns: minmax(0, 1fr) 248px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
 #overviewView .overview-main-column { gap: 20px; }
 #overviewView .overview-greeting,
-#overviewView .overview-panel,
-#overviewView .draw-panel {
+#overviewView .overview-panel{
   border-color: var(--ov-line);
   border-radius: 12px;
   background: var(--ov-surface);
@@ -49,8 +48,7 @@ body[data-theme="dark"] #overviewView.overview-dashboard {
   background: var(--ov-surface);
 }
 
-#overviewView .overview-greeting::after,
-#overviewView .draw-panel::after {
+#overviewView .overview-greeting::after{
   content: "";
   position: absolute;
   border-radius: 50%;
@@ -168,53 +166,10 @@ body[data-theme="dark"] #overviewView .overview-task-check input { color-scheme:
 }
 
 #overviewView .overview-quick-actions small { color: var(--ov-muted); }
-#overviewView .draw-panel { min-height: 400px; overflow: hidden; background: var(--ov-surface); }
-#overviewView .draw-panel::before { display: none; }
-#overviewView .draw-panel::after {
-  top: -70px;
-  left: 50%;
-  width: 210px;
-  height: 190px;
-  transform: translateX(-50%);
-}
-
-#overviewView .draw-panel-content { padding: 18px 16px 16px; }
-#overviewView .draw-title { text-align: left; }
-#overviewView .draw-title small,
-#overviewView .draw-message,
-#overviewView .draw-ranking-mini h4,
-#overviewView .draw-rank-row { color: var(--ov-muted); }
-#overviewView .draw-title h3,
-#overviewView .draw-score strong { color: var(--ov-ink); }
-#overviewView .draw-machine { min-height: 120px; }
-#overviewView .draw-gauge {
-  width: 34px;
-  height: 118px;
-  border: 1px solid var(--ov-line);
-  background: var(--ov-soft);
-  box-shadow: none;
-}
-
-#overviewView .draw-gauge-fill {
-  background: linear-gradient(to top, var(--ov-accent-deep), var(--ov-accent));
-  box-shadow: none;
-}
-
-#overviewView .draw-button {
-  min-height: 40px;
-  border-radius: 8px;
-  background: var(--ov-accent);
-  box-shadow: none;
-}
-
-#overviewView .draw-button:active,
-#overviewView .draw-button.is-pressed { transform: none; box-shadow: none; }
-#overviewView .draw-rank-row.is-me { background: var(--ov-accent-soft); color: var(--ov-ink); }
-#overviewView .draw-ranking-all { color: var(--ov-accent-deep); }
-body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-quick-actions button > span, .draw-ranking-all) { color: #57f391; }
+body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-quick-actions button > span) { color: #57f391; }
 
 @media (max-width: 1120px) {
-  #overviewView .overview-top-grid { grid-template-columns: minmax(0, 1fr) 228px; }
+  #overviewView .overview-top-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 900px) {
@@ -306,7 +261,6 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
   #mobileApp .mobile-overview { gap: 12px; color: var(--ov-ink); }
   #mobileApp .mobile-overview-greeting,
   #mobileApp .mobile-overview-panel,
-  #mobileApp .mobile-draw-card,
   #mobileApp .mobile-overview-summary button {
     border-color: var(--ov-line);
     border-radius: 12px;
@@ -336,8 +290,7 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
 
   #mobileApp .mobile-overview-greeting > * { position: relative; z-index: 1; }
   #mobileApp .mobile-overview-greeting > span,
-  #mobileApp .mobile-overview-panel header > span,
-  #mobileApp .mobile-draw-card header > span {
+  #mobileApp .mobile-overview-panel header > span{
     color: var(--ov-muted);
     font-size: 9px;
     letter-spacing: .06em;
@@ -380,39 +333,9 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
     border-color: var(--ov-accent-deep);
     background: var(--ov-accent-soft);
   }
-
-  #mobileApp .mobile-draw-card { gap: 10px; padding: 17px; background: var(--ov-surface); }
-  #mobileApp .mobile-draw-card header { text-align: left; }
-  #mobileApp .mobile-draw-card header h3 { color: var(--ov-ink); font-weight: 600; }
-  #mobileApp .mobile-draw-gauge {
-    width: 38px;
-    height: 132px;
-    border: 1px solid var(--ov-line);
-    background: var(--ov-soft);
-  }
-
-  #mobileApp .mobile-draw-gauge i {
-    background: linear-gradient(to top, var(--ov-accent-deep), var(--ov-accent));
-  }
-
-  #mobileApp .mobile-draw-machine strong { color: var(--ov-ink); font-size: 48px; font-weight: 600; }
-  #mobileApp .mobile-draw-machine span,
-  #mobileApp .mobile-draw-card > p,
-  #mobileApp .mobile-draw-ranking > span,
-  #mobileApp .mobile-draw-ranking small { color: var(--ov-muted); }
-  #mobileApp .mobile-draw-card > button:not(.mobile-draw-ranking-button) {
-    border-radius: 8px;
-    background: var(--ov-accent);
-    font-weight: 700;
-  }
-
-  #mobileApp .mobile-draw-card > em { color: var(--ov-danger); }
-  #mobileApp .mobile-draw-ranking > span.is-me { background: var(--ov-accent-soft); color: var(--ov-ink); }
-  #mobileApp .mobile-draw-ranking-button { color: var(--ov-accent-deep); }
-  body[data-theme="dark"] #mobileApp .mobile-draw-ranking-button { color: #57f391; }
 }
 
-/* Mobile overview hardening: keep checkbox geometry and draw modal theme isolated. */
+/* Mobile overview checkbox geometry. */
 @media (max-width: 768px) {
   body:has(#mobileApp[data-mobile-section="overview"]) #mobileApp .mobile-overview-task {
     grid-template-columns: 22px minmax(0, 1fr);
@@ -469,384 +392,4 @@ body[data-theme="dark"] #overviewView :is(.overview-activity-avatar, .overview-q
     background: #111512 !important;
     color-scheme: dark !important;
   }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-modal {
-    align-items: end !important;
-    padding: 0 !important;
-    background: rgba(23, 23, 23, .34) !important;
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card {
-    width: 100% !important;
-    max-height: min(78svh, 680px) !important;
-    border: 1px solid #ebebeb !important;
-    border-bottom: 0 !important;
-    border-radius: 18px 18px 0 0 !important;
-    background: #ffffff !important;
-    color: #171717 !important;
-    padding-bottom: env(safe-area-inset-bottom) !important;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, .12) !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header {
-    align-items: flex-start !important;
-    padding: 20px 20px 16px !important;
-    border-bottom: 1px solid #ebebeb !important;
-    background: #ffffff !important;
-    color: #171717 !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header .eyebrow {
-    color: #8f8f8f !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header h2 {
-    color: #171717 !important;
-    font-size: 20px !important;
-    font-weight: 600 !important;
-    letter-spacing: -.4px !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header p:last-child {
-    color: #6f6f6f !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header button {
-    flex: 0 0 40px !important;
-    width: 40px !important;
-    min-width: 40px !important;
-    max-width: 40px !important;
-    height: 40px !important;
-    min-height: 40px !important;
-    max-height: 40px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: 1px solid #ebebeb !important;
-    border-radius: 50% !important;
-    background: #f7f7f7 !important;
-    color: #171717 !important;
-    box-shadow: none !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list {
-    max-height: calc(78svh - 116px) !important;
-    padding: 8px 16px calc(18px + env(safe-area-inset-bottom)) !important;
-    overflow-y: auto !important;
-    background: #ffffff !important;
-    color: #171717 !important;
-    overscroll-behavior: contain;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article {
-    min-height: 52px !important;
-    border-bottom: 1px solid #ebebeb !important;
-    background: transparent !important;
-    color: #171717 !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-me {
-    border-bottom-color: transparent !important;
-    background: #eafff2 !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article :is(b, span, strong) {
-    color: #171717 !important;
-  }
-
-  body:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-pending strong {
-    color: #8f8f8f !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card,
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header,
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list {
-    border-color: #29302c !important;
-    background: #111512 !important;
-    color: #f2f5f3 !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header h2,
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article :is(b, span, strong) {
-    color: #f2f5f3 !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header p:last-child,
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header .eyebrow,
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-pending strong {
-    color: #89928d !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-card header button {
-    border-color: #29302c !important;
-    background: #191e1b !important;
-    color: #f2f5f3 !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article {
-    border-bottom-color: #29302c !important;
-  }
-
-  body[data-theme="dark"]:has(#mobileApp[data-mobile-section="overview"]) .draw-ranking-list article.is-me {
-    background: #0d2b18 !important;
-  }
-}
-
-/* Desktop overview: align the draw card with the summary row. */
-@media (min-width: 769px) {
-  #overviewView .overview-top-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(360px, 420px);
-    grid-template-areas:
-      "greeting greeting"
-      "summary draw";
-    align-items: stretch;
-    gap: 18px 16px;
-  }
-
-  #overviewView .overview-main-column {
-    display: contents;
-  }
-
-  #overviewView .overview-greeting {
-    grid-area: greeting;
-  }
-
-  #overviewView .overview-main-column > section[aria-labelledby="overviewSummaryTitle"] {
-    grid-area: summary;
-    min-width: 0;
-  }
-
-  #overviewView .draw-panel {
-    grid-area: draw;
-    align-self: stretch;
-    min-height: 0;
-    height: auto;
-  }
-
-  #overviewView .draw-panel-content {
-    grid-template-columns: minmax(112px, .9fr) 88px minmax(138px, 1.2fr);
-    grid-template-areas:
-      "title machine action"
-      "title machine message"
-      "title machine more";
-    grid-template-rows: auto 1fr auto;
-    align-items: center;
-    gap: 6px 10px;
-    min-height: 100%;
-    padding: 14px 16px;
-  }
-
-  #overviewView .draw-title {
-    grid-area: title;
-    align-self: start;
-  }
-
-  #overviewView .draw-title h3 {
-    margin-top: 7px;
-    font-size: 17px;
-    line-height: 1.3;
-  }
-
-  #overviewView .draw-machine {
-    grid-area: machine;
-    grid-template-columns: 22px minmax(0, 1fr);
-    gap: 8px;
-    min-height: 0;
-    height: 78px;
-  }
-
-  #overviewView .draw-gauge {
-    width: 22px;
-    height: 78px;
-    border-width: 1px;
-    border-radius: 12px;
-  }
-
-  #overviewView .draw-gauge-fill {
-    inset: 4px;
-    border-radius: 8px;
-  }
-
-  #overviewView .draw-score strong {
-    font-size: 34px;
-  }
-
-  #overviewView .draw-button {
-    grid-area: action;
-    align-self: end;
-    min-height: 36px;
-    border-radius: 7px;
-  }
-
-  #overviewView .draw-message {
-    grid-area: message;
-    display: -webkit-box;
-    overflow: hidden;
-    min-height: 0;
-    margin: 0;
-    color: var(--ov-muted);
-    font-size: 9px;
-    line-height: 1.4;
-    text-align: left;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-  }
-
-  #overviewView .draw-error {
-    grid-area: message;
-    align-self: end;
-    margin: 0;
-    text-align: left;
-  }
-
-  #overviewView .draw-ranking-mini {
-    display: none;
-  }
-
-  #overviewView .draw-ranking-all {
-    grid-area: more;
-    align-self: end;
-    justify-self: end;
-    min-height: 24px;
-    padding: 0;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1120px) {
-  #overviewView .overview-top-grid {
-    grid-template-columns: minmax(0, 1fr) 340px;
-  }
-
-  #overviewView .draw-panel-content {
-    grid-template-columns: minmax(100px, .9fr) 80px minmax(120px, 1.1fr);
-    padding-inline: 14px;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 900px) {
-  #overviewView .overview-top-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "greeting"
-      "summary"
-      "draw";
-  }
-}
-
-/* Compact horizontal daily draw card. Desktop only; mobile renderer is unchanged. */
-@media (min-width: 769px) {
-  #overviewView .draw-panel-content {
-    grid-template-columns: minmax(0, 1.15fr) minmax(142px, .85fr);
-    grid-template-areas:
-      "title ranking"
-      "machine ranking"
-      "message ranking"
-      "action more";
-    grid-template-rows: auto auto minmax(24px, 1fr) auto;
-    align-items: stretch;
-    column-gap: 16px;
-    row-gap: 5px;
-  }
-
-  #overviewView .draw-title h3 {
-    margin-top: 4px;
-    font-size: 16px;
-  }
-
-  #overviewView .draw-machine {
-    grid-area: machine;
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: "score gauge";
-    gap: 10px;
-    min-height: 0;
-    height: auto;
-  }
-
-  #overviewView .draw-gauge {
-    grid-area: gauge;
-    align-self: center;
-    width: 100%;
-    height: 14px;
-    border-width: 1px;
-    border-radius: 999px;
-  }
-
-  #overviewView .draw-gauge-fill {
-    inset: 3px;
-    border-radius: 999px;
-    background: linear-gradient(to right, var(--ov-accent-deep), var(--ov-accent));
-    transform: scaleX(var(--draw-level, 0));
-    transform-origin: left;
-  }
-
-  #overviewView .draw-panel.is-drawing .draw-gauge-fill {
-    animation: drawPunchHorizontal 1.7s cubic-bezier(.18, .8, .25, 1) both;
-  }
-
-  #overviewView .draw-score {
-    grid-area: score;
-    display: flex;
-    align-items: baseline;
-    gap: 4px;
-    text-align: left;
-  }
-
-  #overviewView .draw-score strong {
-    font-size: 24px;
-    letter-spacing: -.04em;
-  }
-
-  #overviewView .draw-score span {
-    font-size: 9px;
-    white-space: nowrap;
-  }
-
-  #overviewView .draw-button {
-    grid-area: action;
-    align-self: end;
-    min-height: 32px;
-  }
-
-  #overviewView .draw-ranking-mini {
-    grid-area: ranking;
-    display: grid;
-    align-content: start;
-    gap: 3px;
-    min-width: 0;
-    padding-left: 14px;
-    border-left: 1px solid var(--ov-line);
-  }
-
-  #overviewView .draw-ranking-mini h4 {
-    margin: 0 0 3px;
-    color: var(--ov-body);
-    font-size: 9px;
-  }
-
-  #overviewView .draw-rank-row {
-    min-height: 25px;
-    padding: 3px 5px;
-    font-size: 9px;
-  }
-
-  #overviewView .draw-ranking-all {
-    grid-area: more;
-  }
-}
-
-@media (min-width: 769px) and (max-width: 1120px) {
-  #overviewView .draw-panel-content {
-    grid-template-columns: minmax(0, 1fr) minmax(132px, .86fr);
-  }
-}
-
-@keyframes drawPunchHorizontal {
-  0% { transform: scaleX(0); }
-  48% { transform: scaleX(.99); }
-  61% { transform: scaleX(.91); }
-  70% { transform: scaleX(1); }
-  79% { transform: scaleX(.94); }
-  87% { transform: scaleX(.99); }
-  100% { transform: scaleX(var(--draw-level)); }
 }

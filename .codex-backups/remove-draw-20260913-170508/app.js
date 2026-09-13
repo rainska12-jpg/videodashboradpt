@@ -856,6 +856,12 @@ let activeView = "overview";
 let activeDropdownAnchor = null;
 let activeDropdownMinWidth = 180;
 let overviewScheduleRange = "today";
+let overviewDrawData = null;
+let overviewDrawLoading = false;
+let overviewDrawSubmitting = false;
+let overviewDrawAnimating = false;
+let overviewDrawError = "";
+let overviewDrawLoadKey = "";
 const overviewTaskPending = new Set();
 
 const $ = (selector) => document.querySelector(selector);
@@ -3108,13 +3114,175 @@ function overviewActivityItems() {
     .slice(0, 10);
 }
 
+function normalizeDrawDashboard(data) {
+  if (!data || typeof data !== "object") return { result: null, ranking: [], members: [], drawDate: seoulNowParts().date };
+  return {
+    result: data.result || null,
+    ranking: Array.isArray(data.ranking) ? data.ranking : [],
+    members: Array.isArray(data.members) ? data.members : [],
+    drawDate: data.drawDate || data.draw_date || seoulNowParts().date
+  };
+}
+
+function dailyDrawErrorMessage(error, action = "load") {
+  const errorText = [error?.code, error?.message, error?.details, error?.hint].filter(Boolean).join(" ");
+  if (/PGRST202|PGRST205|schema cache|Could not find the function/i.test(errorText)) {
+    return "Supabase SQL Editor에서 daily_draw_migration.sql을 다시 실행한 뒤 새로고침해 주세요.";
+  }
+  if (/organization required|organization_id|null value/i.test(errorText)) {
+    return "사용자 조직 정보가 없습니다. 제비뽑기 마이그레이션을 다시 실행해 주세요.";
+  }
+  if (/approved user required|JWT|not authenticated/i.test(errorText)) {
+    return "로그인 세션을 확인한 뒤 다시 시도해 주세요.";
+  }
+  if (/permission denied|42501|row-level security/i.test(errorText)) {
+    return "제비뽑기 권한 설정이 적용되지 않았습니다. 마이그레이션을 다시 실행해 주세요.";
+  }
+  if (/active draw message not found/i.test(errorText)) {
+    return "제비뽑기 문구 데이터가 없습니다. 마이그레이션의 문구 등록 부분을 다시 실행해 주세요.";
+  }
+  return action === "save"
+    ? "결과를 저장하지 못했습니다. 네트워크 연결을 확인하고 다시 시도해 주세요."
+    : "제비뽑기 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
+}
+
+async function loadOverviewDraw({ force = false } = {}) {
+  const user = currentUser();
+  const loadKey = `${user?.id || "guest"}:${seoulNowParts().date}`;
+  if (!SUPABASE_ENABLED || !currentProfile?.approved) {
+    overviewDrawData = null;
+    overviewDrawLoading = false;
+    overviewDrawLoadKey = loadKey;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    return;
+  }
+  if (overviewDrawLoading || (!force && overviewDrawLoadKey === loadKey && overviewDrawData)) return;
+  overviewDrawLoading = true;
+  overviewDrawError = "";
+  overviewDrawLoadKey = loadKey;
+  renderOverviewDashboard();
+  try {
+    const { data, error } = await getSupabaseClient().rpc("get_today_draw_dashboard");
+    if (error) throw error;
+    overviewDrawData = normalizeDrawDashboard(data);
+  } catch (error) {
+    console.warn("Daily draw dashboard load failed", error);
+    overviewDrawError = dailyDrawErrorMessage(error, "load");
+  } finally {
+    overviewDrawLoading = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+  }
+}
+
+async function submitOverviewDraw() {
+  if (overviewDrawSubmitting || overviewDrawData?.result) return;
+  if (!SUPABASE_ENABLED || !currentProfile?.approved) {
+    overviewDrawError = "로그인과 Supabase 연결 후 참여할 수 있습니다.";
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    return;
+  }
+  overviewDrawSubmitting = true;
+  overviewDrawError = "";
+  renderOverviewDashboard();
+  if (isMobileViewport()) renderMobileDashboard();
+  try {
+    const { data, error } = await getSupabaseClient().rpc("draw_today");
+    if (error) throw error;
+    const next = normalizeDrawDashboard(data);
+    if (!next.result) throw new Error("empty draw result");
+    overviewDrawData = { ...next, ranking: overviewDrawData?.ranking || [], members: overviewDrawData?.members || [] };
+    overviewDrawAnimating = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    overviewDrawSubmitting = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+    window.setTimeout(async () => {
+      overviewDrawAnimating = false;
+      await loadOverviewDraw({ force: true });
+    }, overviewDrawAnimating ? 1800 : 0);
+  } catch (error) {
+    console.warn("Daily draw failed", error);
+    overviewDrawError = dailyDrawErrorMessage(error, "save");
+    overviewDrawSubmitting = false;
+    renderOverviewDashboard();
+    if (isMobileViewport()) renderMobileDashboard();
+  }
+}
+
+function drawCompetitionRank(index, rows) {
+  if (!rows[index]?.drawScore) return "";
+  if (index > 0 && rows[index - 1].drawScore === rows[index].drawScore) return drawCompetitionRank(index - 1, rows);
+  return index + 1;
+}
+
+function renderDrawPanel() {
+  const target = $("#drawPanelContent");
+  if (!target) return;
+  const panel = $("#drawPanel");
+  panel?.classList.toggle("is-drawing", overviewDrawAnimating);
+  const result = overviewDrawData?.result;
+  const score = Number(result?.drawScore || result?.draw_score || 0);
+  const message = result?.drawMessage || result?.draw_message || "버튼을 눌러 오늘의 제비 점수를 확인해 보세요.";
+  const ranking = (overviewDrawData?.ranking || []).slice(0, 3);
+  const disabled = overviewDrawSubmitting || overviewDrawAnimating || Boolean(result);
+  const buttonLabel = overviewDrawSubmitting ? "저장 중…" : result ? "오늘 참여 완료" : "제비뽑기";
+  panel?.style.setProperty("--draw-level", String(Math.max(0, Math.min(1, score / 100))));
+  target.innerHTML = `
+    <div class="draw-title"><small>ONE DRAW A DAY</small><h3 id="drawPanelTitle">오늘의 제비뽑기</h3></div>
+    <div class="draw-machine">
+      <div class="draw-gauge" aria-label="${score ? `제비 점수 ${score}점` : "아직 참여하지 않음"}"><i class="draw-gauge-fill"></i></div>
+      <div class="draw-score"><strong>${score || "—"}</strong><span>${score ? "제비 점수" : "미참여"}</span></div>
+    </div>
+    <button class="draw-button ${overviewDrawSubmitting ? "is-pressed" : ""}" data-draw-submit type="button" ${disabled ? "disabled" : ""}>${buttonLabel}</button>
+    <p class="draw-message">${esc(message)}</p>
+    ${overviewDrawError ? `<p class="draw-error">${esc(overviewDrawError)}</p>` : ""}
+    <div class="draw-ranking-mini">
+      <h4>오늘의 제비뽑기 랭킹</h4>
+      ${overviewDrawLoading
+        ? '<div class="draw-rank-row"><span>…</span><span>불러오는 중</span><b></b></div>'
+        : ranking.length
+          ? ranking.map((row, index) => `<div class="draw-rank-row ${row.isMe || row.is_me ? "is-me" : ""}"><b>${esc(row.rank || drawCompetitionRank(index, ranking))}</b><span>${esc(row.name || "구성원")}${row.isMe || row.is_me ? " · 나" : ""}</span><strong>${Number(row.drawScore || row.draw_score)}점</strong></div>`).join("")
+          : '<div class="draw-rank-row"><span>—</span><span>첫 참여를 기다립니다</span><b></b></div>'}
+    </div>
+    <button class="draw-ranking-all" data-draw-ranking-open type="button">전체 보기</button>
+  `;
+}
+
+function renderDrawRankingModal() {
+  const rows = overviewDrawData?.members || [];
+  const participating = rows.filter((row) => Number(row.drawScore || row.draw_score) > 0).length;
+  const summary = $("#drawRankingSummary");
+  const list = $("#drawRankingList");
+  if (summary) summary.textContent = `오늘 참여 ${participating} / ${rows.length}명`;
+  if (!list) return;
+  list.innerHTML = rows.length
+    ? rows.map((row, index) => {
+      const score = Number(row.drawScore || row.draw_score || 0);
+      const isMe = row.isMe || row.is_me;
+      return `<article class="${isMe ? "is-me" : ""} ${score ? "" : "is-pending"}"><b>${score ? esc(row.rank || drawCompetitionRank(index, rows)) : "·"}</b><span>${esc(row.name || "구성원")}${isMe ? " · 나" : ""}</span><strong>${score ? `${score}점` : "미참여"}</strong></article>`;
+    }).join("")
+    : '<div class="overview-empty">활성 구성원 정보를 불러오지 못했습니다.</div>';
+}
+
+function openDrawRanking(open = true) {
+  const modal = $("#drawRankingModal");
+  if (!modal) return;
+  if (open) renderDrawRankingModal();
+  modal.classList.toggle("open", open);
+  modal.setAttribute("aria-hidden", String(!open));
+}
+
 function renderOverviewDashboard() {
   const view = $("#overviewView");
   if (!view) return;
   const today = seoulNowParts().date;
   const summary = overviewSummary();
   $("#overviewGreeting").textContent = overviewGreetingText();
-  $("#overviewDailyLine").textContent = "오늘의 할 일과 제작 일정을 한눈에 확인하세요.";
+  $("#overviewDailyLine").textContent = overviewDrawData?.result?.drawMessage
+    || overviewDrawData?.result?.draw_message
+    || "우선순위 하나를 선명하게 정하면 오늘의 편집점도 또렷해집니다.";
   $("#overviewSummaryCards").innerHTML = [
     ["오늘 할 일", summary.todayTasks, "today", "오늘 마감 기준"],
     ["지연된 할 일", summary.overdueTasks, "overdue", "마감일 경과"],
@@ -3152,6 +3320,8 @@ function renderOverviewDashboard() {
   $("#overviewActivityList").innerHTML = logs.length
     ? logs.map((item) => `<article class="overview-activity-row"><span class="overview-activity-avatar">${esc((item.actor || "사").slice(0, 1))}</span><p><strong>${esc(item.actor)}님</strong>이 <strong>‘${esc(item.target)}’</strong> ${esc(item.description)}</p><time>${esc(overviewRelativeTime(item.createdAt))}</time></article>`).join("")
     : '<div class="overview-empty">최근 업무 변동이 없습니다.</div>';
+  renderDrawPanel();
+  if (!overviewDrawLoading && overviewDrawLoadKey !== `${currentUser()?.id || "guest"}:${today}`) loadOverviewDraw();
 }
 
 function renderKpis() {
@@ -13218,6 +13388,8 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-overview-project]", (button) => openProjectDetail(button.dataset.mobileOverviewProject));
   bind("[data-mobile-overview-schedule]", (button) => openMobileSection(button.dataset.mobileOverviewSchedule));
   bind("[data-mobile-overview-quick]", (button) => openMobileAddSheet(button.dataset.mobileOverviewQuick));
+  bind("[data-mobile-draw-submit]", () => submitOverviewDraw());
+  bind("[data-mobile-draw-ranking]", () => openDrawRanking(true));
   app.querySelectorAll("[data-mobile-overview-task-check]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       const item = taskOverviewItems().find((entry) =>
@@ -13733,22 +13905,34 @@ function bindMobileCoreActions(app) {
 
 function renderMobileOverview() {
   const summary = overviewSummary();
+  const result = overviewDrawData?.result;
+  const score = Number(result?.drawScore || result?.draw_score || 0);
   const priority = overviewPriorityItems().slice(0, 5);
   const projects = state.projects
     .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted)
     .sort((a, b) => String(a.finalDate || "9999-12-31").localeCompare(String(b.finalDate || "9999-12-31")))
     .slice(0, 4);
   const schedules = overviewScheduleItems().slice(0, 5);
+  const ranking = (overviewDrawData?.ranking || []).slice(0, 5);
   return `
     <div class="mobile-overview">
       <section class="mobile-overview-greeting">
         <span>TODAY · ASIA/SEOUL</span>
         <h2>${esc(overviewGreetingText())}</h2>
-        <p>오늘의 할 일과 제작 일정을 한눈에 확인하세요.</p>
+        <p>${esc(result?.drawMessage || result?.draw_message || "오늘 할 일 하나부터 또렷하게 시작해 보세요.")}</p>
       </section>
       <div class="mobile-overview-summary">
         ${[["오늘 할 일", summary.todayTasks, "today"], ["지연", summary.overdueTasks, "overdue"], ["오늘 일정", summary.todaySchedules, "schedule"], ["새 알림", summary.unread, "notifications"]].map(([label, count, action]) => `<button data-mobile-overview-summary="${action}" type="button"><span>${label}</span><b>${count}</b></button>`).join("")}
       </div>
+      <section class="mobile-draw-card ${overviewDrawAnimating ? "is-drawing" : ""}" style="--mobile-draw-level:${Math.max(0, Math.min(1, score / 100))}">
+        <header><span>ONE DRAW A DAY</span><h3>오늘의 제비뽑기</h3></header>
+        <div class="mobile-draw-machine"><div class="mobile-draw-gauge"><i></i></div><div><strong>${score || "—"}</strong><span>${score ? "제비 점수" : "미참여"}</span></div></div>
+        <button data-mobile-draw-submit type="button" ${overviewDrawSubmitting || overviewDrawAnimating || result ? "disabled" : ""}>${overviewDrawSubmitting ? "저장 중…" : result ? "오늘 참여 완료" : "제비뽑기"}</button>
+        <p>${esc(result?.drawMessage || result?.draw_message || "버튼을 눌러 오늘의 한마디를 확인하세요.")}</p>
+        ${overviewDrawError ? `<em>${esc(overviewDrawError)}</em>` : ""}
+        <div class="mobile-draw-ranking">${ranking.map((row, index) => `<span class="${row.isMe || row.is_me ? "is-me" : ""}"><b>${esc(row.rank || drawCompetitionRank(index, ranking))}</b><i>${esc(row.name || "구성원")}</i><strong>${Number(row.drawScore || row.draw_score)}점</strong></span>`).join("") || "<small>아직 참여자가 없습니다.</small>"}</div>
+        <button data-mobile-draw-ranking class="mobile-draw-ranking-button" type="button">전체 보기</button>
+      </section>
       <section class="mobile-overview-panel"><header><span>PRIORITY</span><h3>우선 처리할 업무</h3></header><div>
         ${priority.length ? priority.map((item) => `<label class="mobile-overview-task"><input data-mobile-overview-task-check="${esc(item.id)}" data-mobile-overview-task-source="${esc(item.source)}" type="checkbox" /><span><strong>${esc(item.task.text || "제목 없는 할 일")}</strong><small>${esc(item.sourceTitle)} · ${esc(overviewDueInfo(item.task.dueDate).label)}</small></span></label>`).join("") : '<p class="mobile-overview-empty">임박한 할 일이 없습니다.</p>'}
       </div></section>
@@ -15498,6 +15682,11 @@ $("#overviewView")?.addEventListener("click", async (event) => {
     if (quick === "schedule") openScheduleModal(seoulNowParts().date);
     return;
   }
+  if (event.target.closest("[data-draw-submit]")) {
+    await submitOverviewDraw();
+    return;
+  }
+  if (event.target.closest("[data-draw-ranking-open]")) openDrawRanking(true);
 });
 
 $("#overviewView")?.addEventListener("change", async (event) => {
@@ -15530,6 +15719,10 @@ $("#overviewView")?.addEventListener("change", async (event) => {
   renderAll();
 });
 
+$("#closeDrawRankingBtn")?.addEventListener("click", () => openDrawRanking(false));
+$("#drawRankingModal")?.addEventListener("click", (event) => {
+  if (event.target.id === "drawRankingModal") openDrawRanking(false);
+});
 
 $("#addProjectBtn").addEventListener("click", addProject);
 $("#addWorkBtn").addEventListener("click", addWork);

@@ -15,7 +15,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@500&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="./styles.css?v=88" />
-    <link rel="stylesheet" href="./overview-geist.css?v=4" />
+    <link rel="stylesheet" href="./overview-geist.css?v=3" />
     <link rel="stylesheet" href="./work-task.css?v=37" />
     <link rel="stylesheet" href="./work-studio.css" />
     <link rel="stylesheet" href="./mobile-studio.css?v=56" />
@@ -37,7 +37,7 @@
     <link rel="stylesheet" href="./mobile-more-geist.css?v=7" />
     <link rel="stylesheet" href="./mobile-board-geist.css?v=4" />
     <link rel="stylesheet" href="./mobile-studio-geist.css?v=9" />
-    <link rel="stylesheet" href="./overview-refined.css?v=5" />
+    <link rel="stylesheet" href="./overview-refined.css?v=4" />
     <link rel="stylesheet" href="./mobile-responsive.css?v=1" />
   </head>
   <body>
@@ -164,6 +164,9 @@
               </section>
             </div>
 
+            <aside id="drawPanel" class="draw-panel" aria-labelledby="drawPanelTitle">
+              <div id="drawPanelContent" class="draw-panel-content"></div>
+            </aside>
           </div>
 
           <section class="overview-panel overview-priority" aria-labelledby="overviewPriorityTitle">
@@ -969,6 +972,19 @@
         <div id="notificationCenterList" class="notification-center-list"></div>
       </div>
     </div>
+    <div id="drawRankingModal" class="modal-shell draw-ranking-modal" aria-hidden="true">
+      <section class="draw-ranking-card" role="dialog" aria-modal="true" aria-labelledby="drawRankingTitle">
+        <header>
+          <div>
+            <p class="eyebrow">TODAY'S DRAW</p>
+            <h2 id="drawRankingTitle">오늘의 제비뽑기 랭킹</h2>
+            <p id="drawRankingSummary">오늘 참여 현황</p>
+          </div>
+          <button id="closeDrawRankingBtn" type="button" aria-label="전체 제비뽑기 랭킹 닫기">×</button>
+        </header>
+        <div id="drawRankingList" class="draw-ranking-list"></div>
+      </section>
+    </div>
     <div id="desktopOrganizationModal" class="modal-shell desktop-organization-modal" aria-hidden="true">
       <section class="desktop-organization-card" role="dialog" aria-modal="true" aria-labelledby="desktopOrganizationTitle">
         <header>
@@ -999,6 +1015,6 @@
     <script src="/api/env.js"></script>
     <script src="./lib/monthly-report-core.js?v=14"></script>
     <script src="./lib/monthly-report-docx.js?v=7"></script>
-    <script src="./app.js?v=184"></script>
+    <script src="./app.js?v=183"></script>
   </body>
 </html>
