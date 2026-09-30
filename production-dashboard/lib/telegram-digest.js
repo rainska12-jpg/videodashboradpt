@@ -252,7 +252,11 @@ function studioEventBlock(event, owners, { includeCallTime = true, callTimeOffse
   rows.slice(0, 12).forEach((row) => {
     const type = cleanText(row.type || "스탭", 80);
     lines.push(`${studioStaffEmoji(type)} ${type} - ${studioOwnerLabel(row.owner, owners)}`);
+    const memo = cleanText(row.memo, 500);
+    if (memo) lines.push(`  ↳ ${memo}`);
   });
+  const memo = cleanText(event.memo, 1000);
+  if (memo) lines.push(`\n📝 일정 메모\n${memo}`);
   return lines.join("\n");
 }
 

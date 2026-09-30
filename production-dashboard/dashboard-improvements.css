@@ -1,0 +1,27 @@
+.overview-scope { width: fit-content; margin: 16px 0; }
+.memo-toolbar { flex-wrap: wrap; gap: 6px; }
+.memo-toolbar button { min-width: 44px; width: auto; min-height: 36px; padding: 6px 10px; font-size: 12px; }
+.autosave-hint { color: var(--muted, #707a76); font-size: 12px; margin: 8px 0; }
+.save-status { position: fixed; z-index: 20000; bottom: 18px; right: 20px; max-width: min(560px, calc(100vw - 32px)); display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border: 1px solid #d5dfda; border-radius: 12px; background: #fff; color: #315647; box-shadow: 0 3px 16px #0001; font-size: 12px; }
+.save-status[hidden], #saveLoadBlock[hidden] { display: none; }
+.save-status[data-status="error"], .save-status[data-status="conflict"], .save-status[data-status="storage-error"] { color: #963c14; border-color: #e9b383; background: #fff8ee; }
+.save-status button, .save-conflict-dialog button { background: #edf2ef; border: 1px solid #cbd8d0; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #234834; }
+#saveLoadBlock { position: fixed; inset: 0; z-index: 19999; display: grid; place-items: center; background: #f6f9f7f2; color: #345044; }
+.save-conflict-dialog { width: min(600px, calc(100vw - 32px)); max-height: 80dvh; overflow: auto; padding: 24px; border: 1px solid #cbd8d0; border-radius: 16px; background: #fff; color: #20362c; }
+.save-conflict-dialog::backdrop { background: #0006; }
+.save-conflict-dialog h2 { font-size: 19px; }
+.save-conflict-dialog p { font-size: 14px; line-height: 1.6; }
+.save-conflict-dialog ul { padding: 0; list-style: none; }
+.save-conflict-dialog li { white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; margin: 8px 0; background: #f5f8f6; border-radius: 8px; font-size: 13px; max-height: 240px; overflow: auto; }
+.save-conflict-dialog > div { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 760px) {
+  .save-status { bottom: calc(76px + env(safe-area-inset-bottom)); right: 12px; max-width: calc(100vw - 24px); }
+  .memo-toolbar button { min-height: 44px; }
+}
+
+#projectDetail .memo-toolbar, #workDetail .memo-toolbar { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; border: 1px solid #dce4df; border-radius: 10px; box-shadow: none; }
+#projectDetail .memo-toolbar button, #workDetail .memo-toolbar button { display: inline-flex; align-items: center; justify-content: center; width: auto; min-width: 44px; height: auto; min-height: 36px; padding: 6px 10px; font-size: 12px; white-space: nowrap; }
+#projectDetail .memo-toolbar button::before, #workDetail .memo-toolbar button::before { display: none; }
+@media (max-width: 760px) {
+  #projectDetail .memo-toolbar button, #workDetail .memo-toolbar button { min-height: 44px; padding-inline: 8px; }
+}

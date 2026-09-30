@@ -39,6 +39,7 @@
     <link rel="stylesheet" href="./mobile-studio-geist.css?v=9" />
     <link rel="stylesheet" href="./overview-refined.css?v=5" />
     <link rel="stylesheet" href="./mobile-responsive.css?v=1" />
+    <link rel="stylesheet" href="./dashboard-improvements.css?v=2" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -143,7 +144,6 @@
               <button id="webNotifyBtn" class="web-notification-button" type="button" aria-label="알림" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><b id="webNotifyCount">0</b></button>
               <section id="webNotificationPopup" class="web-notification-popup" aria-hidden="true"></section>
             </div>
-            <button id="exportBtn" class="pill primary">CSV 내보내기</button>
           </div>
         </header>
 
@@ -156,6 +156,7 @@
                 <p class="eyebrow">TODAY · ASIA/SEOUL</p>
                 <h2 id="overviewGreeting">좋은 하루예요.</h2>
                 <p id="overviewDailyLine">오늘의 제작 흐름을 차분하게 시작해 보세요.</p>
+                <div id="overviewScopeControls"></div>
               </header>
 
               <section aria-labelledby="overviewSummaryTitle">
@@ -458,16 +459,13 @@
         <div id="detailBasicTab" class="detail-tab-panel active">
           <div id="detailProperties" class="detail-properties"></div>
           <div class="memo-toolbar" aria-label="프로젝트 메모 서식">
-            <button type="button" aria-label="본문" data-memo-target="detailMemo" data-memo-format="text">T</button>
-            <button type="button" aria-label="제목 1" data-memo-target="detailMemo" data-memo-format="h1">H1</button>
-            <button type="button" aria-label="제목 2" data-memo-target="detailMemo" data-memo-format="h2">H2</button>
-            <button type="button" aria-label="제목 3" data-memo-target="detailMemo" data-memo-format="h3">H3</button>
-            <button type="button" aria-label="제목 4" data-memo-target="detailMemo" data-memo-format="h4">H4</button>
-            <button type="button" aria-label="굵게" data-memo-target="detailMemo" data-memo-format="bold">B</button>
-            <button type="button" aria-label="기울임" data-memo-target="detailMemo" data-memo-format="italic">/</button>
-            <button type="button" aria-label="밑줄" data-memo-target="detailMemo" data-memo-format="underline">U</button>
-            <button type="button" aria-label="서식 지우기" data-memo-target="detailMemo" data-memo-format="clear">Tx</button>
+            <button type="button" title="본문" aria-label="본문" data-memo-target="detailMemo" data-memo-format="text">본문</button>
+            <button type="button" title="제목" aria-label="제목" data-memo-target="detailMemo" data-memo-format="h2">제목</button>
+            <button type="button" title="굵게" aria-label="굵게" data-memo-target="detailMemo" data-memo-format="bold">굵게</button>
+            <button type="button" title="목록" aria-label="목록" data-memo-target="detailMemo" data-memo-format="list">목록</button>
+            <button type="button" title="서식 지우기" aria-label="서식 지우기" data-memo-target="detailMemo" data-memo-format="clear">서식 지우기</button>
           </div>
+          <p class="autosave-hint">기본 정보와 메모는 변경하면 자동 저장됩니다.</p>
           <div id="detailMemo" class="detail-memo rich-memo" contenteditable="true" data-placeholder="프로젝트 메모를 입력하세요."></div>
         </div>
         <section id="detailTasksTab" class="detail-tab-panel records-section">
@@ -511,16 +509,13 @@
         <div id="workDetailBasicTab" class="detail-tab-panel active">
           <div id="workDetailProperties" class="detail-properties"></div>
           <div class="memo-toolbar" aria-label="업무 메모 서식">
-            <button type="button" aria-label="본문" data-memo-target="workDetailMemo" data-memo-format="text">T</button>
-            <button type="button" aria-label="제목 1" data-memo-target="workDetailMemo" data-memo-format="h1">H1</button>
-            <button type="button" aria-label="제목 2" data-memo-target="workDetailMemo" data-memo-format="h2">H2</button>
-            <button type="button" aria-label="제목 3" data-memo-target="workDetailMemo" data-memo-format="h3">H3</button>
-            <button type="button" aria-label="제목 4" data-memo-target="workDetailMemo" data-memo-format="h4">H4</button>
-            <button type="button" aria-label="굵게" data-memo-target="workDetailMemo" data-memo-format="bold">B</button>
-            <button type="button" aria-label="기울임" data-memo-target="workDetailMemo" data-memo-format="italic">/</button>
-            <button type="button" aria-label="밑줄" data-memo-target="workDetailMemo" data-memo-format="underline">U</button>
-            <button type="button" aria-label="서식 지우기" data-memo-target="workDetailMemo" data-memo-format="clear">Tx</button>
+            <button type="button" title="본문" aria-label="본문" data-memo-target="workDetailMemo" data-memo-format="text">본문</button>
+            <button type="button" title="제목" aria-label="제목" data-memo-target="workDetailMemo" data-memo-format="h2">제목</button>
+            <button type="button" title="굵게" aria-label="굵게" data-memo-target="workDetailMemo" data-memo-format="bold">굵게</button>
+            <button type="button" title="목록" aria-label="목록" data-memo-target="workDetailMemo" data-memo-format="list">목록</button>
+            <button type="button" title="서식 지우기" aria-label="서식 지우기" data-memo-target="workDetailMemo" data-memo-format="clear">서식 지우기</button>
           </div>
+          <p class="autosave-hint">기본 정보와 메모는 변경하면 자동 저장됩니다.</p>
           <div id="workDetailMemo" class="detail-memo rich-memo" contenteditable="true" data-placeholder="업무 메모를 입력하세요."></div>
         </div>
         <section id="workDetailTasksTab" class="detail-tab-panel records-section">
@@ -999,6 +994,15 @@
     <script src="/api/env.js"></script>
     <script src="./lib/monthly-report-core.js?v=14"></script>
     <script src="./lib/monthly-report-docx.js?v=7"></script>
-    <script src="./app.js?v=184"></script>
+    <div id="saveLoadBlock" hidden><p>팀 데이터를 불러온 뒤 수정할 수 있습니다.</p></div>
+    <aside id="saveStatus" class="save-status" hidden aria-label="저장 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></aside>
+    <dialog id="saveConflictDialog" class="save-conflict-dialog" aria-labelledby="saveConflictTitle">
+      <h2 id="saveConflictTitle">팀원의 변경사항과 겹칩니다</h2>
+      <p>겹친 내용에 사용할 값을 선택하세요. 서로 다른 항목의 변경사항은 함께 저장됩니다.</p>
+      <ul data-conflict-list></ul>
+      <div><button data-conflict-choice="" type="button">나중에 확인</button><button data-conflict-choice="remote" type="button">팀 변경 유지</button><button data-conflict-choice="local" type="button">내 변경 적용</button></div>
+    </dialog>
+    <script src="./lib/dashboard-sync.js?v=1"></script>
+    <script src="./app.js?v=187"></script>
   </body>
 </html>

@@ -92,49 +92,189 @@ async function fetchCurrentProfile() {
   return user;
 }
 
-async function loadRemoteDashboardState() {
-  const client = getSupabaseClient();
-  if (!client || !currentProfile?.approved) return;
-  const { data, error } = await client.from("dashboard_state").select("data").eq("id", DASHBOARD_STATE_ROW_ID).maybeSingle();
-  if (error) {
-    console.warn("Supabase dashboard load failed", error);
-    return;
+let remoteBase = null;
+let remoteSavePromise = null;
+let remotePending = false;
+let syncStatus = "";
+let syncConflictResolver = null;
+let recoveredJournal = null;
+const syncClientId = (() => {
+  const fresh = crypto.randomUUID();
+  try {
+    const id = sessionStorage.getItem("dashboard-sync-client") || fresh;
+    sessionStorage.setItem("dashboard-sync-client", id);
+    return id;
+  } catch { return fresh; }
+})();
+
+function syncJournalKey() {
+  return `${STORAGE_KEY}-pending:${SUPABASE_URL}:${currentProfile?.id}:${syncClientId}`;
+}
+
+function persistDashboardLocally() {
+  try {
+    // Write the recovery copy first; a failed write must never look like a saved edit.
+    if (remotePending && remoteBase) localStorage.setItem(syncJournalKey(), JSON.stringify({ base: remoteBase, local: state }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
+  } catch (error) {
+    setSyncStatus("storage-error");
+    return false;
   }
-  if (data?.data) {
+}
+
+function setSyncStatus(status) {
+  syncStatus = status;
+  const bar = document.getElementById("saveStatus");
+  if (!bar) return;
+  document.getElementById("saveLoadBlock").hidden = !SUPABASE_ENABLED || !currentProfile?.approved || remoteStateLoaded;
+  const labels = {
+    pending: "변경사항 저장 대기 중", saving: "서버에 저장 중…", saved: "서버 저장 완료",
+    local: "이 기기에 저장됨", error: "서버 저장 실패 · 변경사항은 이 기기에 보관 중",
+    offline: "오프라인 · 연결되면 자동 저장", conflict: "같은 내용을 팀원이 수정했습니다 · 변경사항 확인 필요",
+    "storage-error": "기기 저장 공간 부족 · 화면을 닫기 전에 다시 저장해 주세요",
+    loading: "팀 데이터 불러오는 중…"
+  };
+  bar.hidden = !status || !currentUser();
+  bar.dataset.status = status;
+  bar.querySelector("[data-save-label]").textContent = SUPABASE_ENABLED && !remoteStateLoaded && status === "error"
+    ? "팀 데이터를 불러오지 못했습니다 · 다시 시도해 주세요" : labels[status] || status;
+  bar.querySelector("[data-save-retry]").hidden = !["error", "offline", "conflict", "storage-error"].includes(status);
+  bar.querySelector("[data-save-backup]").hidden = !["error", "offline", "conflict", "storage-error"].includes(status);
+}
+
+async function awaitSyncResponse(request) {
+  let timer;
+  try {
+    return await Promise.race([request, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error("SAVE_TIMEOUT")), 15000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function readRemoteDashboard() {
+  const { data, error } = await awaitSyncResponse(getSupabaseClient().from("dashboard_state").select("data,updated_at").eq("id", DASHBOARD_STATE_ROW_ID).maybeSingle());
+  if (error) throw error;
+  return { value: data ? migrateOwnerState(normalizeState(data.data)) : {}, version: data?.updated_at || null };
+}
+
+async function loadRemoteDashboardState() {
+  if (!getSupabaseClient() || !currentProfile?.approved) return;
+  setSyncStatus("loading");
+  try {
+    const latest = await readRemoteDashboard();
+    const prefix = `${STORAGE_KEY}-pending:${SUPABASE_URL}:${currentProfile.id}:`;
+    const key = localStorage.getItem(syncJournalKey()) ? syncJournalKey() : Object.keys(localStorage).find((key) => key.startsWith(prefix));
+    const raw = key && localStorage.getItem(key);
+    const pending = raw ? JSON.parse(raw) : null;
+    recoveredJournal = key && key !== syncJournalKey() ? { key, raw } : null;
+    remoteBase = pending?.base || structuredClone(latest.value);
     isRemoteHydrating = true;
-    state = migrateOwnerState(normalizeState(data.data));
+    if (pending?.local) state = migrateOwnerState(normalizeState(pending.local));
+    else if (latest.version) state = latest.value;
     monthlyReportSharedPromptSnapshot = state.monthlyReport?.prompt || window.MonthlyReportCore?.DEFAULT_PROMPT || "";
     mergeProfileUser(currentProfile);
     resetActivityAuditSnapshot();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     isRemoteHydrating = false;
-  } else {
-    await saveRemoteDashboardState();
+    remoteStateLoaded = true;
+    remotePending = Boolean(pending?.local) || !latest.version;
+    persistDashboardLocally();
+    if (remotePending) queueRemoteSave();
+    else setSyncStatus("saved");
+  } catch (error) {
+    isRemoteHydrating = false;
+    console.warn("Supabase dashboard load failed", error);
+    setSyncStatus("error");
   }
-  remoteStateLoaded = true;
-  if (data?.data) queueRemoteSave();
+}
+
+function resolveSyncConflicts(conflicts) {
+  setSyncStatus("conflict");
+  const dialog = document.getElementById("saveConflictDialog");
+  const names = { memo: "메모", title: "제목", status: "진행 상태", finalDate: "마감일", owners: "담당자", done: "완료 여부" };
+  const describe = (value) => typeof value === "object" ? JSON.stringify(value) : String(value ?? "삭제됨");
+  dialog.querySelector("[data-conflict-list]").replaceChildren(...conflicts.map((item) => {
+    const row = document.createElement("li");
+    const entity = [...state.projects, ...state.works, ...state.schedules, ...state.staffEvents].find((entry) => item.path.includes(entry.id));
+    row.textContent = `${entity?.title || "공유 항목"} · ${names[item.path.at(-1)] || item.path.at(-1)}\n내 변경: ${describe(item.local)}\n팀 변경: ${describe(item.remote)}`;
+    return row;
+  }));
+  if (!dialog.open) dialog.showModal();
+  return new Promise((resolve) => { syncConflictResolver = resolve; });
 }
 
 async function saveRemoteDashboardState() {
-  const client = getSupabaseClient();
-  if (!client || !currentProfile?.approved || isRemoteHydrating) return false;
-  const payload = { ...state, currentUser: currentProfile.id };
-  const { error } = await client
-    .from("dashboard_state")
-    .upsert({ id: DASHBOARD_STATE_ROW_ID, data: payload, updated_at: new Date().toISOString() }, { onConflict: "id" });
-  if (error) {
-    console.warn("Supabase dashboard save failed", error);
-    return false;
+  if (!getSupabaseClient() || !currentProfile?.approved || isRemoteHydrating) return false;
+  if (remoteSavePromise) {
+    const saved = await remoteSavePromise;
+    return saved && remotePending ? saveRemoteDashboardState() : saved;
   }
-  return true;
+  if (!remoteStateLoaded || !remoteBase) { setSyncStatus("error"); return false; }
+  clearTimeout(remoteSaveTimer);
+  remoteSavePromise = (async () => {
+    try {
+      do {
+        remotePending = true;
+        persistDashboardLocally();
+        setSyncStatus(navigator.onLine ? "saving" : "offline");
+        const snapshot = structuredClone(state);
+        const committed = await window.DashboardSync.commit({
+          base: remoteBase, local: snapshot, read: readRemoteDashboard,
+          resolve: resolveSyncConflicts,
+          write: async (value, version) => {
+            const client = getSupabaseClient();
+            const updatedAt = new Date(Math.max(Date.now(), version ? Date.parse(version) + 1 : 0)).toISOString();
+            const row = { id: DASHBOARD_STATE_ROW_ID, data: value, updated_at: updatedAt };
+            const query = version
+              ? client.from("dashboard_state").update(row).eq("id", DASHBOARD_STATE_ROW_ID).eq("updated_at", version)
+              : client.from("dashboard_state").insert(row);
+            const { data, error } = await awaitSyncResponse(query.select("updated_at"));
+            if (error?.code === "23505") return false;
+            if (error) throw error;
+            return Boolean(data?.length);
+          }
+        });
+        // Preserve typing that happened while the network request was in flight.
+        state = window.DashboardSync.merge(snapshot, state, committed, "local").value;
+        remoteBase = structuredClone(committed);
+        mergeProfileUser(currentProfile);
+        remoteBase.currentUser = state.currentUser;
+        resetActivityAuditSnapshot();
+        remotePending = JSON.stringify(state) !== JSON.stringify(remoteBase);
+        const stored = persistDashboardLocally();
+        if (!remotePending && stored) {
+          localStorage.removeItem(syncJournalKey());
+          if (recoveredJournal && localStorage.getItem(recoveredJournal.key) === recoveredJournal.raw) localStorage.removeItem(recoveredJournal.key);
+          recoveredJournal = null;
+        }
+        if (!stored) return false;
+      } while (remotePending);
+      setSyncStatus("saved");
+      if (!document.activeElement?.matches("input, textarea, [contenteditable=true]")) {
+        renderAll();
+        if (activeProjectId) renderProjectDetail();
+        if (activeWorkId) renderWorkDetail();
+      }
+      return true;
+    } catch (error) {
+      remotePending = true;
+      persistDashboardLocally();
+      setSyncStatus(error.message === "CONFLICT" ? "conflict" : navigator.onLine ? "error" : "offline");
+      console.warn("Dashboard save pending", error);
+      return false;
+    } finally { remoteSavePromise = null; }
+  })();
+  return remoteSavePromise;
 }
 
 function queueRemoteSave() {
   if (!SUPABASE_ENABLED || !currentProfile?.approved || isRemoteHydrating) return;
+  remotePending = true;
+  if (!persistDashboardLocally()) return;
+  if (syncStatus === "conflict") return;
+  setSyncStatus(navigator.onLine ? "pending" : "offline");
   clearTimeout(remoteSaveTimer);
-  remoteSaveTimer = setTimeout(() => {
-    saveRemoteDashboardState();
-  }, 700);
+  remoteSaveTimer = setTimeout(() => { saveRemoteDashboardState(); }, 700);
 }
 
 async function fetchSharedLinkPayload() {
@@ -2279,12 +2419,25 @@ function formatRecordTime(value) {
   return `${date.getFullYear()}년 ${String(date.getMonth() + 1).padStart(2, "0")}월 ${String(date.getDate()).padStart(2, "0")}일 ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
-function saveState() {
-  captureDetailedActivityLogs();
-  state.activityLogs = pruneActivityLogs(state.activityLogs);
-  resetActivityAuditSnapshot();
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  queueRemoteSave();
+let basicAuditTimer = null;
+const pendingBasicNotifications = new Map();
+
+function saveState({ deferAudit = false } = {}) {
+  clearTimeout(basicAuditTimer);
+  if (deferAudit) {
+    basicAuditTimer = setTimeout(() => saveState(), 600);
+  } else {
+    for (const { scope, id, fields } of pendingBasicNotifications.values()) {
+      const entity = state[scope === "project" ? "projects" : "works"].find((item) => item.id === id);
+      if (entity) notifyEntityFieldChanges({ entityType: scope, entity, ownerIds: scope === "project" ? projectOwners(entity) : workOwners(entity), fields: [...fields] });
+    }
+    pendingBasicNotifications.clear();
+    captureDetailedActivityLogs();
+    state.activityLogs = pruneActivityLogs(state.activityLogs);
+    resetActivityAuditSnapshot();
+  }
+  if (SUPABASE_ENABLED) queueRemoteSave();
+  else if (persistDashboardLocally()) setSyncStatus("local");
 }
 
 function isSharedGuestItem(entityType, entityId) {
@@ -2349,7 +2502,7 @@ async function createAndCopyShareLink(entityType, entityId, button) {
     button.title = "공유 링크 생성 중";
   }
   try {
-    await saveRemoteDashboardState();
+    if (!await saveRemoteDashboardState()) throw new Error("최신 내용을 서버에 저장한 뒤 공유해 주세요.");
     const { data: token, error } = await getSupabaseClient().rpc("create_share_link", {
       p_entity_type: entityType,
       p_entity_id: entityId
@@ -2991,14 +3144,48 @@ function overviewUnreadCount() {
   return (state.notifications || []).filter((item) => item.userId === userId && !item.read).length;
 }
 
+function overviewScope() {
+  return viewPref(`overviewScope:${currentUser()?.id}`, isAdminUser() ? "team" : "mine");
+}
+
+function overviewMatchesOwners(owners = []) {
+  if (overviewScope() === "team") return true;
+  const ids = [currentUser()?.id, ...linkedOwnerIdsForUser()];
+  return owners.some((id) => ids.includes(id));
+}
+
+function overviewTaskItems() {
+  return taskOverviewItems().filter((item) => overviewMatchesOwners(taskOwners(item.task)));
+}
+
+function overviewScopeControls() {
+  return `<div class="overview-segmented overview-scope" role="group" aria-label="홈 표시 범위">${[["mine", "내 업무"], ["team", "팀 전체"]].map(([value, label]) => `<button type="button" data-overview-scope="${value}" aria-pressed="${overviewScope() === value}" class="${overviewScope() === value ? "active" : ""}">${label}</button>`).join("")}</div>`;
+}
+
+function changeOverviewScope(value) {
+  saveViewPrefs({ [`overviewScope:${currentUser()?.id}`]: value === "mine" ? "mine" : "team" });
+  renderOverviewDashboard();
+  renderMobileDashboard();
+}
+
+function openOverviewSchedule(source, id) {
+  if (source === "project") openProjectDetail(id);
+  else if (source === "work") openWorkDetail(id);
+  else if (source === "studio") openStaffEventDetail(id);
+  else openScheduleEventDetail(id);
+}
+
+function overviewSourceLabel(source) {
+  return { studio: "방송실", calendar: "일정", project: "영상 마감", work: "업무 마감" }[source] || "일정";
+}
+
 function overviewSummary() {
   const today = seoulNowParts().date;
-  const tasks = taskOverviewItems().filter((item) => !item.task.done);
+  const tasks = overviewTaskItems().filter((item) => !item.task.done);
   return {
     todayTasks: tasks.filter((item) => !item.task.noDueDate && item.task.dueDate === today).length,
     overdueTasks: tasks.filter((item) => !item.task.noDueDate && item.task.dueDate && item.task.dueDate < today).length,
-    todaySchedules: state.schedules.filter((item) => item.date === today).length
-      + state.staffEvents.filter((item) => item.date === today).length,
+    todaySchedules: overviewScheduleItems("today").length,
     unread: overviewUnreadCount()
   };
 }
@@ -3010,7 +3197,7 @@ function overviewOwnerLabel(task) {
 
 function overviewPriorityItems() {
   const today = seoulNowParts().date;
-  return taskOverviewItems()
+  return overviewTaskItems()
     .filter((item) => !item.task.done && !item.task.noDueDate && item.task.dueDate)
     .sort((a, b) => {
       const aRank = a.task.dueDate < today ? 0 : a.task.dueDate === today ? 1 : 2;
@@ -3027,11 +3214,11 @@ function overviewDueInfo(value) {
   return { label: formatDate(value), className: "" };
 }
 
-function overviewScheduleItems() {
+function overviewScheduleItems(range = overviewScheduleRange) {
   const today = seoulNowParts().date;
-  const keys = overviewScheduleRange === "week" ? overviewWeekKeys(today) : [today];
+  const keys = range === "week" ? overviewWeekKeys(today) : [today];
   const schedules = state.schedules
-    .filter((item) => keys.includes(item.date))
+    .filter((item) => keys.includes(item.date) && overviewMatchesOwners(item.owners || [item.owner].filter(Boolean)))
     .map((item) => ({
       id: item.id,
       source: "calendar",
@@ -3041,7 +3228,7 @@ function overviewScheduleItems() {
       location: item.location || ""
     }));
   const studio = state.staffEvents
-    .filter((item) => keys.includes(item.date))
+    .filter((item) => keys.includes(item.date) && overviewMatchesOwners(item.owners || [item.owner].filter(Boolean)))
     .map((item) => ({
       id: item.id,
       source: "studio",
@@ -3050,7 +3237,14 @@ function overviewScheduleItems() {
       time: item.allDay === false ? `${item.startTime || "09:00"}–${item.endTime || "10:00"}` : "종일",
       location: item.room || ""
     }));
-  return [...schedules, ...studio].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
+  const deadlines = [
+    ...state.projects.filter((item) => item.status !== "납품 완료" && !item.broadcastCompleted && overviewMatchesOwners(projectOwners(item))).map((item) => ({ ...item, source: "project" })),
+    ...state.works.filter((item) => !item.noSchedule && item.status !== "완료" && overviewMatchesOwners(workOwners(item))).map((item) => ({ ...item, source: "work" }))
+  ].filter((item) => keys.includes(item.finalDate)).map((item) => ({
+    id: item.id, source: item.source, title: item.title, date: item.finalDate,
+    time: item.source === "work" && item.allDay === false ? `${item.startTime || "09:00"}–${item.endTime || "10:00"}` : "종일", location: ""
+  }));
+  return [...schedules, ...studio, ...deadlines].sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`));
 }
 
 function overviewRelativeTime(value) {
@@ -3113,12 +3307,13 @@ function renderOverviewDashboard() {
   if (!view) return;
   const today = seoulNowParts().date;
   const summary = overviewSummary();
+  $("#overviewScopeControls").innerHTML = overviewScopeControls();
   $("#overviewGreeting").textContent = overviewGreetingText();
   $("#overviewDailyLine").textContent = "오늘의 할 일과 제작 일정을 한눈에 확인하세요.";
   $("#overviewSummaryCards").innerHTML = [
     ["오늘 할 일", summary.todayTasks, "today", "오늘 마감 기준"],
     ["지연된 할 일", summary.overdueTasks, "overdue", "마감일 경과"],
-    ["오늘 일정", summary.todaySchedules, "schedule", "캘린더 + 방송실"],
+    ["오늘 일정", summary.todaySchedules, "schedule", "일정 + 방송실 + 마감"],
     ["읽지 않은 알림", summary.unread, "notifications", "새 변경사항"]
   ].map(([label, count, action, hint]) => `<button class="overview-summary-card ${action === "overdue" && count ? "is-alert" : ""}" data-overview-summary="${action}" type="button"><span>${label}</span><b>${count}</b><small>${hint} ↗</small></button>`).join("");
 
@@ -3131,7 +3326,7 @@ function renderOverviewDashboard() {
     : '<div class="overview-empty">임박하거나 지연된 할 일이 없습니다.</div>';
 
   const projects = state.projects
-    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted)
+    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted && overviewMatchesOwners(projectOwners(project)))
     .sort((a, b) => String(a.finalDate || "9999-12-31").localeCompare(String(b.finalDate || "9999-12-31")))
     .slice(0, 6);
   $("#overviewProjectList").innerHTML = projects.length
@@ -3145,7 +3340,7 @@ function renderOverviewDashboard() {
     button.setAttribute("aria-selected", String(active));
   });
   $("#overviewScheduleList").innerHTML = schedules.length
-    ? schedules.slice(0, overviewScheduleRange === "today" ? 6 : 10).map((item) => `<button class="overview-row" data-overview-schedule-source="${item.source}" type="button"><span class="overview-row-main"><strong>${esc(item.title)}</strong><small>${esc(item.date === today ? "오늘" : formatDate(item.date))} · ${esc(item.time)}${item.location ? ` · ${esc(item.location)}` : ""}</small></span><span class="overview-row-meta"><i class="overview-source-pill ${item.source === "studio" ? "studio" : ""}">${item.source === "studio" ? "방송실" : "일정"}</i><b>›</b></span></button>`).join("")
+    ? schedules.slice(0, overviewScheduleRange === "today" ? 6 : 10).map((item) => `<button class="overview-row" data-overview-schedule-source="${item.source}" data-overview-schedule-id="${esc(item.id)}" type="button"><span class="overview-row-main"><strong>${esc(item.title)}</strong><small>${esc(item.date === today ? "오늘" : formatDate(item.date))} · ${esc(item.time)}${item.location ? ` · ${esc(item.location)}` : ""}</small></span><span class="overview-row-meta"><i class="overview-source-pill ${item.source === "studio" ? "studio" : ""}">${overviewSourceLabel(item.source)}</i><b>›</b></span></button>`).join("")
     : `<div class="overview-empty">${overviewScheduleRange === "today" ? "오늘" : "이번 주"} 등록된 일정이 없습니다.</div>`;
 
   const logs = overviewActivityItems();
@@ -3718,12 +3913,12 @@ function createWorkBasicDraft(work) {
 }
 
 function ensureProjectBasicDraft(project) {
-  if (!projectBasicDraft || projectBasicDraft.projectId !== project.id) projectBasicDraft = createProjectBasicDraft(project);
+  if (!projectBasicDraft || projectBasicDraft.projectId !== project.id || !projectBasicIsDirty()) projectBasicDraft = createProjectBasicDraft(project);
   return projectBasicDraft;
 }
 
 function ensureWorkBasicDraft(work) {
-  if (!workBasicDraft || workBasicDraft.workId !== work.id) workBasicDraft = createWorkBasicDraft(work);
+  if (!workBasicDraft || workBasicDraft.workId !== work.id || !workBasicIsDirty()) workBasicDraft = createWorkBasicDraft(work);
   return workBasicDraft;
 }
 
@@ -3747,7 +3942,7 @@ function syncBasicSaveButton(scope, editable = true) {
   if (!button) return;
   const isBasicTab = isProject ? activeDetailTab === "basic" : activeWorkDetailTab === "basic";
   const dirty = isProject ? projectBasicIsDirty() : workBasicIsDirty();
-  button.hidden = !editable || !isBasicTab;
+  button.hidden = true;
   button.disabled = !dirty;
   button.classList.toggle("is-dirty", dirty);
   button.setAttribute("aria-label", dirty ? "상태와 메모 변경사항 저장" : "저장할 상태 또는 메모 변경사항 없음");
@@ -3866,11 +4061,11 @@ function renderWorkDetail() {
   $("#workDetail .detail-actions").hidden = sharedGuest;
   $("#shareWorkBtn").hidden = !editable;
   $("#deleteWorkDetailBtn").disabled = !editable;
-  $("#deleteWorkDetailBtn").title = editable ? "" : "담당자 또는 관리자만 삭제할 수 있습니다.";
+  $("#deleteWorkDetailBtn").title = editable ? "" : "로그인한 팀원만 삭제할 수 있습니다.";
   $("#workDetailTitle").value = work.title;
   $("#workDetailTitle").disabled = !editable;
   $("#workDetailProperties").innerHTML = `
-    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "이 업무의 담당자 또는 관리자만 수정할 수 있습니다."}</div>` : ""}
+    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "로그인한 팀원만 수정할 수 있습니다."}</div>` : ""}
     ${propertyRow("☷", "업무분류", '<div id="workDetailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="workDetailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="workDetailClient"></div>')}
@@ -5405,15 +5600,8 @@ function updateActiveWork(field, value, rerender = true) {
   const work = state.works.find((item) => item.id === activeWorkId);
   if (!work) return;
   if (!canEditWork(work)) {
-    showToast("담당자 또는 관리자만 수정할 수 있습니다.");
+    showToast("로그인한 팀원만 수정할 수 있습니다.");
     renderWorkDetail();
-    return;
-  }
-  if (field === "status" || field === "memo") {
-    const draft = ensureWorkBasicDraft(work);
-    draft[field] = value;
-    if (rerender && field === "status") renderWorkDetail();
-    else syncBasicSaveButton("work", true);
     return;
   }
   const previousOwners = field === "owners" ? workOwners(work) : [];
@@ -5421,14 +5609,22 @@ function updateActiveWork(field, value, rerender = true) {
   const changed = JSON.stringify(previousValue ?? "") !== JSON.stringify(value ?? "");
   if (!changed && !workChangeBuffer.has(field)) return;
   work[field] = value;
+  if (field === "status" && changed) recordProgressActivity({ entityType: "work", entity: work, activityType: "status_change", previousStatus: previousValue, nextStatus: value });
+  if (field === "status" || field === "memo") workBasicDraft = createWorkBasicDraft(work);
   if (field === "owners") {
     notifyOwnerAssignmentChanges({ entityType: "work", entity: work, previousOwners, nextOwners: Array.isArray(value) ? value : [] });
-  } else if (rerender || workChangeBuffer.has(field)) {
+  } else if (rerender) {
     notifyEntityFieldChanges({ entityType: "work", entity: work, ownerIds: workOwners(work), fields: [field] });
   }
   if (!rerender) workChangeBuffer.add(field);
   else workChangeBuffer.delete(field);
-  saveState();
+  const notificationKey = `work:${work.id}`;
+  if (!rerender) {
+    const pending = pendingBasicNotifications.get(notificationKey) || { scope: "work", id: work.id, fields: new Set() };
+    pending.fields.add(field);
+    pendingBasicNotifications.set(notificationKey, pending);
+  } else pendingBasicNotifications.get(notificationKey)?.fields.delete(field);
+  saveState({ deferAudit: !rerender });
   if (rerender) {
     renderAll();
     renderWorkDetail();
@@ -5438,7 +5634,7 @@ function updateActiveWork(field, value, rerender = true) {
 function deleteWork(workId) {
   const work = state.works.find((item) => item.id === workId);
   if (!canEditWork(work)) {
-    showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
+    showToast("로그인한 팀원만 삭제할 수 있습니다.");
     return;
   }
   notifyOwners(workOwners(work), `${notificationActor().name}님이 ‘${work.title}’ 업무를 삭제했습니다.`, {
@@ -6225,7 +6421,8 @@ function moveCalendarEvent(payload, targetDate) {
 function showToast(message, { type = "default", duration = 2200 } = {}) {
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.textContent = message;
+  toast.textContent = SUPABASE_ENABLED && remotePending && /저장.*(완료|했습니다|되었습니다)/.test(message)
+    ? "변경사항을 반영했습니다. 서버 저장 상태를 확인해 주세요." : message;
   toast.setAttribute("role", "status");
   toast.setAttribute("aria-live", "polite");
   document.body.appendChild(toast);
@@ -6302,7 +6499,8 @@ function updateMemoToolbarState(targetId) {
   const inlineStates = {
     bold: isActiveEditor && document.queryCommandState("bold"),
     italic: isActiveEditor && document.queryCommandState("italic"),
-    underline: isActiveEditor && document.queryCommandState("underline")
+    underline: isActiveEditor && document.queryCommandState("underline"),
+    list: isActiveEditor && document.queryCommandState("insertUnorderedList")
   };
 
   $$(`[data-memo-target="${targetId}"]`).forEach((button) => {
@@ -6310,6 +6508,7 @@ function updateMemoToolbarState(targetId) {
     const isBlockActive = ["text", "h1", "h2", "h3", "h4"].includes(format) && format === blockFormat;
     const isInlineActive = Boolean(inlineStates[format]);
     button.classList.toggle("active", isBlockActive || isInlineActive);
+    button.setAttribute("aria-pressed", String(isBlockActive || isInlineActive));
   });
 }
 
@@ -6327,6 +6526,7 @@ function applyMemoFormat(targetId, format) {
   if (format === "text") document.execCommand("formatBlock", false, "div");
   if (["h1", "h2", "h3", "h4"].includes(format)) document.execCommand("formatBlock", false, format);
   if (format === "bold") document.execCommand("bold", false);
+  if (format === "list") document.execCommand("insertUnorderedList", false);
   if (format === "italic") document.execCommand("italic", false);
   if (format === "underline") document.execCommand("underline", false);
   if (format === "clear") {
@@ -6363,11 +6563,11 @@ function renderProjectDetail() {
   $("#projectDetail .detail-actions").hidden = sharedGuest;
   $("#shareProjectBtn").hidden = !editable;
   $("#deleteDetailBtn").disabled = !editable;
-  $("#deleteDetailBtn").title = editable ? "" : "담당자 또는 관리자만 삭제할 수 있습니다.";
+  $("#deleteDetailBtn").title = editable ? "" : "로그인한 팀원만 삭제할 수 있습니다.";
   $("#detailTitle").value = project.title;
   $("#detailTitle").disabled = !editable;
   $("#detailProperties").innerHTML = `
-    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "이 영상의 담당자 또는 관리자만 수정할 수 있습니다."}</div>` : ""}
+    ${!editable ? `<div class="readonly-notice">${sharedGuest ? "공유 링크에서는 내용을 볼 수만 있습니다. 로그인하면 수정할 수 있습니다." : "이 영상의 로그인한 팀원만 수정할 수 있습니다."}</div>` : ""}
     ${propertyRow("☷", "업무분류", '<div id="detailType"></div>')}
     ${propertyRow("▾", "담당자", '<div id="detailOwners"></div>')}
     ${propertyRow("▾", "발주 부서", '<div id="detailClient"></div>')}
@@ -7122,15 +7322,8 @@ function updateActiveProject(field, value, rerender = true) {
   const project = state.projects.find((item) => item.id === activeProjectId);
   if (!project) return;
   if (!canEditProject(project)) {
-    showToast("담당자 또는 관리자만 수정할 수 있습니다.");
+    showToast("로그인한 팀원만 수정할 수 있습니다.");
     renderProjectDetail();
-    return;
-  }
-  if (field === "status" || field === "memo") {
-    const draft = ensureProjectBasicDraft(project);
-    draft[field] = value;
-    if (rerender && field === "status") renderProjectDetail();
-    else syncBasicSaveButton("project", true);
     return;
   }
   const previousOwners = field === "owners" ? projectOwners(project) : [];
@@ -7138,15 +7331,23 @@ function updateActiveProject(field, value, rerender = true) {
   const changed = JSON.stringify(previousValue ?? "") !== JSON.stringify(value ?? "");
   if (!changed && !projectChangeBuffer.has(field)) return;
   project[field] = ["budget", "spent", "progress"].includes(field) ? Number(value || 0) : value;
+  if (field === "status" && changed) recordProgressActivity({ entityType: "project", entity: project, activityType: "status_change", previousStatus: previousValue, nextStatus: value });
+  if (field === "status" || field === "memo") projectBasicDraft = createProjectBasicDraft(project);
   if (field === "owners") {
     notifyOwnerAssignmentChanges({ entityType: "project", entity: project, previousOwners, nextOwners: Array.isArray(value) ? value : [] });
-  } else if (rerender || projectChangeBuffer.has(field)) {
+  } else if (rerender) {
     notifyEntityFieldChanges({ entityType: "project", entity: project, ownerIds: projectOwners(project), fields: [field] });
   }
   if (!rerender) projectChangeBuffer.add(field);
   else projectChangeBuffer.delete(field);
   if (field === "status" && value === "납품 완료") project.progress = 100;
-  saveState();
+  const notificationKey = `project:${project.id}`;
+  if (!rerender) {
+    const pending = pendingBasicNotifications.get(notificationKey) || { scope: "project", id: project.id, fields: new Set() };
+    pending.fields.add(field);
+    pendingBasicNotifications.set(notificationKey, pending);
+  } else pendingBasicNotifications.get(notificationKey)?.fields.delete(field);
+  saveState({ deferAudit: !rerender });
   if (rerender) {
     renderAll();
     renderProjectDetail();
@@ -7186,7 +7387,7 @@ function addProject() {
 function deleteProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!canEditProject(project)) {
-    showToast("담당자 또는 관리자만 삭제할 수 있습니다.");
+    showToast("로그인한 팀원만 삭제할 수 있습니다.");
     return;
   }
   notifyOwners(projectOwners(project), `${notificationActor().name}님이 ‘${project.title}’ 프로젝트를 삭제했습니다.`, {
@@ -10521,16 +10722,12 @@ async function saveMonthlyReportPrompt(button) {
   const input = button?.closest(".monthly-report-manager")?.querySelector("[data-monthly-report-prompt]")
     || $("[data-monthly-report-prompt]");
   if (!input) return;
-  const previousPrompt = monthlyReportSharedPromptSnapshot;
   const prompt = String(input.value || window.MonthlyReportCore?.DEFAULT_PROMPT || "").slice(0, 12000);
   state.monthlyReport = { prompt };
   saveState();
   const remoteSaved = SUPABASE_ENABLED ? await saveRemoteDashboardState() : true;
   if (remoteSaved === false) {
-    state.monthlyReport = { prompt: previousPrompt };
-    saveState();
-    input.value = previousPrompt;
-    showToast("공용 프롬프트 서버 저장을 확인하지 못했습니다. 다시 시도해 주세요.");
+    showToast("공용 프롬프트는 이 기기에 보관했습니다. 서버 저장을 다시 시도해 주세요.");
     return;
   }
   monthlyReportSharedPromptSnapshot = prompt;
@@ -10568,7 +10765,6 @@ async function generateMonthlyReportWithGpt(button) {
   const promptInput = button?.closest(".monthly-report-manager")?.querySelector("[data-monthly-report-prompt]")
     || $("[data-monthly-report-prompt]");
   const prompt = String(promptInput?.value || state.monthlyReport?.prompt || window.MonthlyReportCore.DEFAULT_PROMPT).slice(0, 12000);
-  const previousPrompt = monthlyReportSharedPromptSnapshot;
   monthlyReportGenerating = true;
   monthlyReportGeneratedByGpt = false;
   monthlyReportStep = 2;
@@ -10582,9 +10778,7 @@ async function generateMonthlyReportWithGpt(button) {
   if (isMobileViewport() && mobileActiveSection === "settings" && mobileMoreRoute === "admin-report") renderMobileDashboard();
   try {
     if (SUPABASE_ENABLED && !await saveRemoteDashboardState()) {
-      state.monthlyReport = { prompt: previousPrompt };
-      saveState();
-      throw new Error("공용 프롬프트를 서버에 저장하지 못했습니다. 다시 시도해 주세요.");
+      throw new Error("공용 프롬프트는 이 기기에 보관했습니다. 서버 저장 후 다시 생성해 주세요.");
     }
     monthlyReportSharedPromptSnapshot = prompt;
     updateMonthlyReportProgress(Math.max(monthlyReportProgress, 28), "GPT에 선택한 자료와 공용 프롬프트를 전달했습니다.");
@@ -11611,7 +11805,7 @@ function mobileProjectStatusClass(status) {
 }
 
 function mobileProjectDueInfo(project) {
-  const isDone = String(project.status || "").includes("완료") || String(project.status || "").includes("납품");
+  const isDone = project.broadcastCompleted || String(project.status || "").includes("완료") || String(project.status || "").includes("납품");
   if (isDone) return { label: "완료", className: "done" };
   if (!project.finalDate) return { label: "마감 없음", className: "none" };
   const diff = daysUntil(project.finalDate);
@@ -13209,14 +13403,20 @@ function bindMobileCoreActions(app) {
   bind("[data-mobile-overview-summary]", (button) => {
     const action = button.dataset.mobileOverviewSummary;
     if (["today", "overdue"].includes(action)) {
-      taskOverviewFilter = action;
-      saveViewPrefs({ taskOverviewFilter });
+      mobileTaskFilter = action;
+      saveViewPrefs({ mobileTaskFilter });
       openMobileSection("tasks");
-    } else if (action === "schedule") openMobileSection("calendar");
+    } else if (action === "schedule") {
+      selectedCalendarDate = seoulNowParts().date;
+      calendarDate = new Date(`${selectedCalendarDate}T12:00:00`);
+      saveViewPrefs({ selectedCalendarDate, calendarDate: selectedCalendarDate });
+      openMobileSection("calendar");
+    }
     else openMobileSection("notifications");
   });
   bind("[data-mobile-overview-project]", (button) => openProjectDetail(button.dataset.mobileOverviewProject));
-  bind("[data-mobile-overview-schedule]", (button) => openMobileSection(button.dataset.mobileOverviewSchedule));
+  bind("[data-mobile-overview-schedule]", (button) => openOverviewSchedule(button.dataset.mobileOverviewSchedule, button.dataset.overviewScheduleId));
+  bind("[data-overview-scope]", (button) => changeOverviewScope(button.dataset.overviewScope));
   bind("[data-mobile-overview-quick]", (button) => openMobileAddSheet(button.dataset.mobileOverviewQuick));
   app.querySelectorAll("[data-mobile-overview-task-check]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
@@ -13735,10 +13935,10 @@ function renderMobileOverview() {
   const summary = overviewSummary();
   const priority = overviewPriorityItems().slice(0, 5);
   const projects = state.projects
-    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted)
+    .filter((project) => project.status !== "납품 완료" && !project.broadcastCompleted && overviewMatchesOwners(projectOwners(project)))
     .sort((a, b) => String(a.finalDate || "9999-12-31").localeCompare(String(b.finalDate || "9999-12-31")))
     .slice(0, 4);
-  const schedules = overviewScheduleItems().slice(0, 5);
+  const schedules = overviewScheduleItems("today").slice(0, 5);
   return `
     <div class="mobile-overview">
       <section class="mobile-overview-greeting">
@@ -13746,6 +13946,7 @@ function renderMobileOverview() {
         <h2>${esc(overviewGreetingText())}</h2>
         <p>오늘의 할 일과 제작 일정을 한눈에 확인하세요.</p>
       </section>
+      ${overviewScopeControls()}
       <div class="mobile-overview-summary">
         ${[["오늘 할 일", summary.todayTasks, "today"], ["지연", summary.overdueTasks, "overdue"], ["오늘 일정", summary.todaySchedules, "schedule"], ["새 알림", summary.unread, "notifications"]].map(([label, count, action]) => `<button data-mobile-overview-summary="${action}" type="button"><span>${label}</span><b>${count}</b></button>`).join("")}
       </div>
@@ -13756,7 +13957,7 @@ function renderMobileOverview() {
         ${projects.length ? projects.map((project) => `<button class="mobile-overview-row" data-mobile-overview-project="${esc(project.id)}" type="button"><span><strong>${esc(project.title)}</strong><small>${esc(project.status || "단계 미설정")}</small></span><b>${project.finalDate ? esc(formatDate(project.finalDate)) : "마감 없음"}</b></button>`).join("") : '<p class="mobile-overview-empty">진행 중인 영상이 없습니다.</p>'}
       </div></section>
       <section class="mobile-overview-panel"><header><span>SCHEDULE</span><h3>오늘 일정</h3></header><div>
-        ${schedules.length ? schedules.map((item) => `<button class="mobile-overview-row" data-mobile-overview-schedule="${item.source === "studio" ? "studio" : "calendar"}" type="button"><span><strong>${esc(item.title)}</strong><small>${esc(item.time)} · ${item.source === "studio" ? "방송실" : "캘린더"}</small></span><b>›</b></button>`).join("") : '<p class="mobile-overview-empty">오늘 등록된 일정이 없습니다.</p>'}
+        ${schedules.length ? schedules.map((item) => `<button class="mobile-overview-row" data-mobile-overview-schedule="${item.source}" data-overview-schedule-id="${esc(item.id)}" type="button"><span><strong>${esc(item.title)}</strong><small>${esc(item.time)} · ${overviewSourceLabel(item.source)}</small></span><b>›</b></button>`).join("") : '<p class="mobile-overview-empty">오늘 등록된 일정이 없습니다.</p>'}
       </div></section>
       <section class="mobile-overview-panel"><header><span>QUICK ACTION</span><h3>빠른 실행</h3></header><div class="mobile-overview-quick">${[["project", "영상 추가"], ["work", "업무 추가"], ["task", "할 일 추가"], ["schedule", "일정 추가"]].map(([mode, label]) => `<button data-mobile-overview-quick="${mode}" type="button">＋ ${label}</button>`).join("")}</div></section>
     </div>
@@ -14450,7 +14651,7 @@ function submitMobileAddForm(form) {
       shootDate: String(data.get("shootDate") || today),
       firstEditDate: String(data.get("firstEditDate") || today),
       finalDate: String(data.get("finalDate") || today),
-      calendarFields: { ...defaultCalendarFields, finalDate: Boolean(data.get("calendar")) },
+      calendarFields: { ...defaultCalendarFields },
       progress: 0,
       budget: 0,
       spent: 0,
@@ -14537,6 +14738,10 @@ function submitMobileAddForm(form) {
       done: false,
       createdAt: new Date().toISOString()
     };
+    if (!task.noDueDate && !task.allDay && minutesFromTime(task.endTime) <= minutesFromTime(task.startTime)) {
+      showToast("종료 시간은 시작 시간보다 늦어야 합니다.");
+      return;
+    }
     if (target.startsWith("project:")) {
       task.projectId = target.replace("project:", "");
       state.tasks.unshift(task);
@@ -14585,6 +14790,10 @@ function submitMobileAddForm(form) {
       startTime: String(data.get("startTime") || "09:00"),
       endTime: String(data.get("endTime") || "10:00")
     };
+    if (!schedule.allDay && minutesFromTime(schedule.endTime) <= minutesFromTime(schedule.startTime)) {
+      showToast("종료 시간은 시작 시간보다 늦어야 합니다.");
+      return;
+    }
     state.schedules.push(schedule);
     notifyOwners(schedule.owners, `${notificationActor().name}님이 ‘${schedule.title}’ 일정을 생성했습니다.`, {
       type: "schedule",
@@ -15454,7 +15663,8 @@ $("#overviewView")?.addEventListener("click", async (event) => {
       renderTasks();
     } else if (summaryAction === "schedule") {
       selectedCalendarDate = seoulNowParts().date;
-      saveViewPrefs({ selectedCalendarDate });
+      calendarDate = new Date(`${selectedCalendarDate}T12:00:00`);
+      saveViewPrefs({ selectedCalendarDate, calendarDate: selectedCalendarDate });
       setView("calendar");
       renderCalendar();
     } else {
@@ -15482,9 +15692,11 @@ $("#overviewView")?.addEventListener("click", async (event) => {
     openProjectDetail(projectId);
     return;
   }
-  const scheduleSource = event.target.closest("[data-overview-schedule-source]")?.dataset.overviewScheduleSource;
-  if (scheduleSource) {
-    setView(scheduleSource === "studio" ? "studio" : "calendar");
+  const scope = event.target.closest("[data-overview-scope]")?.dataset.overviewScope;
+  if (scope) { changeOverviewScope(scope); return; }
+  const scheduleButton = event.target.closest("[data-overview-schedule-source]");
+  if (scheduleButton) {
+    openOverviewSchedule(scheduleButton.dataset.overviewScheduleSource, scheduleButton.dataset.overviewScheduleId);
     return;
   }
   const quick = event.target.closest("[data-overview-quick]")?.dataset.overviewQuick;
@@ -15512,7 +15724,6 @@ $("#overviewView")?.addEventListener("change", async (event) => {
     showToast("담당자 또는 관리자만 할 일을 변경할 수 있습니다.");
     return;
   }
-  const previous = Boolean(item.task.done);
   overviewTaskPending.add(item.id);
   setTaskCompletionState(item.task, true);
   notifyTaskCompletion(item.source, item.task, true);
@@ -15521,9 +15732,7 @@ $("#overviewView")?.addEventListener("change", async (event) => {
   if (SUPABASE_ENABLED) {
     const saved = await saveRemoteDashboardState();
     if (!saved) {
-      setTaskCompletionState(item.task, previous);
-      saveState();
-      showToast("완료 상태를 서버에 저장하지 못했습니다.");
+      showToast("완료 변경은 이 기기에 보관했습니다. 서버 저장을 다시 시도해 주세요.");
     }
   }
   overviewTaskPending.delete(item.id);
@@ -15619,7 +15828,7 @@ $("#worksView").addEventListener("change", (event) => {
   saveState();
   renderAll();
 });
-$("#exportBtn").addEventListener("click", exportCsv);
+
 
 $("#authForm").addEventListener("submit", (event) => {
   event.preventDefault();
@@ -15718,9 +15927,19 @@ document.addEventListener("keydown", (event) => {
 
 $("#logoutBtn").addEventListener("click", async () => {
   toggleDesktopAccountMenu(false);
+  if (pendingBasicNotifications.size) saveState();
+  if (SUPABASE_ENABLED && remotePending && !await saveRemoteDashboardState()) {
+    showToast("변경사항 저장이 완료되지 않았습니다. 저장 상태에서 다시 시도해 주세요.");
+    return;
+  }
+  clearTimeout(remoteSaveTimer);
   currentProfile = null;
   state.currentUser = null;
-  saveState();
+  remoteStateLoaded = false;
+  remoteBase = null;
+  remotePending = false;
+  setSyncStatus("");
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (SUPABASE_ENABLED) {
     await getSupabaseClient()?.auth.signOut().catch(() => {
       showToast("서버 로그아웃 처리가 지연되고 있습니다.");
@@ -16025,7 +16244,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("#unsavedBasicModal")?.classList.contains("open")) cancelUnsavedBasicLeave();
 });
 window.addEventListener("beforeunload", (event) => {
-  if (!projectBasicIsDirty() && !workBasicIsDirty()) return;
+  if (!remotePending && syncStatus !== "storage-error" && !projectBasicIsDirty() && !workBasicIsDirty()) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -17207,3 +17426,36 @@ if ("serviceWorker" in navigator) {
     });
   });
 }
+
+
+document.querySelector("[data-save-retry]").addEventListener("click", async () => {
+  if (!SUPABASE_ENABLED) { if (persistDashboardLocally()) setSyncStatus("local"); return; }
+  if (!remoteStateLoaded) { await loadRemoteDashboardState(); renderAll(); }
+  else await saveRemoteDashboardState();
+});
+document.querySelector("[data-save-backup]").addEventListener("click", () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `dashboard-recovery-${seoulNowParts().date}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+document.querySelectorAll("[data-conflict-choice]").forEach((button) => button.addEventListener("click", () => {
+  document.getElementById("saveConflictDialog").close();
+  const resolve = syncConflictResolver;
+  syncConflictResolver = null;
+  resolve?.(button.dataset.conflictChoice);
+}));
+document.getElementById("saveConflictDialog").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  document.querySelector('[data-conflict-choice=""]').click();
+});
+window.addEventListener("online", () => { if (remotePending) saveRemoteDashboardState(); });
+window.addEventListener("offline", () => { if (remotePending) setSyncStatus("offline"); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && remotePending) {
+    persistDashboardLocally();
+    saveRemoteDashboardState();
+  }
+});
