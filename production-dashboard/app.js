@@ -98,6 +98,7 @@ let remotePending = false;
 let syncStatus = "";
 let syncConflictResolver = null;
 let recoveredJournal = null;
+let browserStorageFailure = null;
 const syncClientId = (() => {
   const fresh = crypto.randomUUID();
   try {
@@ -111,15 +112,52 @@ function syncJournalKey() {
   return `${STORAGE_KEY}-pending:${SUPABASE_URL}:${currentProfile?.id}:${syncClientId}`;
 }
 
+function browserStorageErrorKind(error) {
+  if (["QuotaExceededError", "NS_ERROR_DOM_QUOTA_REACHED"].includes(error?.name) || [22, 1014].includes(error?.code)) return "storage-quota";
+  if (error?.name === "SecurityError") return "storage-blocked";
+  return "storage-error";
+}
+
 function persistDashboardLocally() {
+  const recoveryRequired = SUPABASE_ENABLED && remotePending && remoteBase;
   try {
-    // Write the recovery copy first; a failed write must never look like a saved edit.
-    if (remotePending && remoteBase) localStorage.setItem(syncJournalKey(), JSON.stringify({ base: remoteBase, local: state }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (recoveryRequired) {
+      localStorage.setItem(syncJournalKey(), JSON.stringify(window.DashboardSync.createRecovery(remoteBase, state)));
+    } else localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    browserStorageFailure = null;
     return true;
   } catch (error) {
-    setSyncStatus("storage-error");
+    const kind = browserStorageErrorKind(error);
+    console.warn("Browser dashboard storage failed", { name: error?.name || "Error", kind, recoveryRequired: Boolean(recoveryRequired) });
+    // A cache failure cannot invalidate data already confirmed by the server.
+    if (recoveryRequired || !SUPABASE_ENABLED) {
+      browserStorageFailure = kind;
+      setSyncStatus(kind);
+    }
     return false;
+  }
+}
+
+function readRecoveryJournal(prefix) {
+  try {
+    const key = localStorage.getItem(syncJournalKey()) ? syncJournalKey() : Object.keys(localStorage).find((key) => key.startsWith(prefix));
+    const raw = key && localStorage.getItem(key);
+    return { key, raw, pending: raw ? JSON.parse(raw) : null };
+  } catch (error) {
+    if (error?.name !== "SecurityError") throw error;
+    console.warn("Browser recovery storage blocked", { name: error.name });
+    return {};
+  }
+}
+
+function clearConfirmedRecovery() {
+  // Only remove this tab's acknowledged recovery copy, never other unsaved tabs.
+  try {
+    localStorage.removeItem(syncJournalKey());
+    if (recoveredJournal && localStorage.getItem(recoveredJournal.key) === recoveredJournal.raw) localStorage.removeItem(recoveredJournal.key);
+    recoveredJournal = null;
+  } catch (error) {
+    console.warn("Confirmed recovery cleanup failed", { name: error?.name || "Error" });
   }
 }
 
@@ -132,15 +170,26 @@ function setSyncStatus(status) {
     pending: "변경사항 저장 대기 중", saving: "서버에 저장 중…", saved: "서버 저장 완료",
     local: "이 기기에 저장됨", error: "서버 저장 실패 · 변경사항은 이 기기에 보관 중",
     offline: "오프라인 · 연결되면 자동 저장", conflict: "같은 내용을 팀원이 수정했습니다 · 변경사항 확인 필요",
-    "storage-error": "기기 저장 공간 부족 · 화면을 닫기 전에 다시 저장해 주세요",
+    "storage-quota": "브라우저 저장 한도 초과",
+    "storage-blocked": "브라우저의 저장 기능이 차단됨",
+    "storage-error": "브라우저 임시 저장 실패",
     loading: "팀 데이터 불러오는 중…"
   };
   bar.hidden = !status || !currentUser();
   bar.dataset.status = status;
-  bar.querySelector("[data-save-label]").textContent = SUPABASE_ENABLED && !remoteStateLoaded && status === "error"
+  let label = SUPABASE_ENABLED && !remoteStateLoaded && status === "error"
     ? "팀 데이터를 불러오지 못했습니다 · 다시 시도해 주세요" : labels[status] || status;
-  bar.querySelector("[data-save-retry]").hidden = !["error", "offline", "conflict", "storage-error"].includes(status);
-  bar.querySelector("[data-save-backup]").hidden = !["error", "offline", "conflict", "storage-error"].includes(status);
+  const needsBackup = Boolean(browserStorageFailure && (remotePending || !SUPABASE_ENABLED));
+  if (needsBackup) {
+    const reason = labels[browserStorageFailure];
+    label = ["pending", "saving"].includes(status)
+      ? `${label} · ${reason}로 임시 보관할 수 없습니다`
+      : `${reason} · 화면을 닫기 전 서버 저장 확인 또는 내용 백업이 필요합니다`;
+  }
+  bar.querySelector("[data-save-label]").textContent = label;
+  const actionable = needsBackup || ["error", "offline", "conflict", "storage-quota", "storage-blocked", "storage-error"].includes(status);
+  bar.querySelector("[data-save-retry]").hidden = !actionable;
+  bar.querySelector("[data-save-backup]").hidden = !actionable;
 }
 
 async function awaitSyncResponse(request) {
@@ -164,20 +213,19 @@ async function loadRemoteDashboardState() {
   try {
     const latest = await readRemoteDashboard();
     const prefix = `${STORAGE_KEY}-pending:${SUPABASE_URL}:${currentProfile.id}:`;
-    const key = localStorage.getItem(syncJournalKey()) ? syncJournalKey() : Object.keys(localStorage).find((key) => key.startsWith(prefix));
-    const raw = key && localStorage.getItem(key);
-    const pending = raw ? JSON.parse(raw) : null;
+    const { key, raw, pending } = readRecoveryJournal(prefix);
+    const recovery = pending ? window.DashboardSync.restoreRecovery(latest.value, pending) : null;
     recoveredJournal = key && key !== syncJournalKey() ? { key, raw } : null;
-    remoteBase = pending?.base || structuredClone(latest.value);
+    remoteBase = recovery?.base || structuredClone(latest.value);
     isRemoteHydrating = true;
-    if (pending?.local) state = migrateOwnerState(normalizeState(pending.local));
+    if (recovery?.local) state = migrateOwnerState(normalizeState(recovery.local));
     else if (latest.version) state = latest.value;
     monthlyReportSharedPromptSnapshot = state.monthlyReport?.prompt || window.MonthlyReportCore?.DEFAULT_PROMPT || "";
     mergeProfileUser(currentProfile);
     resetActivityAuditSnapshot();
     isRemoteHydrating = false;
     remoteStateLoaded = true;
-    remotePending = Boolean(pending?.local) || !latest.version;
+    remotePending = Boolean(recovery?.local) || !latest.version;
     persistDashboardLocally();
     if (remotePending) queueRemoteSave();
     else setSyncStatus("saved");
@@ -241,13 +289,11 @@ async function saveRemoteDashboardState() {
         remoteBase.currentUser = state.currentUser;
         resetActivityAuditSnapshot();
         remotePending = JSON.stringify(state) !== JSON.stringify(remoteBase);
-        const stored = persistDashboardLocally();
-        if (!remotePending && stored) {
-          localStorage.removeItem(syncJournalKey());
-          if (recoveredJournal && localStorage.getItem(recoveredJournal.key) === recoveredJournal.raw) localStorage.removeItem(recoveredJournal.key);
-          recoveredJournal = null;
+        if (!remotePending) {
+          browserStorageFailure = null;
+          clearConfirmedRecovery();
         }
-        if (!stored) return false;
+        persistDashboardLocally();
       } while (remotePending);
       setSyncStatus("saved");
       if (!document.activeElement?.matches("input, textarea, [contenteditable=true]")) {
@@ -270,8 +316,9 @@ async function saveRemoteDashboardState() {
 function queueRemoteSave() {
   if (!SUPABASE_ENABLED || !currentProfile?.approved || isRemoteHydrating) return;
   remotePending = true;
-  if (!persistDashboardLocally()) return;
-  if (syncStatus === "conflict") return;
+  const conflicted = syncStatus === "conflict";
+  persistDashboardLocally();
+  if (conflicted) { setSyncStatus("conflict"); return; }
   setSyncStatus(navigator.onLine ? "pending" : "offline");
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = setTimeout(() => { saveRemoteDashboardState(); }, 700);
@@ -401,7 +448,7 @@ async function refreshSupabaseProfiles() {
   await Promise.all(state.users.filter((user) => user.avatarPath).map(async (user) => {
     user.avatarUrl = await signedProfileImageUrl(user.avatarPath);
   }));
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistDashboardLocally();
 }
 
 async function syncProfileToSupabase(user) {
@@ -602,7 +649,8 @@ let dashboardPrefs = loadPrefs();
 
 function savePrefs(patch = {}) {
   dashboardPrefs = { ...dashboardPrefs, ...patch };
-  localStorage.setItem(PREFS_KEY, JSON.stringify(dashboardPrefs));
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(dashboardPrefs)); }
+  catch (error) { console.warn("Browser view preferences could not be cached", { name: error?.name || "Error" }); }
 }
 
 function saveViewPrefs(patch = {}) {
@@ -1687,9 +1735,9 @@ function shiftDate(value, repeat, index) {
 }
 
 function loadState() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return normalizeState(structuredClone(sampleData));
   try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return normalizeState(structuredClone(sampleData));
     return normalizeState(JSON.parse(saved));
   } catch {
     return normalizeState(structuredClone(sampleData));
@@ -13094,7 +13142,7 @@ async function refreshOrganizationDirectory() {
     await Promise.all(state.users.filter((user) => user.avatarPath).map(async (user) => {
       user.avatarUrl = await signedProfileImageUrl(user.avatarPath);
     }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    persistDashboardLocally();
   } catch (error) {
     console.warn("Organization directory load failed", error);
     if (organizationUsers().length) {
@@ -15939,7 +15987,7 @@ $("#logoutBtn").addEventListener("click", async () => {
   remoteBase = null;
   remotePending = false;
   setSyncStatus("");
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  persistDashboardLocally();
   if (SUPABASE_ENABLED) {
     await getSupabaseClient()?.auth.signOut().catch(() => {
       showToast("서버 로그아웃 처리가 지연되고 있습니다.");
@@ -16244,7 +16292,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && $("#unsavedBasicModal")?.classList.contains("open")) cancelUnsavedBasicLeave();
 });
 window.addEventListener("beforeunload", (event) => {
-  if (!remotePending && syncStatus !== "storage-error" && !projectBasicIsDirty() && !workBasicIsDirty()) return;
+  if (!remotePending && !browserStorageFailure && !projectBasicIsDirty() && !workBasicIsDirty()) return;
   event.preventDefault();
   event.returnValue = "";
 });

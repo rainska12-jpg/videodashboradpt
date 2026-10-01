@@ -44,7 +44,50 @@
     }
     throw new Error("BUSY");
   }
-  const api = { merge, commit };
+
+  // Keep only changed entities, with their old values for conflict detection.
+  function createRecovery(base, local) {
+    const changes = [];
+    for (const key of new Set([...Object.keys(base), ...Object.keys(local)])) {
+      if (equal(base[key], local[key])) continue;
+      if (keyed(base[key]) && keyed(local[key])) {
+        const before = new Map(base[key].map((item) => [item.id, item]));
+        const after = new Map(local[key].map((item) => [item.id, item]));
+        for (const id of new Set([...before.keys(), ...after.keys()])) {
+          if (!equal(before.get(id), after.get(id))) {
+            changes.push({ path: [key, id], base: copy(before.get(id)), local: copy(after.get(id)) });
+          }
+        }
+      } else changes.push({ path: [key], base: copy(base[key]), local: copy(local[key]) });
+    }
+    return { version: 2, changes };
+  }
+
+  function restoreRecovery(latest, recovery) {
+    // Read full snapshots left by the previous release without discarding them.
+    if (recovery.version !== 2) return { base: copy(recovery.base), local: copy(recovery.local) };
+    const result = { base: copy(latest), local: copy(latest) };
+    for (const change of recovery.changes) {
+      const [key, id] = change.path;
+      if ([key, id].some((part) => ["__proto__", "constructor", "prototype"].includes(part))) throw new Error("INVALID_RECOVERY");
+      for (const side of ["base", "local"]) {
+        const value = copy(change[side]);
+        if (change.path.length === 1) {
+          if (value === undefined) delete result[side][key];
+          else result[side][key] = value;
+        } else {
+          const items = result[side][key] || [];
+          const index = items.findIndex((item) => item.id === id);
+          if (value === undefined) { if (index >= 0) items.splice(index, 1); }
+          else if (index >= 0) items[index] = value;
+          else items.push(value);
+          result[side][key] = items;
+        }
+      }
+    }
+    return result;
+  }
+  const api = { merge, commit, createRecovery, restoreRecovery };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DashboardSync = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

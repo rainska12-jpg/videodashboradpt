@@ -80,3 +80,38 @@ test('a conflict that changes again during resolution is shown again', async () 
   });
   assert.equal(resolutions, 2); assert.equal(result.projects[0].memo, 'newer');
 });
+
+test('compact recovery omits unchanged large data and restores conflict detection', () => {
+  const { createRecovery, restoreRecovery } = require('../lib/dashboard-sync.js');
+  const b = base(), l = base(), r = base();
+  b.archive = 'x'.repeat(1000000); l.archive = b.archive; r.archive = b.archive;
+  l.projects[0].memo = '수정 메모';
+  r.projects[0].status = '촬영';
+  r.works[0].tasks[0].done = true;
+  const packet = JSON.parse(JSON.stringify(createRecovery(b, l)));
+  assert.ok(JSON.stringify(packet).length < 1000);
+  const restored = restoreRecovery(r, packet);
+  const combined = merge(restored.base, restored.local, r);
+  assert.equal(combined.conflicts.length, 0);
+  assert.equal(combined.value.projects[0].memo, '수정 메모');
+  assert.equal(combined.value.projects[0].status, '촬영');
+  assert.equal(combined.value.works[0].tasks[0].done, true);
+  r.projects[0].memo = '다른 팀원 메모';
+  const conflict = restoreRecovery(r, packet);
+  assert.deepEqual(merge(conflict.base, conflict.local, r).conflicts[0].path, ['projects', 'p1', 'memo']);
+});
+
+test('compact recovery preserves additions, deletions, and delete-versus-edit conflicts', () => {
+  const { createRecovery, restoreRecovery } = require('../lib/dashboard-sync.js');
+  const b = base(), l = base(), r = base();
+  l.projects = [{ id: 'p2', title: '새 프로젝트', memo: '' }];
+  l.works[0].tasks.push({ id: 't2', text: '편집', done: false });
+  r.projects[0].title = '팀원이 수정한 프로젝트';
+  r.projects.push({ id: 'p3', title: '팀 새 프로젝트' });
+  const restored = restoreRecovery(r, JSON.parse(JSON.stringify(createRecovery(b, l))));
+  const result = merge(restored.base, restored.local, r);
+  assert.equal(result.conflicts.length, 1);
+  assert.deepEqual(result.conflicts[0].path, ['projects', 'p1']);
+  assert.deepEqual(result.value.projects.map(p=>p.id), ['p3','p2']);
+  assert.equal(result.value.works[0].tasks.length, 2);
+});
