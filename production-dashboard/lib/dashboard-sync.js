@@ -1,8 +1,15 @@
 (function (root) {
   const copy = (value) => value === undefined ? undefined : structuredClone(value);
-  const equal = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const object = (value) => value && typeof value === "object" && !Array.isArray(value);
   const keyed = (value) => Array.isArray(value) && value.every((item) => object(item) && typeof item.id === "string") && new Set(value.map((item) => item.id)).size === value.length;
+
+  function equal(a, b) {
+    if (a === b) return true;
+    if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, index) => equal(item, b[index]));
+    if (!object(a) || !object(b)) return false;
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && equal(a[key], b[key]));
+  }
 
   // Three-way merge: only fields changed since this client's last read are applied.
   function merge(base, local, remote, preference = "") {
@@ -87,7 +94,7 @@
     }
     return result;
   }
-  const api = { merge, commit, createRecovery, restoreRecovery };
+  const api = { equal, merge, commit, createRecovery, restoreRecovery };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DashboardSync = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

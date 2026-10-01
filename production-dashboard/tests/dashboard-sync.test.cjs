@@ -1,7 +1,40 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { merge, commit } = require('../lib/dashboard-sync.js');
+const { equal, merge, commit, createRecovery } = require('../lib/dashboard-sync.js');
 const base = () => ({ projects: [{ id: 'p1', title: '영상', memo: '초안', status: '기획' }], works: [{ id: 'w1', tasks: [{ id: 't1', text: '촬영', done: false }] }], currentUser: 'a' });
+
+test('server object key order does not turn an unchanged work deletion into a conflict', () => {
+  const b = { works: [{ id: 'w1', title: '새 업무', memo: '', calendarFields: { kickoffDate: false, finalDate: true } }] };
+  const r = { works: [{ calendarFields: { finalDate: true, kickoffDate: false }, memo: '', title: '새 업무', id: 'w1' }] };
+  assert.equal(equal(b, r), true);
+  assert.deepEqual(createRecovery(b, r).changes, []);
+  const result = merge(b, { works: [] }, r);
+  assert.deepEqual(result.conflicts, []);
+  assert.deepEqual(result.value.works, []);
+  r.works[0].memo = '실제 팀 수정';
+  assert.equal(merge(b, { works: [] }, r).conflicts.length, 1);
+});
+
+test('semantic equality preserves differences in array order, null, booleans and actual fields', () => {
+  assert.equal(equal(['a', 'b'], ['b', 'a']), false);
+  assert.equal(equal(null, {}), false);
+  assert.equal(equal({ done: false }, { done: true }), false);
+  assert.equal(equal({ id: 'w', title: 'A' }, { title: 'B', id: 'w' }), false);
+});
+
+test('a recovered deletion survives a server roundtrip that reorders object keys', async () => {
+  const { restoreRecovery } = require('../lib/dashboard-sync.js');
+  const b = { works: [{ id: 'w', title: '새 업무', studioReservation: null }] };
+  const remote = { works: [{ studioReservation: null, title: '새 업무', id: 'w' }] };
+  const recovered = restoreRecovery(remote, JSON.parse(JSON.stringify(createRecovery(b, { works: [] }))));
+  let writes = 0;
+  const value = await commit({ ...recovered,
+    read: async () => ({ value: remote, version: 1 }),
+    write: async () => { writes++; return true; },
+    resolve: async () => { throw new Error('No real content change'); }
+  });
+  assert.deepEqual(value.works, []); assert.equal(writes, 1);
+});
 
 test('different fields and nested tasks from two team members survive together', () => {
   const b = base(), l = base(), r = base();

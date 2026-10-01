@@ -64,3 +64,27 @@ test('save status stays inside details, and dynamically created retry buttons us
   assert.doesNotMatch(css.match(/\.save-status \{[^}]+\}/)[0], /position:\s*fixed|bottom:/);
   assert.match(source, /document\.addEventListener\("click", async \(event\) => \{\s*if \(!event\.target\.closest\("\[data-save-retry\]"\)\) return/);
 });
+
+test('opening an inactive work studio panel leaves shared work data unchanged', () => {
+  const target = {};
+  const ctx = vm.createContext({ $: () => target, canEditWork: () => true });
+  vm.runInContext(`let workStudioMemoOpen=false; function ensureWorkStudioReservation(){throw new Error('A disabled booking must not be initialized')}; ${fn('renderWorkStudioReservation')}`, ctx);
+  const work = { id: 'w', title: '새 업무', studioReservationEnabled: false, studioReservation: null };
+  ctx.work = work;
+  const before = structuredClone(work);
+  vm.runInContext('renderWorkStudioReservation(work)', ctx);
+  assert.deepEqual(work, before);
+  assert.match(target.innerHTML, /사용 안함/);
+});
+
+test('delete conflict uses a readable title and consequences without raw JSON or internal IDs', () => {
+  const ctx = vm.createContext({ ownerName: id => ({ u: '담당 PD' }[id] || id) });
+  vm.runInContext(`let state={projects:[],works:[],schedules:[],staffEvents:[],tasks:[]}; ${fn('describeSyncConflictValue')} ${fn('syncConflictText')}`, ctx);
+  ctx.conflict = { path: ['works', 'item-1790863752570-c2470dba3e25d'], local: undefined, remote: { id: 'item-1790863752570-c2470dba3e25d', title: '새 업무', memo: '', owners: ['u'], studioReservation: { staffRows: [{ id: 'row-1' }] } } };
+  const text = vm.runInContext('syncConflictText(conflict)', ctx);
+  assert.match(text, /업무 · 새 업무 · 삭제 여부 확인/);
+  assert.match(text, /이 기기: 삭제 예정/);
+  assert.match(text, /서버: 새 업무/);
+  assert.match(text, /담당 PD/);
+  assert.doesNotMatch(text, /item-179086|studioReservation|staffRows|\{\s*"/);
+});

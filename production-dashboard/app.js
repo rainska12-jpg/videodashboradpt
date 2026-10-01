@@ -180,7 +180,7 @@ function renderSyncStatus() {
   const labels = {
     pending: "저장 중…", saving: "저장 중…", saved: "저장 완료",
     local: "이 기기에 저장됨", error: "저장 실패 · 다시 시도해 주세요",
-    offline: "오프라인 · 연결되면 자동 저장", conflict: "같은 내용을 팀원이 수정했습니다 · 변경사항 확인 필요",
+    offline: "오프라인 · 연결되면 자동 저장", conflict: "기기와 서버의 내용이 다릅니다 · 확인 필요",
     "storage-quota": "브라우저 저장 한도 초과",
     "storage-blocked": "브라우저의 저장 기능이 차단됨",
     "storage-error": "브라우저 임시 저장 실패",
@@ -249,15 +249,43 @@ async function loadRemoteDashboardState() {
   }
 }
 
+function describeSyncConflictValue(value, field) {
+  if (value === undefined) return "삭제 예정";
+  if (value === null || value === "") return "비어 있음";
+  if (typeof value === "boolean") return value ? "예" : "아니요";
+  if (Array.isArray(value)) {
+    if (!value.length) return "없음";
+    return value.map((entry) => typeof entry === "object" ? describeSyncConflictValue(entry, field) : field === "owners" ? ownerName(entry) : String(entry)).join(" · ");
+  }
+  if (typeof value === "object") {
+    const summary = [value.title || value.text || "항목 내용"];
+    if (value.status) summary.push(`진행: ${value.status}`);
+    if (value.date || value.finalDate) summary.push(`날짜: ${value.date || value.finalDate}`);
+    if (value.memo) summary.push(`메모: ${String(value.memo).replace(/<[^>]*>/g, " ")}`);
+    if (value.owners?.length) summary.push(`담당자: ${value.owners.map(ownerName).join(", ")}`);
+    return summary.join("\n");
+  }
+  return String(value).replace(/<[^>]*>/g, " ");
+}
+
+function syncConflictText(item) {
+  const collections = { projects: "영상", works: "업무", tasks: "할 일", schedules: "일정", staffEvents: "방송실 일정" };
+  const fields = { memo: "메모", title: "제목", status: "진행 상태", finalDate: "마감일", kickoffDate: "시작일", owners: "담당자", done: "완료 여부", tasks: "할 일", records: "관리기록", staffRows: "스탭 목록", studioReservation: "방송실 예약" };
+  const entities = [...state.projects, ...state.works, ...state.schedules, ...state.staffEvents, ...(state.tasks || [])];
+  const entity = entities.find((entry) => item.path.includes(entry.id)) || item.local || item.remote;
+  const entityTitle = entity?.title || entity?.text || "공유 항목";
+  const wholeItem = item.path.length === 2 && Boolean(collections[item.path[0]]);
+  const field = item.path.at(-1);
+  const action = wholeItem && (item.local === undefined || item.remote === undefined) ? "삭제 여부 확인" : fields[field] || "내용 확인";
+  return `${collections[item.path[0]] || "공유 항목"} · ${entityTitle} · ${action}\n이 기기: ${describeSyncConflictValue(item.local, field)}\n서버: ${describeSyncConflictValue(item.remote, field)}`;
+}
+
 function resolveSyncConflicts(conflicts) {
   setSyncStatus("conflict");
   const dialog = document.getElementById("saveConflictDialog");
-  const names = { memo: "메모", title: "제목", status: "진행 상태", finalDate: "마감일", owners: "담당자", done: "완료 여부" };
-  const describe = (value) => typeof value === "object" ? JSON.stringify(value) : String(value ?? "삭제됨");
   dialog.querySelector("[data-conflict-list]").replaceChildren(...conflicts.map((item) => {
     const row = document.createElement("li");
-    const entity = [...state.projects, ...state.works, ...state.schedules, ...state.staffEvents].find((entry) => item.path.includes(entry.id));
-    row.textContent = `${entity?.title || "공유 항목"} · ${names[item.path.at(-1)] || item.path.at(-1)}\n내 변경: ${describe(item.local)}\n팀 변경: ${describe(item.remote)}`;
+    row.textContent = syncConflictText(item);
     return row;
   }));
   if (!dialog.open) dialog.showModal();
@@ -301,7 +329,7 @@ async function saveRemoteDashboardState() {
         mergeProfileUser(currentProfile);
         remoteBase.currentUser = state.currentUser;
         resetActivityAuditSnapshot();
-        remotePending = JSON.stringify(state) !== JSON.stringify(remoteBase);
+        remotePending = !window.DashboardSync.equal(state, remoteBase);
         if (!remotePending) {
           browserStorageFailure = null;
           clearConfirmedRecovery();
@@ -4437,8 +4465,8 @@ function renderWorkStudioReservation(work) {
   const target = $("#workStudioReservationPanel");
   if (!target) return;
   const editable = canEditWork(work);
-  const reservation = ensureWorkStudioReservation(work);
-  if (reservation.memo) workStudioMemoOpen = true;
+  const reservation = work.studioReservationEnabled ? ensureWorkStudioReservation(work) : work.studioReservation;
+  if (reservation?.memo) workStudioMemoOpen = true;
   target.innerHTML = `
     <div class="work-studio-panel">
       <label class="work-studio-toggle studio-compact-toggle">
