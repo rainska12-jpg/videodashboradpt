@@ -162,21 +162,30 @@ function clearConfirmedRecovery() {
 }
 
 function setSyncStatus(status) {
+  const previousStatus = syncStatus;
   syncStatus = status;
-  const bar = document.getElementById("saveStatus");
-  if (!bar) return;
+  renderSyncStatus();
+  if (status !== previousStatus && remotePending && ["error", "offline"].includes(status)) {
+    showToast(status === "offline" ? "오프라인입니다. 연결되면 자동 저장합니다." : "자동 저장에 실패했습니다. 상세창에서 다시 시도해 주세요.", { duration: 5000 });
+  }
+}
+
+function inlineSaveStatusMarkup() {
+  return `<div class="save-status" data-save-status hidden aria-label="자동 저장 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></div>`;
+}
+
+function renderSyncStatus() {
+  const status = syncStatus;
   document.getElementById("saveLoadBlock").hidden = !SUPABASE_ENABLED || !currentProfile?.approved || remoteStateLoaded;
   const labels = {
-    pending: "변경사항 저장 대기 중", saving: "서버에 저장 중…", saved: "서버 저장 완료",
-    local: "이 기기에 저장됨", error: "서버 저장 실패 · 변경사항은 이 기기에 보관 중",
+    pending: "저장 중…", saving: "저장 중…", saved: "저장 완료",
+    local: "이 기기에 저장됨", error: "저장 실패 · 다시 시도해 주세요",
     offline: "오프라인 · 연결되면 자동 저장", conflict: "같은 내용을 팀원이 수정했습니다 · 변경사항 확인 필요",
     "storage-quota": "브라우저 저장 한도 초과",
     "storage-blocked": "브라우저의 저장 기능이 차단됨",
     "storage-error": "브라우저 임시 저장 실패",
     loading: "팀 데이터 불러오는 중…"
   };
-  bar.hidden = !status || !currentUser();
-  bar.dataset.status = status;
   let label = SUPABASE_ENABLED && !remoteStateLoaded && status === "error"
     ? "팀 데이터를 불러오지 못했습니다 · 다시 시도해 주세요" : labels[status] || status;
   const needsBackup = Boolean(browserStorageFailure && (remotePending || !SUPABASE_ENABLED));
@@ -186,10 +195,14 @@ function setSyncStatus(status) {
       ? `${label} · ${reason}로 임시 보관할 수 없습니다`
       : `${reason} · 화면을 닫기 전 서버 저장 확인 또는 내용 백업이 필요합니다`;
   }
-  bar.querySelector("[data-save-label]").textContent = label;
   const actionable = needsBackup || ["error", "offline", "conflict", "storage-quota", "storage-blocked", "storage-error"].includes(status);
-  bar.querySelector("[data-save-retry]").hidden = !actionable;
-  bar.querySelector("[data-save-backup]").hidden = !actionable;
+  document.querySelectorAll("[data-save-status]").forEach((bar) => {
+    bar.hidden = !status || (!currentUser() && !currentProfile?.approved);
+    bar.dataset.status = status;
+    bar.querySelector("[data-save-label]").textContent = label;
+    bar.querySelector("[data-save-retry]").hidden = !actionable;
+    bar.querySelector("[data-save-backup]").hidden = !actionable;
+  });
 }
 
 async function awaitSyncResponse(request) {
@@ -2475,7 +2488,12 @@ function saveState({ deferAudit = false } = {}) {
   if (deferAudit) {
     basicAuditTimer = setTimeout(() => saveState(), 600);
   } else {
-    for (const { scope, id, fields } of pendingBasicNotifications.values()) {
+    for (const { scope, id, fields, ownerIds } of pendingBasicNotifications.values()) {
+      if (scope === "staff") {
+        const event = state.staffEvents.find((item) => item.id === id);
+        if (event) notifyOwners(uniqueValues([...ownerIds, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 일정을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 일정 변경", eventDate: event.date, targetView: "studio" });
+        continue;
+      }
       const entity = state[scope === "project" ? "projects" : "works"].find((item) => item.id === id);
       if (entity) notifyEntityFieldChanges({ entityType: scope, entity, ownerIds: scope === "project" ? projectOwners(entity) : workOwners(entity), fields: [...fields] });
     }
@@ -4204,6 +4222,7 @@ function renderWorkDetail() {
   renderWorkStudioReservation(work);
   renderWorkDetailTabs();
   syncBasicSaveButton("work", editable);
+  renderSyncStatus();
 }
 
 function renderWorkDetailTabs() {
@@ -6689,6 +6708,7 @@ function renderProjectDetail() {
   renderProjectTasks(project);
   renderDetailTabs();
   syncBasicSaveButton("project", editable);
+  renderSyncStatus();
 }
 
 function renderOwnerPicker(project) {
@@ -8048,6 +8068,8 @@ function openStaffEventDetail(staffEventId) {
     </section>` : ""}
   `;
   renderStaffEventDetailStaffRows(event);
+  $("#staffEventDetailContent").insertAdjacentHTML("beforeend", inlineSaveStatusMarkup());
+  renderSyncStatus();
   $("#staffEventDetailModal").classList.add("open");
   $("#staffEventDetailModal").setAttribute("aria-hidden", "false");
 }
@@ -11422,7 +11444,6 @@ let mobileStudioFormErrors = {};
 let mobileStudioFormDraft = null;
 let mobileStudioDetailId = "";
 let mobileStudioDetailDraft = null;
-let mobileStudioDetailDirty = false;
 let mobileStudioDeleteConfirm = false;
 
 function isMobileViewport() {
@@ -12910,7 +12931,7 @@ function moveMobileStudioRow(rowId, direction) {
   if (index < 0 || target < 0 || target >= rows.length) return;
   const [row] = rows.splice(index, 1);
   rows.splice(target, 0, row);
-  if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+  saveMobileStudioStaffOnly();
   renderMobileDashboard();
 }
 
@@ -12929,6 +12950,7 @@ function saveMobileStudioReservation() {
     if (!event) return;
     const previousOwners = event.owners || [event.owner].filter(Boolean);
     Object.assign(event, eventData);
+    mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
     notifyOwners(uniqueValues([...previousOwners, ...owners]), `${notificationActor().name}님이 ‘${eventData.title}’ 방송실 일정을 수정했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_reservation_updated", title: "방송실 일정 수정", eventDate: event.date, targetView: "studio" });
     recordOverviewActivity(eventData.title, "방송실 일정을 수정했습니다.", "studio_reservation_updated");
     mobileStudioDetailId = event.id;
@@ -12973,32 +12995,32 @@ function openMobileStudioDetail(eventId) {
   if (!event) return;
   mobileStudioDetailId = eventId;
   mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
-  mobileStudioDetailDirty = false;
   mobileStudioDeleteConfirm = false;
   renderMobileDashboard();
 }
 
 function closeMobileStudioDetail() {
-  if (mobileStudioDetailDirty && !window.confirm("저장하지 않은 스탭 변경사항을 버리고 닫을까요?")) return;
+  if (pendingBasicNotifications.has(`staff:${mobileStudioDetailId}`)) saveState();
   mobileStudioDetailId = "";
   mobileStudioDetailDraft = null;
-  mobileStudioDetailDirty = false;
   mobileStudioDeleteConfirm = false;
   renderMobileDashboard();
 }
 
 function saveMobileStudioStaffOnly() {
+  if (mobileStudioFormOpen) return;
   const event = state.staffEvents.find((item) => item.id === mobileStudioDetailId);
   if (!event || !mobileStudioDetailDraft) return;
   const previousOwners = event.owners || [event.owner].filter(Boolean);
-  event.staffRows = mobileStudioDetailDraft.staffRows.slice(0, 6).map((row) => ({ type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
+  const rows = mobileStudioDetailDraft.staffRows.slice(0, 6).map((row) => ({ id: row.id, type: row.type || "", owner: row.owner || "", memo: row.memo || "" }));
+  if (JSON.stringify(event.staffRows) === JSON.stringify(rows)) return;
+  event.staffRows = rows;
   syncStaffEventSummary(event);
-  notifyOwners(uniqueValues([...previousOwners, ...(event.owners || [])]), `${notificationActor().name}님이 ‘${event.title}’ 방송실 일정을 변경했습니다.`, { type: "staff", staffEventId: event.id, actionType: "studio_staff_updated", title: "방송실 일정 변경", eventDate: event.date, targetView: "studio" });
-  saveState();
-  mobileStudioDetailDraft = { staffRows: structuredClone(normalizeStaffEventRows(event)) };
-  mobileStudioDetailDirty = false;
-  showToast("스탭 변경사항이 저장되었습니다.");
-  renderAll();
+  const notificationKey = `staff:${event.id}`;
+  const pending = pendingBasicNotifications.get(notificationKey) || { scope: "staff", id: event.id, ownerIds: new Set() };
+  [...previousOwners, ...(event.owners || [])].forEach((owner) => pending.ownerIds.add(owner));
+  pendingBasicNotifications.set(notificationKey, pending);
+  saveState({ deferAudit: true });
 }
 
 function renderMobileStudioDetail() {
@@ -13028,7 +13050,8 @@ function renderMobileStudioDetail() {
             <button data-mobile-studio-row-add type="button" ${mobileStudioDetailDraft.staffRows.length >= 6 ? "disabled" : ""}>＋ 스탭 추가</button>
           </header>
           ${renderMobileStudioStaffEditor(mobileStudioDetailDraft.staffRows, "detail")}
-          <button class="mobile-studio-save-staff" data-mobile-studio-staff-save type="button" ${mobileStudioDetailDirty ? "" : "disabled"}>스탭 변경 저장</button>
+          <p class="autosave-hint">스탭과 역할 메모는 변경하면 자동 저장됩니다.</p>
+          ${inlineSaveStatusMarkup()}
         </section>
         ${isAdminUser() ? `<section class="mobile-studio-telegram-panel">
           <div class="mobile-studio-telegram-head"><span><h2>텔레그램 공지</h2><p>이 일정만 바로 전송합니다.</p></span><label class="mobile-studio-inline-calltime" title="일정 시작 전 도착 시간을 선택합니다."><span>콜타임</span><select data-mobile-studio-telegram-calltime-offset aria-label="콜타임 선택">${studioCallTimeOffsetOptions(event.telegramCallTimeOffsetMinutes)}</select></label></div>
@@ -13857,7 +13880,7 @@ function bindMobileCoreActions(app) {
     const formatter = key === "owner" ? ownerOptionLabel : (option) => option;
     openDropdown(button, options, row[key] || "", (value) => {
       row[key] = value;
-      if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+      saveMobileStudioStaffOnly();
       renderMobileDashboard();
     }, formatter);
   });
@@ -13872,7 +13895,7 @@ function bindMobileCoreActions(app) {
     const rows = mobileStudioFormRows();
     if (rows.length >= 6) return;
     rows.push(makeDefaultStaffRow(rows.length));
-    if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+    saveMobileStudioStaffOnly();
     renderMobileDashboard();
   });
   bind("[data-mobile-studio-row-delete]", (button) => {
@@ -13880,27 +13903,24 @@ function bindMobileCoreActions(app) {
     if (rows.length <= 1) return showToast("스탭 행은 최소 1개가 필요합니다.");
     const index = rows.findIndex((row) => row.id === button.dataset.mobileStudioRowDelete);
     if (index >= 0) rows.splice(index, 1);
-    if (!mobileStudioFormOpen) mobileStudioDetailDirty = true;
+    saveMobileStudioStaffOnly();
     renderMobileDashboard();
   });
   bind("[data-mobile-studio-row-up]", (button) => moveMobileStudioRow(button.dataset.mobileStudioRowUp, -1));
   bind("[data-mobile-studio-row-down]", (button) => moveMobileStudioRow(button.dataset.mobileStudioRowDown, 1));
   bind("[data-mobile-studio-detail-close]", () => closeMobileStudioDetail());
   bind("[data-mobile-studio-edit]", (button) => openMobileStudioForm("edit", button.dataset.mobileStudioEdit));
-  bind("[data-mobile-studio-staff-save]", () => saveMobileStudioStaffOnly());
   bind("[data-mobile-studio-telegram-send]", (button) => sendStudioEventTelegram(button.dataset.mobileStudioTelegramSend, button));
   bind("[data-mobile-studio-delete-open]", () => { mobileStudioDeleteConfirm = true; renderMobileDashboard(); });
   bind("[data-mobile-studio-delete-cancel]", () => { mobileStudioDeleteConfirm = false; renderMobileDashboard(); });
   bind("[data-mobile-studio-delete-one]", () => {
     const id = mobileStudioDetailId;
-    mobileStudioDetailDirty = false;
     mobileStudioDetailId = "";
     mobileStudioDetailDraft = null;
     deleteStaffEvent(id);
   });
   bind("[data-mobile-studio-delete-series]", () => {
     const id = mobileStudioDetailId;
-    mobileStudioDetailDirty = false;
     mobileStudioDetailId = "";
     mobileStudioDetailDraft = null;
     deleteStaffEventSeries(id);
@@ -13964,11 +13984,7 @@ function bindMobileCoreActions(app) {
       const row = rows.find((item) => item.id === input.dataset.rowId);
       if (!row) return;
       row[input.dataset.mobileStudioRowField] = input.value;
-      if (!mobileStudioFormOpen) {
-        mobileStudioDetailDirty = true;
-        const saveButton = app.querySelector("[data-mobile-studio-staff-save]");
-        if (saveButton) saveButton.disabled = false;
-      }
+      saveMobileStudioStaffOnly();
     };
     input.addEventListener("input", update);
     input.addEventListener("change", update);
@@ -14054,6 +14070,7 @@ function renderMobileDashboard() {
   };
   app.innerHTML = (renderers[current] || renderMobileProjectCards)();
   bindMobileCoreActions(app);
+  renderSyncStatus();
   renderNotificationSurfaces();
 }
 
@@ -17476,12 +17493,14 @@ if ("serviceWorker" in navigator) {
 }
 
 
-document.querySelector("[data-save-retry]").addEventListener("click", async () => {
+document.addEventListener("click", async (event) => {
+  if (!event.target.closest("[data-save-retry]")) return;
   if (!SUPABASE_ENABLED) { if (persistDashboardLocally()) setSyncStatus("local"); return; }
   if (!remoteStateLoaded) { await loadRemoteDashboardState(); renderAll(); }
   else await saveRemoteDashboardState();
 });
-document.querySelector("[data-save-backup]").addEventListener("click", () => {
+document.addEventListener("click", (event) => {
+  if (!event.target.closest("[data-save-backup]")) return;
   const url = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: "application/json" }));
   const link = document.createElement("a");
   link.href = url;

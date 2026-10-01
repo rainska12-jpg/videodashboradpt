@@ -39,7 +39,7 @@
     <link rel="stylesheet" href="./mobile-studio-geist.css?v=9" />
     <link rel="stylesheet" href="./overview-refined.css?v=5" />
     <link rel="stylesheet" href="./mobile-responsive.css?v=1" />
-    <link rel="stylesheet" href="./dashboard-improvements.css?v=3" />
+    <link rel="stylesheet" href="./dashboard-improvements.css?v=4" />
   </head>
   <body>
     <div id="authOverlay" class="auth-overlay auth-loading">
@@ -451,6 +451,7 @@
           <button id="deleteDetailBtn" class="pill danger-pill">삭제</button>
         </div>
         <input id="detailTitle" class="detail-title" placeholder="프로젝트명을 입력하세요" />
+        <div class="save-status" data-save-status hidden aria-label="자동 저장 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></div>
         <div class="detail-tabs" role="tablist" aria-label="프로젝트 상세 메뉴">
           <button class="detail-tab active" data-detail-tab="basic" type="button">기본정보</button>
           <button class="detail-tab" data-detail-tab="tasks" type="button">할 일</button>
@@ -500,6 +501,7 @@
           <button id="deleteWorkDetailBtn" class="pill danger-pill">삭제</button>
         </div>
         <input id="workDetailTitle" class="detail-title" placeholder="업무명을 입력하세요" />
+        <div class="save-status" data-save-status hidden aria-label="자동 저장 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></div>
         <div class="detail-tabs" role="tablist" aria-label="업무 상세 메뉴">
           <button class="detail-tab active" data-work-detail-tab="basic" type="button">기본정보</button>
           <button class="detail-tab" data-work-detail-tab="tasks" type="button">할 일</button>
@@ -994,8 +996,7 @@
     <script src="/api/env.js"></script>
     <script src="./lib/monthly-report-core.js?v=14"></script>
     <script src="./lib/monthly-report-docx.js?v=7"></script>
-    <div id="saveLoadBlock" hidden><p>팀 데이터를 불러온 뒤 수정할 수 있습니다.</p></div>
-    <aside id="saveStatus" class="save-status" hidden aria-label="저장 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></aside>
+    <div id="saveLoadBlock" hidden><section><p>팀 데이터를 불러온 뒤 수정할 수 있습니다.</p><div class="save-status" data-save-status hidden aria-label="불러오기 상태"><span data-save-label role="status" aria-live="polite"></span><button data-save-retry type="button" hidden>다시 시도</button><button data-save-backup type="button" hidden>내용 백업</button></div></section></div>
     <dialog id="saveConflictDialog" class="save-conflict-dialog" aria-labelledby="saveConflictTitle">
       <h2 id="saveConflictTitle">팀원의 변경사항과 겹칩니다</h2>
       <p>겹친 내용에 사용할 값을 선택하세요. 서로 다른 항목의 변경사항은 함께 저장됩니다.</p>
@@ -1003,6 +1004,6 @@
       <div><button data-conflict-choice="" type="button">나중에 확인</button><button data-conflict-choice="remote" type="button">팀 변경 유지</button><button data-conflict-choice="local" type="button">내 변경 적용</button></div>
     </dialog>
     <script src="./lib/dashboard-sync.js?v=2"></script>
-    <script src="./app.js?v=188"></script>
+    <script src="./app.js?v=189"></script>
   </body>
 </html>

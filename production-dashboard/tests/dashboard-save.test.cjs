@@ -168,7 +168,9 @@ test('the status text does not claim offline data is backed up when the browser 
   const h = harness(quotaStorage(0)); await h.run('loadRemoteDashboardState()');
   const nodes = { '[data-save-label]': {}, '[data-save-retry]': {}, '[data-save-backup]': {} };
   const bar = { dataset: {}, querySelector: key => nodes[key] };
-  h.ctx.document.getElementById = id => id === 'saveStatus' ? bar : {};
+  h.ctx.document.getElementById = () => ({});
+  h.ctx.document.querySelectorAll = () => [bar];
+  h.ctx.showToast = () => {};
   h.ctx.currentUser = () => ({ id: 'u' });
   h.run('state.projects[0].memo="미저장"; queueRemoteSave(); actualSetSyncStatus("offline")');
   assert.match(nodes['[data-save-label]'].textContent, /브라우저 저장 한도 초과/);
@@ -176,7 +178,7 @@ test('the status text does not claim offline data is backed up when the browser 
   assert.doesNotMatch(nodes['[data-save-label]'].textContent, /기기 저장 공간 부족|보관 중/);
   assert.equal(nodes['[data-save-backup]'].hidden, false);
   await h.run('saveRemoteDashboardState()'); h.run('actualSetSyncStatus("saved")');
-  assert.equal(nodes['[data-save-label]'].textContent, '서버 저장 완료');
+  assert.equal(nodes['[data-save-label]'].textContent, '저장 완료');
   assert.equal(nodes['[data-save-backup]'].hidden, true);
 });
 
